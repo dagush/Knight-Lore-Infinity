@@ -1,0 +1,42 @@
+# macOS and editor noise
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+*~
+*.swp
+*.swo
+
+# Local IDE/workspace metadata
+.idea/
+
+# Local environment/secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+logs/
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.pid
+*.seed
+
+# Dependency and generated output directories
+node_modules/
+dist/
+coverage/
+.cache/
+.npm/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Local Spectrum game snapshots/images.
+# Keep copyrighted game dumps out of the repository.
+*.z80
+*.Z80
