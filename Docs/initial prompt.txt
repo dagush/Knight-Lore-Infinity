@@ -1,0 +1,35 @@
+We are starting a new Knight Lore/JSSpeccy project, based on the original Knight Lore 1984 game  for the ZX Spectrum, excecuting on a Javascript emulator called JSSpeccy. This is not a 3D rendering project.
+
+Goal:
+Build a JavaScript-side sliding-window map virtualization system for Knight Lore, using only the original emulator view and runtime memory modification. The original game source code must not be modified.
+
+Core idea:
+The original game only needs the room the player is currently in, plus nearby rooms needed for transitions. We will use a small fixed physical stencil of rooms, probably a 3x3 window centered on room 0x88. Externally, we maintain an arbitrary logical map coordinate system. Whenever the player moves to a neighboring room, the JS layer detects the transition, shifts the logical map coordinate, rewrites the physical 3x3 room data, and makes the game continue as if the player is still around the same physical room ids, especially the center room 0x88.
+
+Constraints:
+- Do not touch the game's 3D renderer or add any renderer such as Three.js.
+- Use the original Spectrum/JSSpeccy display only.
+- Do not modify the original game source code.
+- Use emulator memory inspection, static-table rewriting, working-memory rewriting, and pokes/runtime patches only.
+- Be strict and honest about timing risks and engine assumptions.
+
+Relevant previous project knowledge:
+- Docs/static.txt summarizes static room data.
+- Docs/dynamic.txt summarizes working memory.
+- Docs/info.txt contains decoded room/object/player facts.
+- SRC folder contains the JSSpeccy emulator, which we will modify and extend.
+- Known anchors include:
+  - room id: 0x5C10
+  - room colour: 0x5BAD
+  - room size bytes: 0x5BAB, 0x5BAC, 0x5BAE
+  - dynamic records around 0x5C88 + n * 0x20
+  - live item/charm slots around 0x5C48 and 0x5C68
+
+First task:
+Do not write code yet. Read the relevant docs and code, ignore the 3D renderer, and produce a staged technical plan for proving the sliding 3x3 room-window idea. Include:
+- what static tables must be rewritten;
+- what working-memory values must be watched or patched;
+- how to detect room transitions and direction;
+- how to keep the player effectively centered on physical room 0x88;
+- risks, unknowns, recommended probes, and exit criteria.
+Name the plan as "Plan XXXX XX XX.txt", where the X's represent today's date, for instance, 2026 06 28.

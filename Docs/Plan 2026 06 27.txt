@@ -1,0 +1,171 @@
+Here is a clean master plan for the new project, using the same staged style but adapted to the **sliding 3x3 room-window** idea.
+
+=========================================
+**Master Plan: Knight Lore Infinite Map**
+=========================================
+
+
+=========================================
+**Stage 0 - Project Foundation**
+
+Goal: Start from a clean JSSpeccy/Knight Lore base without the 3D renderer.
+
+Tasks:
+- Fork/copy the current project.
+- Remove or ignore Three.js and semantic 3D rendering.
+- Keep useful infrastructure: memory capture, static cache, pokes, frame callbacks, debug panels.
+- Keep `Docs/static.txt`, `Docs/dynamic.txt`, and `Docs/info.txt` as reference material.
+
+Exit criteria:
+- Original Knight Lore runs normally.
+- JS can still inspect memory and apply pokes.
+- No rendering-side complexity remains.
+
+=========================================
+**Stage 1 - Room Loading Anatomy**
+
+Goal: Understand exactly when and how the game loads a room.
+
+Tasks:
+- Reconfirm the role of `0x5C10` as current room id.
+- Track when `0x5BAD`, `0x5BAB`, `0x5BAC`, and `0x5BAE` are refreshed.
+- Identify which static tables are consulted during room entry.
+- Detect the first stable frame after a room transition.
+
+Exit criteria:
+- We can say: “room X was requested, room data was loaded, working memory is now stable.”
+
+=========================================
+**Stage 2 - Physical 3x3 Stencil**
+
+Goal: Choose the small set of real game rooms that will act as the reusable physical window.
+
+Recommended model:
+- Centre room: `0x88`.
+- Eight neighbouring physical rooms around it.
+- The game always believes it is moving inside this small stencil.
+
+Tasks:
+- Identify the actual neighbour/index data that controls room-to-room transitions.
+- Verify all four cardinal exits from the centre can be made usable.
+- Decide whether the stencil must be real neighbouring rooms or can be forced by rewriting indexes.
+
+Exit criteria:
+- The player can move from centre to north/south/east/west physical rooms and back.
+
+=========================================
+**Stage 3 - One-Room Injection**
+
+Goal: Make physical room `0x88` display arbitrary logical room data.
+
+Tasks:
+- Rewrite room colour, size, wall/background data, doors/arches.
+- Start with simple rooms: empty square, rectangular room, different colour.
+- Inject data before the game builds working memory.
+
+Exit criteria:
+- Room `0x88` can visually become several different logical rooms.
+
+=========================================
+**Stage 4 - Logical Map Model**
+
+Goal: Define the external infinite map representation.
+
+Tasks:
+- Use logical coordinates such as `(x, y)`.
+- Define a room JSON structure: size, colour, exits, backgrounds, objects, items.
+- Add deterministic generation or authored map loading.
+- Store persistent room state outside the emulator.
+
+Exit criteria:
+- JS can ask: “what logical room exists at coordinate `(12, -4)`?” and receive room data.
+
+=========================================
+**Stage 5 - Full 3x3 Window Injection**
+
+Goal: Populate the physical stencil from the logical map.
+
+Tasks:
+- Centre physical room receives logical `(x, y)`.
+- North receives `(x, y - 1)`, south `(x, y + 1)`, etc.
+- Corners receive diagonal logical neighbours.
+- Rewrite exits so the player remains inside the physical stencil.
+
+Exit criteria:
+- The visible neighbourhood around the player matches the external logical map.
+
+=========================================
+**Stage 6 - Transition Detection And Recentering**
+
+Goal: When the player exits, shift the logical map and rebuild the stencil.
+
+Tasks:
+- Detect transition direction.
+- Update logical player coordinate.
+- Rewrite the 3x3 physical stencil around the new coordinate.
+- Force or guide the game back to the centre physical room if needed.
+
+Exit criteria:
+- Walking east repeatedly moves through different logical rooms while the game keeps reusing the same physical room window.
+
+=========================================
+**Stage 7 - Objects And Items**
+
+Goal: Virtualize dynamic room contents.
+
+Tasks:
+- Keep object/item state in JS per logical room.
+- Inject only the objects relevant to the active physical room/window.
+- Track picked-up, dropped, pushed, or moved items.
+- Synchronize state when leaving a room.
+
+Strict caveat:
+- This can escape the original global map size, but the active room will still be constrained by what the original engine can simulate at once.
+
+Exit criteria:
+- Objects persist logically when the player leaves and returns.
+
+=========================================
+**Stage 8 - Edge Cases**
+
+Goal: Make the illusion robust.
+
+Tasks:
+- Test death/respawn.
+- Test carrying items across room boundaries.
+- Test transformations.
+- Test menus, pause, snapshot reloads, and game restart.
+- Decide what to do with original quest logic if the map becomes arbitrary.
+
+Exit criteria:
+- The system survives normal gameplay events without losing logical map state.
+
+=========================================
+**Stage 9 - Tooling And Diagnostics**
+
+Goal: Make the invisible virtualization visible while developing.
+
+Tasks:
+- Show physical room id vs logical coordinate.
+- Show current 3x3 logical window.
+- Show last transition direction.
+- Show injected room checksum/version.
+- Add a “freeze logical map” or “step transition” debug mode.
+
+Exit criteria:
+- When something goes wrong, we can tell whether it is room loading, index rewriting, transition detection, or persistence.
+
+**Stage 10 - Map Authoring / Generation**
+
+Goal: Turn the proof into a usable system.
+
+Tasks:
+- Add a simple JSON map format.
+- Optionally add procedural generation.
+- Optionally add a small editor later.
+- Save/load logical map state.
+
+Exit criteria:
+- The project can load or generate a map much larger than the original Knight Lore layout.
+
+The honest summary: this plan can plausibly make the **map effectively infinite**, because the original game only ever sees a small physical neighbourhood. The hardest parts will be timing, transition detection, and persistent objects. The most important first proof is not objects or infinite generation; it is simply: **walk east from physical `0x88`, shift the logical coordinate, rebuild the stencil, and keep playing as if nothing strange happened.**
