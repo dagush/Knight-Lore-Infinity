@@ -36,6 +36,9 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 
+# Local symlink-based serving sandbox
+_test/
+
 # Local Spectrum game snapshots/images.
 # Keep copyrighted game dumps out of the repository.
 *.z80
