@@ -1,0 +1,164 @@
+Coords:
+My student detected that the exact expressions to go from low-resolution integer coordinates, where objects are initialised in memory, are translated to high-resolution coordinates are:
+    X_h = X_L * 16 + X_l * 8 + 72
+    Y_h = Y_L * 16 + Y_l * 8 + 72
+    Z_h = Z_L * 12 + Z_l * 4 + ScreenZ
+Where X_L, Y_L and Z_L are the low resolution coordinates, the _l is information related to the sprites and allow to work with self-moving objects, and ScreenZ is always 128.
+
+Main Character:
+    The head location information is located at 5C20h, 5C2Ah and 5C2Bh for X, Y and Z.
+    The body location information is at         5C09h, 5C0Ah and 5C0Bh.
+    Sprites, as stored in 0x5C08 (body) and 0x5C28 (head):
+        0x10 to 0x15: human body west (6 sprites)
+        0x18 to 0x1D: human body east
+        0x20 to 0x27: human head west (8 sprites)
+        0x28 to 0x2F: human head east
+        0x30 to 0x35: wolf body west (6 sprites)
+        0x38 to 0x3F: wolf body east
+        0x40 to 0x47: wolf head west (8 sprites)
+        0x48 to 0x4F: wolf head east
+        0x5C to 0x5F: transformation (4 sprites)
+    Orientation Summary:
+        Positions 5C41h and 5C45h indicate the head and body sprite codes.
+        Positions 5C0Fh and 5C2Fh contain the mirror flags for orientation.
+        0x5C41 == 0x5C45: 0x18 human west/north, 0x19 human east/south,
+                          0x1D wolf west/north,  0x1E wolf east/south.
+        0x5C0F >= 0x4C -> south/north, else: west/east
+        0x5C2F == 0x7E wolf north
+    Pseudocode for character orientation:
+        sprite_body = contents of 0x5c41
+        if sprite_body is 0x18 or 0x19: body is human, else: body is wolf
+        if contents of 0x5c0f >= 0x4c:
+            direction is either North or South
+            if sprite_body is 0x18 or 0x1d:
+                direction is North,
+            else: direction is South
+        else:
+            direction is either west or east
+            if sprite_body is 0x18 or 0x1d:
+                direction is West,
+            else: direction is east
+    Renderer compass/view convention:
+        View names describe the side where the camera is placed, not the direction it looks.
+        North view means the camera is north of the room/character and looks inward, toward the center.
+        Therefore, if the character is facing north and the camera side is north, the rendered billboard should show the front.
+        If the character is facing north and the camera side is south, it should show the back.
+        The same rule is used for east, west, and south.
+        The camera side is computed from the room center to the camera, not from the moving character to the camera.
+        This keeps the chosen billboard side stable while the character walks.
+        Diagonal full-3D character billboard policy:
+            Upper south east (game): east-facing billboard, live game sprite ids.
+            Upper north west: west-facing billboard, opposite live sprite side, final texture mirror in X.
+            Upper south west: south-facing billboard, relative sprite side.
+            Upper north east: north-facing billboard, opposite relative sprite side, final texture mirror in X.
+        Final X mirroring also includes the live character mirror flags:
+            body uses 0x5C0F;
+            head uses 0x5C2F;
+            transformation sprites use either flag.
+        Policy mirror and live mirror are combined as toggles, so two mirrors cancel.
+
+
+ghost: 0x50 to 0x53 (4 sprites)
+
+Current Room
+     id: 5C10h
+     color: 5BADh
+     size: 5BABh, 5BACh and 5BAEh (X, Y, Z)
+     Walls: use static information
+
+Working memory: between 5BA0h and 6107h
+
+Live graphic object table:
+     Starts at 0x5C08, with up to 40 slots of 0x20 bytes each.
+     Slot layout, from the disassembly:
+        +0 graphic/sprite id
+        +1, +2, +3: X, Y, Z
+        +4, +5, +6: width/radius X, depth/radius Y, height
+        +7 flags:
+            bit 7 = vertical flip
+            bit 6 = horizontal flip
+            bit 5 = wipe, transient
+            bit 4 = draw, transient
+            bit 3 = auto-adjust near arches, player only
+            bit 2 = moveable
+            bit 1 = ignore in 3D calculations
+            bit 0 = near arch, player only
+        +8 room
+        +9, +10, +11: dX, dY, dZ as signed bytes
+        +13 per-object direction/state information
+     Confirmed guard/wizard slots:
+        0x60C8: guard slot. Coordinates and +7 flags are confirmed correct.
+        0x6028 and 0x6048: second guard type, top and lower halves. Coordinates are confirmed correct.
+            This guard walks east/west, so +7 bit 6 does not toggle; the apparent lack of hflip change is expected.
+            The east/west visual side is represented by the sprite id/dX logic, not by hflip.
+        Wizard in the cauldron room: coordinates are confirmed in the dynamic entries paired with background rows 8 and 9.
+            The same +7 flag layout must be used for the wizard; if a row comes from compact comparison data,
+            read the raw flag byte from offset +7.
+     Direction/state note:
+        For NSEW guard/wizard movement, +13 low two bits decode as:
+            0 = west, 1 = north, 2 = east, 3 = south.
+
+Note: portcullis: 0x08~0x09 west/east
+      ball: 0xB2~0xB3
+      ghost: 0x50~0x52
+
+guard: head: 0x96: west, 0x97: east
+       body: 0x90~0x95: west, 0x98~0x9D: east
+
+items/charms: During the game, the player has to collect and bring to the mage a number of items,
+       of 8 different types. I have found this page:
+       https://www.porotal.org/knightlore/
+       which describes, from a player's perspective, where they can be found (and in
+       which order they must be retrieved).
+       In this document:
+       https://www.icemark.com/dataformats/knightlore/index.html
+       it seems they are stored starting at 0x6ff2 (until 0x7111), in groups of 9 bytes.
+       The screen (room?) where they are located is coded in offset 04, their current position
+       is in 05, 06 and 07.
+       -> The items in the table 0x6ff2 are updated once the player LEAVES the room leaving the
+       item behind, not while the player is in the room toying around.
+item codes:
+       0x60: diamond/gem
+       0x61: poison
+       0x62: shoe/boot
+       0x63: chalice/vase
+       0x64: cup
+       0x65: bottle
+       0x66: ball/crystal ball
+       0x67: life
+item locations in working memory (only 2):
+1st:   0x5C48 -> sprite/object ID 1
+       0x5C49 ~ 0x5C4B -> XYZ
+       0x5C50 -> room ID
+2nd:   0x5C68 -> sprite/object ID 2
+       0x5C69 ~ 0x5C6B -> X, Y, Z
+       0x5C70 -> room ID
+
+wizard: 0x9F and 0x9E -> head
+        0x90 ~ 0x95 -> body
+
+guard: 0x90~0x95 is the lower part of the back of the guard and
+       0x96 is the head, while
+       0x97 is the front head, and
+       0x98~0x9D are the front view of the legs.
+       0x1E and 0x1F are, without doubt, the head of the guard
+0x08 0x09 portcullis
+0x10~0x15 legs ????
+0x16 gargoyle
+0xB4~0xB5 fire
+0x07 is a regular block,
+0x52 is a ghost (mark this for possible later usage), and
+0x54 is a table,
+0x78~0x7F Character death?
+0x5C68 cauldron spell bubbles:
+    0xA0..0xA3: "good" bubbles
+    0xA4..0xA7: wolf-attack bubbles
+    0xAE: item-display state, using the sphere marker
+0x8D cauldron, 0x8E cauldron "contents"
+0xA4~0xA7 repelling spell
+
+0x02 and 0x03 are the arches,
+0x0A to 0x0F: brick walls
+
+0x04 and 0x05: wooden entrance
+0x80 to 0x82: wooden walls

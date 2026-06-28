@@ -1,0 +1,738 @@
+Plan 2026 06 28
+================
+
+Unified Sliding Room-Window Proof Plan for Knight Lore / JSSpeccy
+-----------------------------------------------------------------
+
+Purpose
+-------
+
+This file merges the high-level roadmap from "Plan 2026 06 27.txt" with the
+lower-level memory and timing analysis done today. Yesterday's plan is left
+unchanged. This file is the current working plan.
+
+Important correction:
+- We do not need a full 3x3 physical stencil.
+- Knight Lore transitions are cardinal: north, south, west, and east.
+- The reusable physical window can therefore be a 5-room cross:
+  - center: 0x88;
+  - west: 0x87;
+  - east: 0x89;
+  - south: 0x78;
+  - north: 0x98.
+- All five of these physical room ids exist in the location table, so the
+  missing 0x99 corner from the earlier 3x3 discussion is not a blocker.
+
+Core idea:
+- Externally, JS owns an arbitrary logical map coordinate system.
+- Internally, the original game sees only physical room 0x88 and its four
+  immediate physical neighbours.
+- Before the player exits the center room, JS preloads the four physical
+  neighbours with the corresponding logical destination rooms.
+- When the original game moves into a physical neighbour, JS detects the
+  direction, advances the logical coordinate, renames the active working room
+  back to physical 0x88, rewrites the 5-room cross around the new logical
+  coordinate, and lets the game continue.
+
+
+Hard Boundaries
+---------------
+
+- Do not modify the original Knight Lore game source or disassembly.
+- Do not add or touch any 3D renderer.
+- Use the original Spectrum/JSSpeccy display only.
+- Use emulator-side memory inspection, static RAM table rewriting, working
+  memory rewriting, and documented runtime pokes/patches.
+- Be strict about timing. If frame-boundary pokes are too late, move the proof
+  into worker/core watchpoints instead of assuming the race is harmless.
+
+
+Sources Checked
+---------------
+
+- Docs/Plan 2026 06 27.txt
+- Docs/static.txt
+- Docs/dynamic.txt
+- Docs/info.txt
+- Docs/knightlore.asm
+- SRC/runtime/jsspeccy.js
+- SRC/runtime/worker.js
+- SRC/generator/core.ts.in
+- SRC/tech_notes.md
+- SRC/package.json
+- SRC/webpack.config.js
+- SRC/test/test.js
+
+
+Confirmed Emulator Facts
+------------------------
+
+JSSpeccy structure:
+- runtime/jsspeccy.js owns the browser/UI side and sends runFrame messages.
+- runtime/worker.js owns the Web Worker side and calls the WASM core.
+- generator/core.ts.in exports peek(addr) and poke(addr, val).
+- The worker already uses core.poke during tape loading.
+- The normal UI-visible boundary is frameCompleted, after a full Spectrum frame.
+- If we need mid-frame precision, the right place is the emulator worker/core.
+
+Memory access caution:
+- core.peek/core.poke use the current Z80 memory page mapping.
+- Knight Lore is a 48K game, but the emulator may be running as a 128K machine.
+- Confirm the loaded game memory is in the expected visible RAM pages before
+  treating Z80 addresses as direct poke targets.
+
+
+Confirmed Game Facts
+--------------------
+
+Room and object tables:
+- 0x5BA0..0x6107 is Knight Lore's scratch/work-memory area.
+- graphic_objs_tbl starts at 0x5C08.
+- There are up to 40 graphic object slots of 0x20 bytes each.
+- Slot 0 at 0x5C08 is the player lower/body slot.
+- Slot 1 at 0x5C28 is the player upper/head slot.
+- Slot +8 is the room id for each graphic object.
+- The usual current room anchor 0x5C10 is slot 0 + 8.
+- Slot 1 also has a room byte at 0x5C30 and should be kept consistent.
+
+Room loading:
+- build_screen_objects calls update_special_objs, clear_scrn_buffer,
+  retrieve_screen, find_special_objs_here, adjust_plyr_xyz_for_room_size, and
+  flag_room_visited.
+- retrieve_screen scans the location table at 0x6251 until the entry id matches
+  the player room byte. It does not use a room pointer table.
+- retrieve_screen expands static background and foreground block data into
+  graphic_objs_tbl.
+
+Room transition mechanics:
+- handle_exit_screen only exits if the player is near an arch, using bit 0 of
+  the player flags byte.
+- Physical movement by room id is:
+  - west: low nibble - 1, preserving the high nibble;
+  - east: low nibble + 1, preserving the high nibble;
+  - north: +16;
+  - south: -16.
+- From center room 0x88:
+  - west -> 0x87;
+  - east -> 0x89;
+  - south -> 0x78;
+  - north -> 0x98.
+- On transition, the player X/Y is temporarily set to an entry sentinel:
+  - east move sets X to 0xFF, then the next room treats this as entering from
+    the west side;
+  - west move sets X to 0x00;
+  - north move sets Y to 0xFF;
+  - south move sets Y to 0x00.
+- The high nibble of slot +12 is set to 0x30 as the entering-room counter.
+
+
+Static Data To Rewrite
+----------------------
+
+Primary target: location_tbl, 0x6251..0x6BD0
+
+This is the main virtualization surface. Each physical room entry contains:
+- byte 0: room id;
+- byte 1: entry size/displacement;
+- byte 2: room size selector and low 3-bit room attribute;
+- following bytes until 0xFF: background type ids;
+- following bytes after 0xFF: block runs.
+
+For the first proof, rewrite only these five physical entries:
+- 0x88 center;
+- 0x87 west neighbour;
+- 0x89 east neighbour;
+- 0x78 south neighbour;
+- 0x98 north neighbour.
+
+Restrictions for the first proof:
+- Do not grow or shrink entries.
+- Preserve each entry's size byte.
+- Treat each selected entry as fixed-capacity storage.
+- Start with structurally safe edits: room attribute, existing background ids,
+  existing block type ids, and block positions that fit the existing entry.
+
+Why fixed-size matters:
+- retrieve_screen advances through the location table using p + 1 + size.
+- Growing or shrinking one entry moves every following entry.
+- Padding is not automatically safe. A zero byte can be interpreted as block
+  type 0 with one position.
+
+Room size table: 0x6248..0x6250
+
+Known selectors:
+- selector 0: 64, 64, 128;
+- selector 1: 32, 64, 128;
+- selector 2: 64, 32, 128.
+
+Initial policy:
+- Do not rewrite this table for the first proof.
+- Use only existing size selectors.
+- Watch 0x5BAB, 0x5BAC, and 0x5BAE to confirm the selected size lands in
+  working memory.
+
+Background type table/data: 0x6CE2..0x6F2E
+
+Initial policy:
+- Do not rewrite this global table for the first proof.
+- Build logical rooms from existing background type ids:
+  - arches 0x00..0x03;
+  - tree arches 0x04..0x07;
+  - portcullises 0x08..0x0B;
+  - wall presets 0x0C..0x0E;
+  - tree room/fillers 0x0F..0x11;
+  - high arch pieces 0x14..0x17.
+- Avoid wizard/cauldron ids 0x12..0x13 until the base sliding proof works.
+
+Block type table/data: 0x6BD1..0x6CE1
+
+Initial policy:
+- Do not rewrite this global table for the first proof.
+- Build logical rooms from existing block type ids.
+- Avoid complex moving/collapsing/deadly objects in the earliest proof.
+
+Special/static objects table: 0x6FF2..0x7111
+
+This matters after the room-window proof works. Each object record is 9 bytes:
+- +0 graphic id;
+- +1..+3 start X/Y/Z;
+- +4 start screen;
+- +5..+7 current X/Y/Z;
+- +8 current screen.
+
+Initial policy:
+- Do not virtualize items/charms in the first proof.
+- Later, mirror this table into JS logical-room state.
+- Watch live special slots at 0x5C48 and 0x5C68, with room fields at 0x5C50
+  and 0x5C70.
+- Remember that update_special_objs writes item state back when leaving a room,
+  not continuously while the item is being moved inside the room.
+
+Tables to avoid changing in this phase:
+- Sprite offset/data tables at 0x7112..0xAF6B.
+- Original code bytes, unless a runtime patch is explicitly needed for timing
+  and documented as a poke.
+
+
+Working Memory To Watch Or Patch
+--------------------------------
+
+Room identity:
+- 0x5C10: player lower/body slot room id.
+- 0x5C30: player upper/head slot room id.
+- 0x5C08 + slot * 0x20 + 8: room id for each of the 40 graphic object slots.
+
+Room fields written by retrieve_screen:
+- 0x5BAB: room size X.
+- 0x5BAC: room size Y.
+- 0x5BAD: room attribute/colour candidate.
+- 0x5BAE: room size Z.
+
+Player position and movement:
+- 0x5C09, 0x5C0A, 0x5C0B: lower/body X, Y, Z.
+- 0x5C29, 0x5C2A, 0x5C2B: upper/head visual X, Y, Z candidate.
+- 0x5C11, 0x5C12, 0x5C13: lower/body dX, dY, dZ.
+- 0x5C31, 0x5C32, 0x5C33: upper/head dX, dY, dZ.
+- 0x5C14 and 0x5C34: slot +12, including entering-room counter and OOB flags.
+- 0x5C15 and 0x5C35: slot +13, per-object direction/state information.
+- 0x5C0F and 0x5C2F: player flag bytes including mirror/orientation bits.
+
+Expanded room/object slots:
+- Slots 0 and 1 are player lower/head.
+- Slots 2 and 3 are special/live object slots.
+- Slots 4..39 are background and foreground room objects.
+- Dynamic visual records of interest begin around 0x5C88 + n * 0x20, but the
+  whole 0x20-byte slot should be preserved and inspected.
+
+Patch candidates during recenter:
+- Change 0x5C10 and 0x5C30 from the just-entered physical neighbour back to
+  physical center 0x88.
+- For every active graphic object slot whose +8 room equals the just-entered
+  physical neighbour, change +8 to 0x88.
+- Patch live special object room fields 0x5C50 and 0x5C70 if they match the
+  just-entered neighbour.
+- Do not disturb player X/Y/Z after the original engine has adjusted entry
+  position unless a probe proves it is necessary.
+- Do not clear the entering-room counter unless it causes a concrete problem.
+
+
+Logical Map Model
+-----------------
+
+JS owns the logical map, not the original game.
+
+Recommended logical room shape:
+- coordinate: integer pair (x, y);
+- size selector;
+- attribute/colour;
+- exits: north/south/west/east booleans or door types;
+- background ids;
+- block runs or a higher-level block list compiled into block runs;
+- item state;
+- optional persistent dynamic object state later.
+
+Initial logical-to-physical mapping for logical center (Lx, Ly):
+- physical 0x88 -> logical (Lx, Ly);
+- physical 0x87 -> logical (Lx - 1, Ly);
+- physical 0x89 -> logical (Lx + 1, Ly);
+- physical 0x78 -> logical (Lx, Ly - 1);
+- physical 0x98 -> logical (Lx, Ly + 1).
+
+Coordinate naming note:
+- The disassembly says north is +16 and south is -16 in physical room ids.
+- The logical coordinate convention can choose y + 1 for north or y - 1 for
+  north, but it must be documented and used consistently.
+
+
+Transition Detection
+--------------------
+
+Frame-boundary detection, first attempt:
+- Keep the previous frame's 0x5C10 and 0x5C30.
+- On each frameCompleted, read 0x5C10, 0x5C30, player X/Y, and slot +12 flags.
+- A transition candidate occurs when 0x5C10 changes from 0x88 to one of:
+  - 0x87: west;
+  - 0x89: east;
+  - 0x78: south;
+  - 0x98: north.
+- Confirm with 0x5C30 if it changed the same way.
+- Confirm with slot +12 high nibble nonzero if the timing exposes the entering
+  counter.
+
+Supporting evidence:
+- X == 0xFF indicates an east move before entry adjustment consumes it.
+- X == 0x00 indicates a west move.
+- Y == 0xFF indicates a north move.
+- Y == 0x00 indicates a south move.
+- These may already be consumed by adjust_plyr_xyz_for_room_size by the time
+  frameCompleted is observed, so they are not the primary detector.
+
+If frame-boundary detection is too late:
+- Add emulator-side watchpoints in worker/core.
+- Preferred watchpoints:
+  - writes to 0x5C10 and 0x5C30;
+  - writes to 0x5BAB..0x5BAE;
+  - writes to 0x5C88..0x6107 during retrieve_screen;
+  - optional PC watchpoints around exit_screen, build_screen_objects, and
+    retrieve_screen.
+- A clean emulator design is to let the WASM core return a watchpoint status,
+  let the worker inspect/patch memory, then resumeFrame.
+
+
+Recentering Strategy
+--------------------
+
+Meaning of "centered":
+- The game is returned to using physical room id 0x88 as the current room id
+  after each transition.
+- This does not mean the player's X/Y coordinates are forced to the room center.
+  The original entry-side placement should be preserved.
+
+Preferred strategy: load-then-renumber.
+
+Before a transition:
+- JS preloads the four neighbours with the logical rooms adjacent to the current
+  logical center.
+- The neighbour the player enters is already valid, so the original engine can
+  perform the room transition normally.
+
+Example, walking east:
+1. Physical 0x88 contains logical (Lx, Ly).
+2. Physical 0x89 contains logical (Lx + 1, Ly).
+3. The player walks east through a valid arch.
+4. The original game moves from 0x88 to 0x89 and retrieve_screen builds 0x89.
+5. JS detects 0x5C10 changed from 0x88 to 0x89.
+6. JS advances the logical center to (Lx + 1, Ly).
+7. JS patches working memory:
+   - 0x5C10: 0x89 -> 0x88;
+   - 0x5C30: 0x89 -> 0x88, if it changed;
+   - active object slot +8 fields: 0x89 -> 0x88;
+   - live special object room fields: 0x89 -> 0x88 if needed.
+8. JS rewrites the five physical location entries:
+   - 0x88 now holds logical (Lx + 1, Ly);
+   - 0x87 now holds logical (Lx, Ly);
+   - 0x89 now holds logical (Lx + 2, Ly);
+   - 0x78 now holds logical (Lx + 1, Ly - 1) or the chosen south coordinate;
+   - 0x98 now holds logical (Lx + 1, Ly + 1) or the chosen north coordinate.
+9. The game continues believing it is again in physical center 0x88.
+
+Why this is preferred:
+- It uses the original game transition and room-entry adjustment.
+- It avoids manually calling retrieve_screen.
+- It gives the engine a valid physical neighbour to load before JS changes room
+  labels.
+
+Timing risk:
+- If JS patches only after frameCompleted, one frame may run with current room
+  id 0x89, 0x87, 0x78, or 0x98.
+- That may be visually acceptable but could affect special object updates,
+  visited flags, or collisions.
+- If this shows up, move the recenter patch to a worker/core watchpoint
+  immediately after the room id write or immediately after retrieve_screen.
+
+
+Unified Staged Plan
+-------------------
+
+Stage 0 - Project Foundation
+
+Goal:
+- Start from a clean JSSpeccy/Knight Lore base without renderer-side baggage.
+
+Tasks:
+- Keep the original JSSpeccy display path.
+- Keep useful infrastructure: memory capture, pokes, frame callbacks, and debug
+  panels.
+- Keep Docs/static.txt, Docs/dynamic.txt, and Docs/info.txt as active reference
+  material.
+- Ignore any old 3D renderer work.
+
+Exit criteria:
+- Original Knight Lore runs normally.
+- JS can inspect memory and apply pokes.
+- No renderer-side complexity is required for this project.
+
+Stage 1 - Read-Only Room Loading Anatomy
+
+Goal:
+- Understand exactly when and how the game loads a room.
+
+Tasks:
+- Sample 0x5C10, 0x5C30, 0x5BAB..0x5BAE, player X/Y/Z, and slot +12.
+- Decode the current location table entry for the visible room.
+- Compare location entry attribute with 0x5BAD.
+- Compare location size selector with 0x5BAB/0x5BAC/0x5BAE.
+- Observe a normal transition and record whether frameCompleted is too late.
+
+Exit criteria:
+- We can say: "room X was requested, static data was consumed, working memory is
+  now stable."
+
+Stage 2 - Physical 5-Room Cross
+
+Goal:
+- Prove the chosen physical cross centered on 0x88 is sufficient.
+
+Physical rooms:
+- center 0x88;
+- west 0x87;
+- east 0x89;
+- south 0x78;
+- north 0x98.
+
+Tasks:
+- Verify retrieve_screen can find all five entries.
+- Verify all four cardinal exits from 0x88 can be made usable with arch
+  background ids.
+- Confirm the engine never needs diagonal/corner rooms for normal cardinal
+  transitions under the load-then-renumber model.
+
+Exit criteria:
+- The player can move from 0x88 to each cardinal physical neighbour and back.
+- No donor entry or 3x3 corner is needed.
+
+Stage 3 - One-Room Injection
+
+Goal:
+- Make physical room 0x88 display arbitrary logical room data.
+
+Tasks:
+- Preserve the original entry size.
+- Rewrite room attribute/colour, size selector, wall/background ids, arch ids,
+  and simple block runs.
+- Start with safe test rooms: empty-ish room, different colour, different arch
+  combination, simple block fingerprint.
+- Inject before retrieve_screen builds the working memory.
+
+Exit criteria:
+- Physical room 0x88 can visibly become several different logical rooms using
+  only original display and memory rewriting.
+
+Stage 4 - Logical Map Model
+
+Goal:
+- Define the external infinite map representation.
+
+Tasks:
+- Use logical coordinates such as (x, y).
+- Define a room JSON or JS object shape for size, colour, exits, backgrounds,
+  blocks, objects, and items.
+- Add deterministic generation or authored map loading.
+- Store persistent room state outside the emulator.
+
+Exit criteria:
+- JS can ask: "what logical room exists at coordinate (12, -4)?" and receive a
+  valid room payload that can compile into a physical location entry.
+
+Stage 5 - Five-Room Cross Injection
+
+Goal:
+- Populate the physical cross from the logical map.
+
+Tasks:
+- Center physical 0x88 receives logical (x, y).
+- East/west/north/south physical rooms receive the four adjacent logical rooms.
+- Assign visual fingerprints to each logical neighbour.
+- Rewrite only the five physical entries.
+- Walk from center to each neighbour and back.
+
+Exit criteria:
+- Each cardinal neighbour displays the expected logical room.
+- Returning to the center displays the expected center logical room.
+- No original renderer or game source changes are involved.
+
+Stage 6 - One-Direction Recenter Proof
+
+Goal:
+- Walk repeatedly in one direction while normalizing back to physical 0x88 after
+  each transition.
+
+Recommended first direction:
+- East, because 0x88 -> 0x89 is simple and both entries exist.
+
+Tasks:
+- Preload 0x89 with logical (Lx + 1, Ly).
+- Walk east.
+- Detect 0x5C10: 0x88 -> 0x89.
+- Patch working-memory room labels from 0x89 back to 0x88.
+- Advance the logical center to (Lx + 1, Ly).
+- Rewrite the five physical entries around the new logical center.
+- Walk east again and confirm a different logical room appears.
+
+Exit criteria:
+- After each completed transition, 0x5C10 and 0x5C30 settle back to 0x88.
+- The logical coordinate advances each time.
+- The visible room changes according to logical map data.
+- The player entry position remains natural.
+
+Stage 7 - Four-Direction Sliding Cross
+
+Goal:
+- Generalize Stage 6 to north, south, east, and west.
+
+Tasks:
+- Keep a physical-to-logical cross mapping.
+- On transition, calculate direction and new logical center.
+- Refresh the five physical room payloads around the new logical center.
+- Patch all active working-memory room ids from the just-entered physical
+  neighbour back to 0x88.
+- Verify repeated movement patterns:
+  - east east west west;
+  - north south north;
+  - small square loop;
+  - alternating axes.
+
+Exit criteria:
+- The game remains playable while logical coordinates change independently of
+  physical room ids.
+- Post-patch current physical room id is always 0x88.
+
+Stage 8 - Persistent Objects And Items
+
+Goal:
+- Stop room contents from resetting when the cross slides.
+
+Initial conservative scope:
+- Track static room layout externally.
+- Track only special items first.
+- Defer pushable/moving block persistence until the sliding proof is stable.
+
+Tasks:
+- Before leaving a logical room, harvest relevant active slots:
+  - special/live slots 0x5C48 and 0x5C68;
+  - later, selected moveable object slots if their semantics are understood.
+- Mirror special object table state from 0x6FF2..0x7111 into JS logical-room
+  storage.
+- When a logical room enters the physical cross, write its persisted items into
+  the corresponding physical representation.
+
+Exit criteria:
+- Picked-up or dropped items do not duplicate or disappear across a slide.
+- A logical room revisited through the sliding cross restores its item state.
+
+Stage 9 - Timing Hardening
+
+Goal:
+- Replace fragile frame-end behavior with exact emulator-side events if needed.
+
+Tasks:
+- Use the existing core logging machinery as a first diagnostic if practical.
+- Add filtered watchpoints in the emulator core only if frame-boundary timing is
+  proven insufficient.
+- Candidate watchpoints:
+  - room id write;
+  - retrieve_screen begins;
+  - retrieve_screen finishes;
+  - room field writes 0x5BAB..0x5BAE;
+  - graphic object table writes in 0x5C88..0x6107.
+- Keep patches in worker/core behavior, not in the original game source.
+
+Exit criteria:
+- The recenter patch happens at a known point in the original engine sequence.
+- No one-frame logic mismatch remains.
+
+Stage 10 - Edge Cases
+
+Goal:
+- Make the illusion survive normal gameplay events.
+
+Tasks:
+- Test death/respawn.
+- Test carrying items across room boundaries.
+- Test transformation.
+- Test pause/menu behavior.
+- Test snapshot reload and game restart.
+- Decide what to do with hardcoded quest logic such as cauldron room 136.
+
+Exit criteria:
+- Normal gameplay events do not lose logical map state or strand the player in
+  a non-center physical room.
+
+Stage 11 - Tooling And Diagnostics
+
+Goal:
+- Make the invisible virtualization visible while developing.
+
+Useful diagnostics:
+- Current physical room id.
+- Current logical coordinate.
+- Last transition direction.
+- Physical cross -> logical coordinate mapping.
+- For each physical room entry: size byte, attr/header byte, checksum.
+- Current working room fields 0x5BAB..0x5BAE.
+- Active graphic object slots and their +8 room fields.
+- Warning if any active slot still uses the just-entered neighbour id after a
+  recenter patch.
+- Freeze logical map / step transition debug mode.
+
+Exit criteria:
+- A failed transition can be attributed to one of:
+  - static table rewrite;
+  - invalid physical room id;
+  - transition detection;
+  - recenter patch;
+  - object persistence.
+
+Stage 12 - Map Authoring Or Generation
+
+Goal:
+- Turn the proof into a usable larger-map system.
+
+Tasks:
+- Add a simple JSON map format.
+- Optionally add deterministic procedural generation.
+- Optionally add a small editor later.
+- Save/load logical map state.
+
+Exit criteria:
+- The project can load or generate a map much larger than the original Knight
+  Lore layout while the original game only sees the five-room physical cross.
+
+
+Recommended Immediate Probe Order
+---------------------------------
+
+1. Build a read-only memory sampler for the known anchors.
+2. Decode location table entries at runtime and compare against 0x5BAD and
+   0x5BAB..0x5BAE.
+3. Observe a normal transition and record whether frameCompleted is too late.
+4. Make a tiny same-size edit to physical room 0x88 and confirm the original
+   display changes after retrieve_screen.
+5. Preload 0x87, 0x89, 0x78, and 0x98 with visual fingerprints.
+6. Prove one east transition with load-then-renumber.
+7. Generalize to west, north, and south.
+8. Only then add item/object persistence.
+
+
+Risks And Unknowns
+------------------
+
+Timing:
+- The largest risk is that frameCompleted is too late for a clean recenter.
+- The game may already have updated special objects, visited flags, or dynamic
+  slots using the neighbour physical id.
+- Mitigation: add worker/core watchpoints if a frame-level patch is not enough.
+
+Location entry capacity:
+- The location table is variable length and scanned linearly.
+- We cannot freely grow compact room data in place.
+- Mitigation: begin with same-size rewrites and avoid custom padding until the
+  loader is fully characterized.
+
+Arches are behavioral, not decorative:
+- Transitions depend on the player being near an arch object and the near-arch
+  flag being set.
+- A room with a visual wall opening but no proper arch background may not allow
+  exit.
+- Mitigation: use known arch background ids for intended exits.
+
+Working-memory labels:
+- Current room id appears in player slots and object slots.
+- Patching only 0x5C10 is unlikely to be sufficient.
+- Mitigation: patch 0x5C10, 0x5C30, and every active slot +8 that still names
+  the just-entered physical neighbour.
+
+Special objects:
+- update_special_objs writes state back when leaving a room.
+- Rewriting physical rooms without harvesting logical item state can lose or
+  duplicate items.
+- Mitigation: defer item virtualization until recentering works, then handle
+  special object state explicitly.
+
+Hardcoded quest rooms:
+- The disassembly contains checks against room 136, the cauldron room.
+- A fully virtualized map needs a policy for fixed quest logic.
+- Mitigation: avoid cauldron/wizard rooms during the sliding proof.
+
+Visited-room flags:
+- The original visited flags are physical-room based.
+- An infinite logical map needs external logical visited state.
+- Mitigation: ignore percentage/completion for the first proof.
+
+Room size selectors:
+- The three room size selectors are global.
+- Rewriting the selector table may affect several physical rooms at once.
+- Mitigation: use existing selectors in the first proof.
+
+Original engine limits:
+- The map can become logically large, but the active simulated room is still
+  constrained by what the original engine can handle at once.
+- Mitigation: keep each logical room within original Knight Lore per-room
+  complexity limits unless later probes prove more is safe.
+
+
+Proof Success Criteria
+----------------------
+
+The sliding-cross idea is proven when all of these are true:
+
+1. The original JSSpeccy display remains the only renderer.
+2. The original Knight Lore game code/source is not modified.
+3. JS can preload the physical 5-room cross from external logical coordinates.
+4. The player can walk out of physical 0x88 into each physical neighbour.
+5. JS detects transition direction.
+6. JS advances the logical map coordinate.
+7. JS rewrites the five physical room entries around the new logical coordinate.
+8. JS normalizes current working-memory room labels back to physical 0x88.
+9. After repeated transitions, current room id settles to 0x88 after every
+   slide.
+10. The visible room changes according to logical map data across repeated
+    moves.
+11. No renderer replacement, source modification, or manual reset is required.
+
+Minimal compelling demo:
+- Start at physical center 0x88.
+- Walk east into physical 0x89.
+- See logical coordinate advance to (1, 0).
+- Confirm 0x5C10 and 0x5C30 settle back to 0x88.
+- See a distinct logical room.
+- Walk east again.
+- See logical coordinate advance to (2, 0), still with physical current room
+  normalized to 0x88 after the transition.
+
+Honest summary:
+- The 5-room cross is enough for the first proof because the original engine
+  only needs the room being occupied and the four rooms that can be entered by
+  cardinal exits.
+- The hard parts are not corners. The hard parts are timing, fixed-capacity
+  location-entry rewriting, correct arch behavior, and persistent objects.
