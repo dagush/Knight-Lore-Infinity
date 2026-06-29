@@ -270,9 +270,10 @@ sliding-window model. It only avoids using 0x5C10 as the initialization hack.
 0x5C10 remains the important live current-room byte for future transition
 detection and renumbering.
 
-Room 0x88 was also cleaned for safer testing. The compact room entry still
-contains background ids 0x12 and 0x13, but the expansion data behind them was
-zeroed so they become null objects instead of visible wizard/cauldron elements:
+Room 0x88 was also cleaned for safer testing (character appearing inside the cauldron).
+The compact room entry still contains background ids 0x12 and 0x13, but the expansion
+data behind them was zeroed so they become null objects instead of visible
+wizard/cauldron elements:
 
 - wizard background data: 0x6FAE..0x6FBE
 - cauldron background data: 0x6FBF..0x6FCF

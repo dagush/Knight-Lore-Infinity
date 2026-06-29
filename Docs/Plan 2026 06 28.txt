@@ -392,6 +392,7 @@ Exit criteria:
 - JS can inspect memory and apply pokes.
 - No renderer-side complexity is required for this project.
 
+-----------------------------------------------------------------
 Stage 1 - Read-Only Room Loading Anatomy
 
 Goal:
@@ -408,6 +409,7 @@ Exit criteria:
 - We can say: "room X was requested, static data was consumed, working memory is
   now stable."
 
+-----------------------------------------------------------------
 Stage 2 - Physical 5-Room Cross
 
 Goal:
@@ -431,6 +433,7 @@ Exit criteria:
 - The player can move from 0x88 to each cardinal physical neighbour and back.
 - No donor entry or 3x3 corner is needed.
 
+-----------------------------------------------------------------
 Stage 3 - One-Room Injection
 
 Goal:
@@ -448,6 +451,7 @@ Exit criteria:
 - Physical room 0x88 can visibly become several different logical rooms using
   only original display and memory rewriting.
 
+-----------------------------------------------------------------
 Stage 4 - Logical Map Model
 
 Goal:
@@ -464,6 +468,7 @@ Exit criteria:
 - JS can ask: "what logical room exists at coordinate (12, -4)?" and receive a
   valid room payload that can compile into a physical location entry.
 
+-----------------------------------------------------------------
 Stage 5 - Five-Room Cross Injection
 
 Goal:
@@ -481,6 +486,7 @@ Exit criteria:
 - Returning to the center displays the expected center logical room.
 - No original renderer or game source changes are involved.
 
+-----------------------------------------------------------------
 Stage 6 - One-Direction Recenter Proof
 
 Goal:
@@ -505,6 +511,7 @@ Exit criteria:
 - The visible room changes according to logical map data.
 - The player entry position remains natural.
 
+-----------------------------------------------------------------
 Stage 7 - Four-Direction Sliding Cross
 
 Goal:
@@ -527,6 +534,7 @@ Exit criteria:
   physical room ids.
 - Post-patch current physical room id is always 0x88.
 
+-----------------------------------------------------------------
 Stage 8 - Persistent Objects And Items
 
 Goal:
@@ -550,6 +558,7 @@ Exit criteria:
 - Picked-up or dropped items do not duplicate or disappear across a slide.
 - A logical room revisited through the sliding cross restores its item state.
 
+-----------------------------------------------------------------
 Stage 9 - Timing Hardening
 
 Goal:
@@ -571,6 +580,7 @@ Exit criteria:
 - The recenter patch happens at a known point in the original engine sequence.
 - No one-frame logic mismatch remains.
 
+-----------------------------------------------------------------
 Stage 10 - Edge Cases
 
 Goal:
@@ -588,6 +598,7 @@ Exit criteria:
 - Normal gameplay events do not lose logical map state or strand the player in
   a non-center physical room.
 
+-----------------------------------------------------------------
 Stage 11 - Tooling And Diagnostics
 
 Goal:
@@ -613,6 +624,7 @@ Exit criteria:
   - recenter patch;
   - object persistence.
 
+-----------------------------------------------------------------
 Stage 12 - Map Authoring Or Generation
 
 Goal:
@@ -629,8 +641,11 @@ Exit criteria:
   Lore layout while the original game only sees the five-room physical cross.
 
 
+-----------------------------------------------------------------
+-----------------------------------------------------------------
 Recommended Immediate Probe Order
----------------------------------
+-----------------------------------------------------------------
+-----------------------------------------------------------------
 
 1. Build a read-only memory sampler for the known anchors.
 2. Decode location table entries at runtime and compare against 0x5BAD and

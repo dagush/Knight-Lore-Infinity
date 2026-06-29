@@ -8,6 +8,7 @@ import { parseSNAFile, parseZ80File, parseSZXFile } from './snapshot.js';
 import { TAPFile, TZXFile } from './tape.js';
 import { StandardKeyboardHandler, RecreatedZXSpectrumHandler } from './keyboard.js';
 import { AudioHandler } from './audio.js';
+import { createKnightLoreInfinity } from './knightlore.js';
 
 import openIcon from './icons/open.svg';
 import resetIcon from './icons/reset.svg';
@@ -803,3 +804,5 @@ window.JSSpeccy = (container, opts) => {
         exit: () => {exit();},
     };
 };
+
+window.KnightLoreInfinity = createKnightLoreInfinity(window.JSSpeccy);

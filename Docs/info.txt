@@ -66,6 +66,43 @@ Current Room
      size: 5BABh, 5BACh and 5BAEh (X, Y, Z)
      Walls: use static information
 
+Room/location shape and background presets:
+     In the static location entry, byte +2 combines the room size selector with the
+     low 3-bit attribute/colour value. The background ids follow this byte and
+     continue until 0xFF.
+     The visual wall shape is not controlled by a separate hidden attribute: the
+     size selector and the chosen wall/background preset ids must agree.
+     This explains the Stage 3 test where 0x5BAB..0x5BAE correctly reported a
+     narrow room, but the room looked square because it still used square/tree
+     background ids.
+     Confirmed size selectors:
+        selector 0: 64, 64, 128
+        selector 1: 32, 64, 128
+        selector 2: 64, 32, 128
+     Original static-location patterns:
+        selector 0: square rooms. Common wall/background ids include 0x0C and
+                    tree room combinations using 0x0F, 0x10, and 0x11.
+        selector 1: rectangular 32x64 rooms. These use wall id 0x0E and only
+                    north/south exits on the narrow ends.
+        selector 2: rectangular 64x32 rooms. These use wall id 0x0D and only
+                    east/west exits on the narrow ends.
+     Practical rule for injected rooms:
+        For selector 1, use north/south exits and wall id 0x0E.
+        For selector 2, use east/west exits and wall id 0x0D.
+        Avoid doors on the long sides of rectangular rooms.
+     Wooden/tree caveat:
+        The original data only uses the tree/wood backgrounds 0x0F, 0x10, and
+        0x11 with square rooms. There do not appear to be stock rectangular
+        tree/wood wall definitions, so rectangular wooden rooms would require
+        custom background definitions later.
+     Fixed-size entry caveat:
+        When testing by rewriting a room entry without changing its total byte
+        length, preserve the number of background slots before 0xFF. Cleaned
+        null expansion ids such as 0x12 and 0x13 can be used as fillers after
+        the wizard/cauldron expansion data has been zeroed.
+        Example selector 1 background list: 0x00, 0x02, 0x0E, 0x12, 0x13, 0x12, 0x13, 0xFF
+        Example selector 2 background list: 0x01, 0x03, 0x0D, 0x12, 0x13, 0x12, 0x13, 0xFF
+
 Working memory: between 5BA0h and 6107h
 
 Live graphic object table:
