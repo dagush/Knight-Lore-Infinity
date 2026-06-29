@@ -1,0 +1,383 @@
+Knight Lore Infinity Logbook
+============================
+
++============================================================+
+| 2026 06 28 - Project Foundation and Stage 1                |
++============================================================+
+
+Project framing
+
+Started the Knight Lore / JSSpeccy sliding-window virtualization project. The
+core rule was set early and kept strict: the original Knight Lore game code and
+3D renderer are not to be modified, and the project must use the original
+Spectrum/JSSpeccy display only. All experiments are JavaScript-side emulator
+work: memory inspection, static table rewriting, working-memory rewriting, and
+runtime pokes/patches.
+
+The initial idea was a 3x3 physical room stencil centered around room 0x88, but
+that was refined after reviewing the game transition model. Knight Lore room
+movement is cardinal only, so a 5-room cross is enough for the first proof:
+
+- center: 0x88
+- west: 0x87
+- east: 0x89
+- south: 0x78
+- north: 0x98
+
+This keeps the project smaller and avoids unnecessary diagonal/corner room
+assumptions. The external JavaScript layer will own arbitrary logical map
+coordinates, while the original game will continue to see a small physical
+neighbourhood.
+
+Planning work
+
+Read and merged the existing overview in Docs/Plan 2026 06 27.txt with the
+newer static/dynamic memory findings. Created Docs/Plan 2026 06 28.txt as the
+current unified staged plan, while leaving the older plan untouched.
+
+The plan established these important anchors and boundaries:
+
+- location table starts at 0x6251
+- room size table is at 0x6248..0x6250
+- current room anchor is 0x5C10
+- current room attribute candidate is 0x5BAD
+- current room size bytes are 0x5BAB, 0x5BAC, and 0x5BAE
+- player/body slot starts at 0x5C08
+- dynamic object slots are 0x20 bytes each
+- slot +8 is a room id
+- slot +12 carries transition/entry state bits
+
+The staged plan became:
+
+- Stage 0: project foundation
+- Stage 1: read-only room loading anatomy
+- Stage 2: prove the physical 5-room cross
+- Stage 3 onward: room injection, static table rewrite, working-memory patching,
+  recentering, and generalization
+
+------------------------------------------------
+Stage 0 - Project Foundation
+
+Set up a safe local working flow around the existing JSSpeccy source tree.
+
+Created and adjusted .gitignore so source documents and important JS/CSS/HTML
+files remain trackable, while generated files, local test files, temporary
+files, node_modules, dist output, and the Knight Lore .z80 snapshot are ignored.
+
+Created a local _test directory using symbolic links only, so testing can happen
+from one simple directory without duplicating source files. The _test directory
+links to:
+
+- SRC/static/index.html
+- SRC/static/favicon.ico
+- SRC/dist/jsspeccy
+- Docs/Knight Lore (1984)(Ultimate).z80
+
+Confirmed that a simple Python local server on port 8000 is sufficient for
+manual testing.
+
+Configured the emulator page to load the local Knight Lore snapshot by default:
+
+- Knight Lore (1984)(Ultimate).z80
+
+Prepared the JSSpeccy build locally:
+
+- installed local dependencies under SRC/node_modules
+- built the JSSpeccy JavaScript and worker bundles
+- generated the local dist assets used by _test
+- verified the default page and snapshot load from the local server
+
+Stage 0 was considered complete when the emulator loaded the Knight Lore
+snapshot successfully from the local testing directory.
+
+------------------------------------------------
+Stage 1 - Read-Only Room Loading Anatomy
+
+Added a read-only emulator memory bridge so browser-side JavaScript can inspect
+the running Spectrum memory without modifying game memory.
+
+Implemented:
+
+- worker-side readMemory message using the existing WASM core peek(addr)
+- host-side readMemory(addr, length) Promise API in JSSpeccy
+- host-side frameCompleted event emission after each completed emulated frame
+- public pass-throughs for readMemory and on() from the JSSpeccy wrapper
+- cache-busting for jsspeccy.js and the worker so diagnostics do not silently
+  use stale bundles
+
+Built a Stage 1 diagnostics table directly below the emulator display. The
+table is read-only and samples live memory after frameCompleted. It shows:
+
+- sampler status and frame/sample counters
+- current location from 0x5C10
+- observed secondary room byte from 0x5C30
+- player body XYZ
+- player head XYZ
+- slot +12 flags for the body/head slots
+- 0x5BAB, 0x5BAC, 0x5BAD, and 0x5BAE room work bytes
+- decoded location table entry for the visible room
+- size selector and attribute byte
+- background ids
+- decoded block/count groups
+- decoded packed block positions
+- attribute comparison against 0x5BAD
+- size selector comparison against 0x5BAB/0x5BAC/0x5BAE
+- latest observed room transition
+- frameCompleted timing note
+
+During manual inspection, 0x5C10 proved to be the useful current-location byte.
+0x5C30 did not reliably update with room transitions, so it was demoted to an
+observed-only diagnostic value. The transition detector and location decoder now
+use only 0x5C10 as authoritative.
+
+Updated the diagnostics using the detailed location format documented at:
+
+https://www.icemark.com/dataformats/knightlore/index.html
+
+The table now reflects the 0x6251 locations format:
+
+- byte 0: location/screen id
+- byte 1: entry size
+- byte 2: size selector and attribute
+- following bytes: background ids
+- 0xFF terminator
+- following bytes: block/count groups
+
+Block/count groups are decoded as:
+
+- type = header byte >> 3
+- count = (header byte & 7) + 1
+- each following position byte is decoded as zz yyy xxx
+
+This was cross-checked against Docs/knightlore.asm, especially retrieve_screen,
+which scans the location table, loads backgrounds, and expands foreground block
+groups into working graphical object slots.
+
+Important Stage 1 conclusions
+
+- The JavaScript layer can read live emulator memory from the browser side.
+- 0x5C10 is the practical current-room/location anchor.
+- 0x5C30 is useful to observe, but should not be treated as current-room truth.
+- The location table can be decoded live from memory.
+- The location entry's attribute and size selector can be compared against
+  working-memory fields.
+- The frameCompleted boundary is useful for observation, but it is still a
+  post-frame boundary. Future recentering may need an earlier worker/core hook
+  if invisible patching after a transition proves too late.
+
+Stage 1 was considered complete after the diagnostics table was manually checked
+and judged to show the right room-loading information.
+
+Current project state at end of 2026 06 28
+
+- Stage 0 is complete.
+- Stage 1 is complete.
+- The project has a working local JSSpeccy/Knight Lore test page.
+- The emulator can load the Knight Lore .z80 snapshot by default.
+- The browser page now includes a reliable read-only memory diagnostics table.
+- The next major work should begin Stage 2: prove the 5-room physical cross
+  centered on 0x88.
+
+Open cautions
+
+- Do not assume frameCompleted is early enough for mutation stages.
+- Do not treat 0x5C30 as authoritative for current room.
+- Do not resize location table entries until fixed-capacity rewrite rules are
+  proven.
+- Keep source-game modifications off limits.
+- Keep the original Spectrum display as the only rendering surface.
+
+
++============================================================+
+| 2026 06 29 - Stage 2 and Stage 3 milestone entry           |
++============================================================+
+
+2026 06 29
+----------
+
+This entry covers the work done after the 2026 06 28 logbook entry. The main
+result is that Stage 2 and Stage 3 are now complete enough to use as project
+milestones.
+
+The emulator-side memory bridge was extended from read-only inspection to
+controlled runtime writes:
+
+- worker-side writeMemory message using the existing WASM core poke(addr, byte)
+- host-side writeMemory(addr, data) Promise API in JSSpeccy
+- public pass-through for writeMemory from the JSSpeccy wrapper
+
+This is still JavaScript-side emulator work only. The original Knight Lore game
+source and renderer remain untouched.
+
+------------------------------------------------
+Stage 2 - Physical 5-Room Cross
+
+The Stage 2 diagnostics table was added below the Stage 1 table. It tracks the
+chosen physical cross:
+
+- center: 0x88
+- west: 0x87
+- east: 0x89
+- south: 0x78
+- north: 0x98
+
+The table scans the location table and confirms that retrieve_screen can find
+all five physical entries. For each room it shows:
+
+- physical role and room id
+- location entry address range
+- header byte, size selector, and attribute
+- decoded size bytes
+- background count
+- block/group count
+- compact block-group fingerprint
+- cardinal arch summary
+- diagnostic status
+
+The Counts column was expanded to include general foreground group summaries,
+for example:
+
+- 0x05 spike block: 8
+- 0x05 spike block: 5
+- 0x0D guard square patrol: 1
+
+This makes the physical rooms easier to identify during manual testing without
+dumping full block-position details into the Stage 2 table.
+
+Room 0x88 was confirmed to already have four cardinal arch background ids in
+its compact entry, so the initial physical center can support all four
+directions without needing diagonal/corner rooms. This supports the current
+5-room cross model for normal cardinal movement.
+
+Start-room injection was corrected. An initial attempt to poke live room-related
+bytes was useful as a probe but not the right initialization path. The proper
+source is the start_locations table used by init_start_location. The exact byte
+sequence:
+
+- 0x2F, 0x44, 0xB3, 0x8F
+
+was found once in decompressed snapshot RAM at:
+
+- start_locations: 0xD1E2..0xD1E5
+
+The diagnostics now patch that table to:
+
+- 0x88, 0x88, 0x88, 0x88
+
+This makes every randomized start location resolve to physical room 0x88 on the
+next game initialization. Importantly, this does not remove 0x5C10 from the
+sliding-window model. It only avoids using 0x5C10 as the initialization hack.
+0x5C10 remains the important live current-room byte for future transition
+detection and renumbering.
+
+Room 0x88 was also cleaned for safer testing. The compact room entry still
+contains background ids 0x12 and 0x13, but the expansion data behind them was
+zeroed so they become null objects instead of visible wizard/cauldron elements:
+
+- wizard background data: 0x6FAE..0x6FBE
+- cauldron background data: 0x6FBF..0x6FCF
+- cauldron bubbles data: 0xB8C8..0xB8D9
+
+This keeps the location entry size and layout intact while removing the wizard,
+cauldron, and bubbles from the visible test room. The diagnostics read those
+ranges back and report whether they are zeroed.
+
+Stage 2 conclusions
+
+- The 5-room physical cross is visible and decodable from JavaScript.
+- retrieve_screen can find all five entries by normal location-table scanning.
+- Center room 0x88 has four usable cardinal arch entries.
+- No diagonal/corner room is needed for the current cardinal-only transition
+  model.
+- start_locations at 0xD1E2 is the correct initialization table to patch for
+  starting in 0x88.
+- 0x5C10 remains reserved for live transition detection and future
+  room-renumber pokes, not initial start-room selection.
+
+Stage 2 is considered complete.
+
+------------------------------------------------
+Stage 3 - One-Room Injection
+
+Stage 3 proved that the JavaScript layer can rewrite a compact static room
+entry while preserving the original entry size, and that the original Knight
+Lore room loader will consume the rewritten data when the room is rebuilt.
+
+A dormant one-room injection test harness was added for room 0x88:
+
+- target entry: 0x67BB..0x67CE
+- original entry size: 0x13
+- normal mode leaves the current clean 0x88 configuration active
+- test mode is enabled by opening:
+  http://127.0.0.1:8000/index.html?stage3test=1
+
+The test rewrites only bytes inside the existing 0x88 entry. It does not resize
+the location table entry. The test fingerprint changes:
+
+- header: 0x06 -> 0x11
+- size selector: 0 -> 2
+- attribute: 6 -> 1
+- decoded size: 64/64/128 -> 64/32/128
+- background/wall style: stone arches/walls -> tree-room/wooden style
+- foreground group: 0x00 block: 8 -> 0x03 rock: 8
+
+The diagnostics table confirmed the injected compact entry:
+
+- header: 0x11 sel 2 attr 1
+- size: 64/32/128
+- counts: bg 7; groups 1; 0x03 rock: 8
+- arch summary: tree arch entries
+
+The decisive manual visual result was successful: with ?stage3test=1 and a
+fresh room build/new game, the Spectrum display showed a wooden room with the
+expected altered exits and eight rocks. This proves the original retrieve_screen
+path consumed the JavaScript-rewritten static data and built a real game room
+from it.
+
+A visible diagnostics/cache marker was added so stale-page problems are easy to
+spot:
+
+- diagnostics build: stage3-url-test-20260629-2
+- script cache tag: stage2-20260629-6
+
+Normal mode explicitly reports that the Stage 3 one-room injection test is
+disabled and explains that ?stage3test=1 enables it. Test mode explicitly
+reports that the room 0x88 entry was rewritten while preserving entry size.
+
+Stage 3 conclusions
+
+- Fixed-size static room-entry rewriting works.
+- Attribute/colour and size selector rewrites are visible to the decoder.
+- Background/wall/arch ids can be rewritten in the compact entry.
+- Simple foreground block runs can be rewritten.
+- retrieve_screen will build a visibly different room from the rewritten static
+  entry when the rewrite happens before the room is built.
+- Changing the compact entry after a room is already expanded does not
+  necessarily change the visible room immediately; already-expanded working
+  memory is a separate mutation target for later stages.
+
+Stage 3 is considered complete.
+
+Current project state at end of 2026 06 29
+
+- Stage 0 is complete.
+- Stage 1 is complete.
+- Stage 2 is complete.
+- Stage 3 is complete.
+- The project has runtime memory reads and writes from JavaScript.
+- The diagnostics page can prove both physical-cross structure and one-room
+  static injection.
+- The current default room 0x88 is cleaned of wizard/cauldron visuals.
+- The Stage 3 injection test is kept available but opt-in via ?stage3test=1.
+
+Open cautions
+
+- frameCompleted is still only an observation boundary, not yet proven early
+  enough for seamless transition mutation.
+- Static entry rewrites affect future retrieve_screen builds; immediate visual
+  mutation of an already-expanded room requires working-memory patching.
+- Keep entry sizes fixed unless/until a safe location-table resizing strategy is
+  deliberately designed.
+- 0x5C10 must remain part of the future live room-renumbering model.
+- Quest-specific hardcoding around the cauldron room should stay out of the
+  sliding-window proof until the base transition loop is stable.

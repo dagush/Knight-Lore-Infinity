@@ -19,12 +19,20 @@ import tapePlayIcon from './icons/tape_play.svg';
 import tapePauseIcon from './icons/tape_pause.svg';
 
 const scriptUrl = document.currentScript.src;
+const getScriptSiblingUrl = (filename) => {
+    const url = new URL(filename, scriptUrl);
+    const scriptSearch = new URL(scriptUrl).search;
+    if (scriptSearch) {
+        url.search = scriptSearch;
+    }
+    return url;
+};
 
 class Emulator extends EventEmitter {
     constructor(canvas, opts) {
         super();
         this.canvas = canvas;
-        this.worker = new Worker(new URL('jsspeccy-worker.js', scriptUrl));
+        this.worker = new Worker(getScriptSiblingUrl('jsspeccy-worker.js'));
         this.keyboardEnabled = ('keyboardEnabled' in opts) ? opts.keyboardEnabled : true;
         if (this.keyboardEnabled) {
             this.keyboardHandler = (opts.keyboardMap == 'recreated')
@@ -49,6 +57,11 @@ class Emulator extends EventEmitter {
 
         this.nextFileOpenID = 0;
         this.fileOpenPromiseResolutions = {};
+
+        this.nextMemoryReadID = 0;
+        this.memoryReadPromiseResolutions = {};
+        this.nextMemoryWriteID = 0;
+        this.memoryWritePromiseResolutions = {};
 
         this.onReadyHandlers = [];
 
@@ -81,6 +94,7 @@ class Emulator extends EventEmitter {
                     }
 
                     this.displayHandler.frameCompleted(e.data.frameBuffer);
+                    this.emit('frameCompleted');
                     if (this.isRunning) {
                         const time = performance.now();
                         if (time > this.nextFrameTime) {
@@ -122,6 +136,36 @@ class Emulator extends EventEmitter {
                     this.tapeIsPlaying = false;
                     this.emit('stoppedTape');
                     break;
+                case 'memoryRead': {
+                    const resolution = this.memoryReadPromiseResolutions[e.data.id];
+                    if (resolution) {
+                        delete this.memoryReadPromiseResolutions[e.data.id];
+                        if (e.data.error) {
+                            resolution.reject(e.data.error);
+                        } else {
+                            resolution.resolve({
+                                addr: e.data.addr,
+                                data: e.data.data,
+                            });
+                        }
+                    }
+                    break;
+                }
+                case 'memoryWritten': {
+                    const resolution = this.memoryWritePromiseResolutions[e.data.id];
+                    if (resolution) {
+                        delete this.memoryWritePromiseResolutions[e.data.id];
+                        if (e.data.error) {
+                            resolution.reject(e.data.error);
+                        } else {
+                            resolution.resolve({
+                                addr: e.data.addr,
+                                length: e.data.length,
+                            });
+                        }
+                    }
+                    break;
+                }
                 default:
                     console.log('message received by host:', e.data);
             }
@@ -240,6 +284,33 @@ class Emulator extends EventEmitter {
 
     reset() {
         this.worker.postMessage({message: 'reset'});
+    }
+
+    readMemory(addr, length) {
+        const readID = this.nextMemoryReadID++;
+        this.worker.postMessage({
+            message: 'readMemory',
+            id: readID,
+            addr,
+            length,
+        });
+        return new Promise((resolve, reject) => {
+            this.memoryReadPromiseResolutions[readID] = {resolve, reject};
+        });
+    }
+
+    writeMemory(addr, data) {
+        const writeID = this.nextMemoryWriteID++;
+        const payload = data instanceof Uint8Array ? data : new Uint8Array(data);
+        this.worker.postMessage({
+            message: 'writeMemory',
+            id: writeID,
+            addr,
+            data: payload,
+        });
+        return new Promise((resolve, reject) => {
+            this.memoryWritePromiseResolutions[writeID] = {resolve, reject};
+        });
     }
 
     loadSnapshot(snapshot) {
@@ -712,6 +783,9 @@ window.JSSpeccy = (container, opts) => {
         enterFullscreen: () => {ui.enterFullscreen();},
         exitFullscreen: () => {ui.exitFullscreen();},
         setMachine: (model) => {emu.setMachine(model);},
+        on: (...args) => emu.on(...args),
+        readMemory: (addr, length) => emu.readMemory(addr, length),
+        writeMemory: (addr, data) => emu.writeMemory(addr, data),
         openFileDialog: () => {openFileDialog();},
         openUrl: (url) => {
             emu.openUrl(url).catch((err) => {alert(err);});

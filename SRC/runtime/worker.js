@@ -33,6 +33,20 @@ const loadMemoryPage = (page, data) => {
     memoryData.set(data, core.MACHINE_MEMORY + page * 0x4000);
 };
 
+const readMemory = (addr, length) => {
+    const data = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        data[i] = core.peek((addr + i) & 0xffff);
+    }
+    return data;
+};
+
+const writeMemory = (addr, data) => {
+    for (let i = 0; i < data.length; i++) {
+        core.poke((addr + i) & 0xffff, data[i]);
+    }
+};
+
 const loadSnapshot = (snapshot) => {
     core.setMachineType(snapshot.model);
     for (let page in snapshot.memoryPages) {
@@ -204,6 +218,44 @@ onmessage = (e) => {
         case 'loadMemory':
             loadMemoryPage(e.data.page, e.data.data);
             break;
+        case 'readMemory': {
+            if (!core) {
+                postMessage({
+                    message: 'memoryRead',
+                    id: e.data.id,
+                    addr: e.data.addr,
+                    error: 'Core is not ready',
+                });
+                break;
+            }
+            const data = readMemory(e.data.addr, e.data.length);
+            postMessage({
+                message: 'memoryRead',
+                id: e.data.id,
+                addr: e.data.addr,
+                data,
+            }, [data.buffer]);
+            break;
+        }
+        case 'writeMemory': {
+            if (!core) {
+                postMessage({
+                    message: 'memoryWritten',
+                    id: e.data.id,
+                    addr: e.data.addr,
+                    error: 'Core is not ready',
+                });
+                break;
+            }
+            writeMemory(e.data.addr, e.data.data);
+            postMessage({
+                message: 'memoryWritten',
+                id: e.data.id,
+                addr: e.data.addr,
+                length: e.data.data.length,
+            });
+            break;
+        }
         case 'loadSnapshot':
             loadSnapshot(e.data.snapshot);
             postMessage({
