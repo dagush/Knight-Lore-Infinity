@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>JSSpeccy v3</title>
-        <script src="jsspeccy/jsspeccy.js?v=stage3-square-cross-20260629-1"></script>
+        <script src="jsspeccy/jsspeccy.js?v=stage45-json-format-20260630-1"></script>
         <style>
             :root {
                 color-scheme: dark;
@@ -158,6 +158,61 @@
             .cross-table td:nth-child(8) {
                 width: 11%;
             }
+
+            .logical-map-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .logical-map-table th:nth-child(1),
+            .logical-map-table td:nth-child(1) {
+                width: 8%;
+            }
+
+            .logical-map-table th:nth-child(2),
+            .logical-map-table td:nth-child(2) {
+                width: 10%;
+            }
+
+            .logical-map-table th:nth-child(3),
+            .logical-map-table td:nth-child(3) {
+                width: 8%;
+            }
+
+            .logical-map-table th:nth-child(4),
+            .logical-map-table td:nth-child(4) {
+                width: 8%;
+            }
+
+            .logical-map-table th:nth-child(5),
+            .logical-map-table td:nth-child(5) {
+                width: 12%;
+            }
+
+            .logical-map-table th:nth-child(6),
+            .logical-map-table td:nth-child(6) {
+                width: 11%;
+            }
+
+            .logical-map-table th:nth-child(7),
+            .logical-map-table td:nth-child(7) {
+                width: 15%;
+            }
+
+            .logical-map-table th:nth-child(8),
+            .logical-map-table td:nth-child(8) {
+                width: 10%;
+            }
+
+            .logical-map-table th:nth-child(9),
+            .logical-map-table td:nth-child(9) {
+                width: 12%;
+            }
+
+            .logical-map-table th:nth-child(10),
+            .logical-map-table td:nth-child(10) {
+                width: 6%;
+            }
         </style>
     </head>
     <body onload="window.KnightLoreInfinity.start()">
@@ -178,7 +233,7 @@
             </section>
             <section id="knight-lore-stage2-diagnostics" class="diagnostics">
                 <h1>Stage 2 - Physical 5-Room Cross</h1>
-                <p id="stage2-status" class="stage-status">Diagnostics build: stage3-square-cross-20260629-1. Waiting for the first Stage 2 sample.</p>
+                <p id="stage2-status" class="stage-status">Diagnostics build: stage45-json-format-20260630-1. Waiting for the first Stage 2 sample.</p>
                 <table class="diagnostics-table cross-table">
                     <thead>
                         <tr>
@@ -193,6 +248,27 @@
                         </tr>
                     </thead>
                     <tbody id="stage2-cross-body"></tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage4-diagnostics" class="diagnostics">
+                <h1>Stage 4.5 - Logical Map JSON Authoring</h1>
+                <p id="stage4-status" class="stage-status">Diagnostics build: stage45-json-format-20260630-1. Waiting for the logical map probe.</p>
+                <table class="diagnostics-table logical-map-table">
+                    <thead>
+                        <tr>
+                            <th>Query</th>
+                            <th>Label</th>
+                            <th>Coord</th>
+                            <th>Source</th>
+                            <th>Size/Attr</th>
+                            <th>Exits</th>
+                            <th>Backgrounds</th>
+                            <th>Blocks</th>
+                            <th>Compiled Entry</th>
+                            <th>State</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage4-logical-body"></tbody>
                 </table>
             </section>
         </main>

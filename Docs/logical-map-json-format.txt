@@ -1,0 +1,392 @@
+Knight Lore Infinity Logical Map JSON Format
+===========================================
+
+Current format id:
+
+    knight-lore-infinity-logical-map-v1
+
+Purpose
+-------
+
+This JSON format describes the external logical map used by the JavaScript
+side of Knight Lore Infinity. It is not original game source code and it is
+not a renderer format. It is an editable authoring format that can compile a
+logical room into the compact Knight Lore location-entry bytes used by the
+original engine.
+
+The same format is used by:
+
+- user-authored maps;
+- generated/deterministic logical rooms;
+- the original Knight Lore room dump in:
+
+      SRC/static/maps/knight-lore-original-map.json
+
+Local test URL:
+
+    http://127.0.0.1:8000/index.html?map=maps/knight-lore-original-map.json
+
+
+Coordinate Convention
+---------------------
+
+Logical coordinates are integer pairs:
+
+    { "x": 0, "y": 0 }
+
+For the original-room dump, room 0x88 is the logical origin:
+
+    0x88 -> (0, 0)
+    0x89 -> (1, 0)
+    0x87 -> (-1, 0)
+    0x98 -> (0, 1)
+    0x78 -> (0, -1)
+
+North is y + 1. South is y - 1.
+
+The original physical room id is not the logical coordinate. It can be kept as
+a label or as originalRoomId for provenance.
+
+
+Top-Level Document
+------------------
+
+Preferred document shape:
+
+    {
+      "format": "knight-lore-infinity-logical-map-v1",
+      "title": "My custom map",
+      "coordinateConvention": "north is y + 1; south is y - 1",
+      "origin": { "label": "start", "coord": { "x": 0, "y": 0 } },
+      "notes": [
+        "Optional human notes."
+      ],
+      "rooms": [
+        ...
+      ]
+    }
+
+The runtime also accepts a bare JSON array of rooms, but the object form above
+is preferred because it can carry title, notes, and provenance.
+
+Top-level fields:
+
+- format:
+  Format identifier. Use "knight-lore-infinity-logical-map-v1".
+
+- title:
+  Human-readable map title.
+
+- coordinateConvention:
+  Human-readable convention note. The runtime currently assumes north is y + 1.
+
+- origin:
+  Optional human/provenance field naming the intended starting room.
+
+- notes:
+  Optional string array for editor notes.
+
+- rooms:
+  Array of room definitions.
+
+
+Room Definition
+---------------
+
+Minimal high-level room:
+
+    {
+      "label": "start",
+      "aliases": ["0x88"],
+      "title": "Starting room",
+      "coord": { "x": 0, "y": 0 },
+      "size": { "selector": 0 },
+      "colour": 6,
+      "theme": "stone",
+      "exits": {
+        "north": "arch",
+        "east": "arch",
+        "south": "arch",
+        "west": "arch"
+      },
+      "blocks": [
+        {
+          "type": 3,
+          "positions": [
+            { "x": 2, "y": 3, "z": 0 },
+            { "x": 5, "y": 3, "z": 0 }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": []
+    }
+
+Room fields:
+
+- label:
+  Required in practice. A unique human-readable room name. Examples:
+  "start", "0x88", "cauldron", "west-gallery".
+
+- aliases:
+  Optional array of additional unique names. The runtime can look rooms up by
+  label or alias. In the original dump, room 0x88 also has alias "cauldron".
+
+- title:
+  Optional display name. If omitted, the label is used.
+
+- coord:
+  Required integer logical coordinate.
+
+- originalRoomId:
+  Optional provenance field for rooms copied from the original game. It is not
+  used as the logical coordinate.
+
+- size:
+  Required object with selector.
+
+- colour:
+  Original low 3-bit room attribute/colour value, 0..7.
+
+- theme:
+  Optional high-level background generator hint. Currently "stone" or "tree".
+  Theme is only used when backgrounds is omitted.
+
+- exits:
+  Semantic exit map. Use false for no exit or "arch" for an arch exit. Future
+  transition logic may use this field as map connectivity.
+
+- backgrounds:
+  Optional exact compact background id list. If present, it is authoritative
+  for compilation and theme is ignored. This is how the original-room dump
+  preserves exact original wall, arch, portcullis, wizard, cauldron, and high
+  arch background ids.
+
+- blocks:
+  Compact foreground block runs, represented as block type plus grid
+  positions.
+
+- objects:
+  Optional dynamic object authoring/state placeholder. Accepted by the runtime
+  and persisted outside the emulator, but not compiled into location-entry
+  bytes yet.
+
+- items:
+  Optional item authoring/state placeholder. Accepted by the runtime and
+  persisted outside the emulator, but not compiled into item tables yet.
+
+- meta:
+  Optional provenance/debug object. The compiler ignores it. It is safe to
+  delete meta when copying a room into a custom map.
+
+
+Labels and Uniqueness
+---------------------
+
+The loader rejects:
+
+- duplicate logical coordinates;
+- duplicate labels;
+- duplicate aliases;
+- a label or alias that points to two different coordinates.
+
+Examples:
+
+    window.KnightLoreInfinity.logicalMap.getRoomByLabel("0x88")
+    window.KnightLoreInfinity.logicalMap.getRoomByLabel("cauldron")
+
+
+Room Sizes
+----------
+
+Supported size selectors:
+
+    selector 0: 64, 64, 128  square room
+    selector 1: 32, 64, 128  rectangular room
+    selector 2: 64, 32, 128  rectangular room
+
+Door rule for rectangular rooms:
+
+- selector 1 uses north/south exits and wall id 0x0E;
+- selector 2 uses east/west exits and wall id 0x0D;
+- avoid long-side doors in rectangular rooms.
+
+For early sliding-window stages, generated rooms remain square to avoid
+rectangular-door ambiguity.
+
+
+Backgrounds
+-----------
+
+If backgrounds is omitted, the runtime builds backgrounds from theme + exits:
+
+- stone + selector 0:
+  arch ids 0x00..0x03 and wall id 0x0C.
+
+- tree + selector 0:
+  tree arch ids 0x04..0x07 and tree room ids 0x0F, 0x10, 0x11.
+
+- rectangular stone:
+  selector 1 wall id 0x0E;
+  selector 2 wall id 0x0D.
+
+Known background ids:
+
+    0x00 arch north
+    0x01 arch east
+    0x02 arch south
+    0x03 arch west
+    0x04 tree arch north
+    0x05 tree arch east
+    0x06 tree arch south
+    0x07 tree arch west
+    0x08 portcullis north
+    0x09 portcullis east
+    0x0A portcullis south
+    0x0B portcullis west
+    0x0C wall size 1
+    0x0D wall size 2
+    0x0E wall size 3
+    0x0F tree room size 1
+    0x10 tree filler west
+    0x11 tree filler north
+    0x12 wizard
+    0x13 cauldron
+    0x14 high arch east
+    0x15 high arch south
+    0x16 high arch east base
+    0x17 high arch south base
+
+Important:
+
+- If backgrounds is present, it is used exactly.
+- In that case exits is still useful semantic/navigation data, but it does
+  not generate or alter background ids.
+- If editing a room copied from the original dump, keep backgrounds and exits
+  consistent.
+
+
+Blocks
+------
+
+Blocks are represented as runs:
+
+    {
+      "type": 3,
+      "positions": [
+        { "x": 2, "y": 3, "z": 0 },
+        { "x": 5, "y": 3, "z": 0 }
+      ]
+    }
+
+Rules:
+
+- type must be an integer 0..31.
+- x and y must be integers 0..7.
+- z must be an integer 0..3.
+- Runs with more than 8 positions are split into multiple compact
+  block/count groups by the compiler.
+
+Known block type names:
+
+    0x00 block
+    0x01 fire unused
+    0x02 ball up/down
+    0x03 rock
+    0x04 gargoyle
+    0x05 spike block
+    0x06 pushable chest
+    0x07 pushable table
+    0x08 guard east/west
+    0x09 ghost
+    0x0A fire north/south
+    0x0B block high
+    0x0C ball up/down offset xy
+    0x0D guard square patrol
+    0x0E block moving east/west
+    0x0F block moving north/south
+    0x10 movable block
+    0x11 spike block high
+    0x12 spike ball fall
+    0x13 spike ball high fall
+    0x14 fire east/west
+    0x15 dropping block
+    0x16 collapsing block
+    0x17 ball bouncing
+    0x18 ball up/down
+    0x19 spell repels player
+    0x1A portcullis up/down
+    0x1B portcullis up/down
+    0x1C ball up/down offset x
+
+
+Compilation to a Physical Location Entry
+----------------------------------------
+
+The compiler turns a logical room into:
+
+    id, entrySize, header, backgrounds..., 0xFF, block/count groups...
+
+Header:
+
+    header = (size.selector << 3) | (colour & 0x07)
+
+Block/count group:
+
+    groupHeader = (block.type << 3) | (positionCount - 1)
+    positionByte = (z << 6) | (y << 3) | x
+
+The physical id is supplied at compile time. For the center room proof this is
+usually 0x88:
+
+    window.KnightLoreInfinity.logicalMap.compileRoomAt(12, -4, 0x88)
+
+
+Runtime API
+-----------
+
+Useful browser console calls:
+
+    window.KnightLoreInfinity.logicalMap.getRoomAt(12, -4)
+    window.KnightLoreInfinity.logicalMap.getRoomByLabel("0x88")
+    window.KnightLoreInfinity.logicalMap.getRoomByLabel("cauldron")
+    window.KnightLoreInfinity.logicalMap.compileRoomAt(12, -4, 0x88)
+    window.KnightLoreInfinity.loadLogicalMapFromUrl("maps/knight-lore-original-map.json")
+
+The loader validates every authored room. If loading fails, the previous map is
+restored.
+
+
+Original Dump Notes
+-------------------
+
+The original-room dump is generated by:
+
+    Tools/dump-original-map.mjs
+
+Source:
+
+    Docs/knightlore.asm location_tbl
+
+Output:
+
+    SRC/static/maps/knight-lore-original-map.json
+
+The dump contains 128 rooms. Labels are original room ids, for example "0x88".
+The cauldron room has:
+
+    "label": "0x88",
+    "aliases": ["cauldron"]
+
+The generated dump intentionally avoids redundant editable block data:
+
+- blocks have type and x/y/z positions only;
+- block names are documented here rather than repeated in every room;
+- raw original position bytes are not repeated beside x/y/z;
+- exact original location-entry bytes are kept only in meta.locationEntryBytes
+  for provenance/debugging.
+
+Some original background-only rooms omit the 0xFF background terminator in the
+original compact data. The dump records this in meta.foundBackgroundTerminator.
+The logical compiler always emits clean semantic entries with a 0xFF separator.
+

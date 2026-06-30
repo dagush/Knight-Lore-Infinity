@@ -382,3 +382,257 @@ Open cautions
 - 0x5C10 must remain part of the future live room-renumbering model.
 - Quest-specific hardcoding around the cauldron room should stay out of the
   sliding-window proof until the base transition loop is stable.
+
+================================================
+| Logbook entry - 2026 06 30                  |
+| Stage 4 and Stage 4.5                       |
+================================================
+
+Today started by making one small but important correction to the Stage 3 test
+setup. The ?stage3test=1 room injection was changed back to a square 64/64/128
+room so the physical 5-room cross can be manually tested by walking from 0x88
+to each cardinal neighbour and back. The active test room now uses:
+
+- header 0x06: selector 0, attr 6
+- four stone arches: 0x00, 0x01, 0x02, 0x03
+- square wall id: 0x0C
+- wizard/cauldron ids 0x12 and 0x13 only as null fillers
+- foreground fingerprint: 0x03 rock: 8
+
+The room-shape finding was also documented in Docs/info.txt: room dimensions
+from 0x5BAB..0x5BAE can correctly report a narrow room while the room looks
+square if the static background/wall ids do not match the size selector. This
+confirmed that size selector and visual wall/background preset must be treated
+as a matched pair.
+
+------------------------------------------------
+Stage 4 - Logical Map Model
+
+Stage 4 implemented the first real external logical map model in
+SRC/runtime/knightlore.js.
+
+The model now supports:
+
+- integer logical coordinates (x, y)
+- coordinate convention: north is y + 1, south is y - 1
+- authored room definitions
+- deterministic generated rooms for coordinates not explicitly authored
+- room payloads with size selector, colour/attribute, exits, backgrounds,
+  blocks, objects, and items
+- persistent per-room state outside the emulator
+- compilation of a logical room into compact Knight Lore location-entry bytes
+
+The browser exposes useful console probes:
+
+- window.KnightLoreInfinity.logicalMap.getRoomAt(12, -4)
+- window.KnightLoreInfinity.logicalMap.compileRoomAt(12, -4, 0x88)
+- window.KnightLoreInfinity.logicalMap.markVisited(12, -4)
+
+The Stage 4 diagnostics table was added below the emulator. It displays sample
+logical queries, including the explicit exit-criteria coordinate (12, -4), and
+shows:
+
+- logical coordinate
+- room source, authored or generated
+- size selector and decoded size
+- exits
+- background ids
+- block summaries
+- compiled compact-entry bytes
+- persistent room-state revision
+
+The initial Stage 4 generator deliberately produces square rooms. This avoids
+rectangular-room long-side door ambiguity while the sliding physical-cross
+machinery is still being proven.
+
+Stage 4 conclusion
+
+- JavaScript can ask for a logical room at an arbitrary coordinate such as
+  (12, -4).
+- The runtime returns a valid room payload.
+- That payload can compile into a physical Knight Lore location entry.
+- Logical room state exists outside the emulator and survives independently of
+  Spectrum memory.
+
+Stage 4 is considered complete as a model/API proof.
+
+------------------------------------------------
+Stage 4.5 - Logical Map JSON Authoring
+
+An intermediate Stage 4.5 was added to make the logical map editable outside
+the codebase.
+
+Room labels and aliases were added first. A room can now be named with a label
+such as:
+
+- 0x88
+- cauldron
+- start
+- west-gallery
+
+The runtime can look up rooms by label or alias:
+
+- window.KnightLoreInfinity.logicalMap.getRoomByLabel("0x88")
+- window.KnightLoreInfinity.logicalMap.getRoomByLabel("cauldron")
+
+A JSON map loader was then added. The preferred JSON format is:
+
+- top-level object with format, title, coordinateConvention, origin, notes,
+  and rooms
+- room entries with label, aliases, coord, size, colour, exits, backgrounds,
+  blocks, objects, items, and optional meta
+
+The runtime can load a JSON map from a URL:
+
+- window.KnightLoreInfinity.loadLogicalMapFromUrl("maps/knight-lore-original-map.json")
+
+The test URL for loading the original dump is:
+
+- http://127.0.0.1:8000/index.html?map=maps/knight-lore-original-map.json
+
+The loader was made deliberately strict:
+
+- duplicate logical coordinates are rejected
+- duplicate labels are rejected
+- duplicate aliases are rejected
+- invalid size selectors, colours, background ids, block types, and block
+  positions are rejected
+- failed loads roll back to the previously loaded map
+
+This strictness is important because JSON files will be edited by hand.
+
+------------------------------------------------
+Original Knight Lore JSON Room Dump
+
+A reproducible dump generator was added:
+
+- Tools/dump-original-map.mjs
+
+It reads:
+
+- Docs/knightlore.asm location_tbl
+
+and writes:
+
+- SRC/static/maps/knight-lore-original-map.json
+
+The generated JSON contains all 128 original room/location entries in the same
+authoring format used by the runtime. Room order is not important because the
+original engine scans the table by room id.
+
+For the dump, the logical coordinate system is centered on original room 0x88:
+
+- 0x88 -> (0, 0)
+- 0x89 -> (1, 0)
+- 0x87 -> (-1, 0)
+- 0x98 -> (0, 1)
+- 0x78 -> (0, -1)
+
+The cauldron room is represented as:
+
+- label: 0x88
+- alias: cauldron
+- originalRoomId: 136
+
+The dump preserves exact original compact background ids and block runs so
+users can copy/paste original rooms into custom maps. To keep the editable
+format clean, redundant fields were removed from generated room data:
+
+- block type names are documented, not repeated in every block
+- raw packed position bytes are not repeated beside decoded x/y/z positions
+- theme is omitted when exact backgrounds are present
+
+Original provenance/debug bytes are kept under meta, especially:
+
+- meta.locationEntryAddress
+- meta.locationEntrySize
+- meta.locationEntryBytes
+- meta.foundBackgroundTerminator
+- meta.backgroundNames
+
+The foundBackgroundTerminator field records a useful original-format nuance:
+some original background-only rooms omit the 0xFF background terminator. The
+logical compiler always emits clean semantic entries with a 0xFF separator.
+
+The static build was updated so static/maps is copied into dist/maps. A local
+_test/maps symlink was also added so the Python test server can serve:
+
+- maps/knight-lore-original-map.json
+
+------------------------------------------------
+Documentation Added
+
+A detailed JSON format document was added:
+
+- Docs/logical-map-json-format.txt
+
+It explains:
+
+- the top-level document shape
+- room fields
+- coordinate convention
+- labels and aliases
+- size selectors
+- background ids
+- block type ids
+- compiler layout
+- runtime APIs
+- original dump notes
+
+This should be the main reference for future-us and for users who want to edit
+or build custom maps in a text editor.
+
+------------------------------------------------
+Verification
+
+The following checks were run today:
+
+- JavaScript syntax checks for SRC/runtime/knightlore.js
+- JavaScript syntax checks for Tools/dump-original-map.mjs
+- JSON parse checks for SRC/package.json
+- JSON parse checks for SRC/static/maps/knight-lore-original-map.json
+- full runtime load of knight-lore-original-map.json
+- compilation of all 128 original dumped rooms with zero compile errors
+- duplicate-label rejection test
+- failed-load rollback test
+- webpack rebuild of SRC/dist/jsspeccy/jsspeccy.js
+- refreshed SRC/dist/index.html
+- refreshed SRC/dist/maps/knight-lore-original-map.json
+- local HTTP fetch test for maps/knight-lore-original-map.json
+- git diff whitespace check
+
+Current cache/diagnostic marker:
+
+- stage45-json-format-20260630-1
+
+------------------------------------------------
+Current project state at end of 2026 06 30
+
+- Stage 0 is complete.
+- Stage 1 is complete.
+- Stage 2 is complete.
+- Stage 3 is complete.
+- Stage 4 is complete as a logical-map model/API proof.
+- Stage 4.5 is complete as a JSON authoring and original-room dump proof.
+- The original game source and renderer remain untouched.
+- The JavaScript runtime can read/write emulator memory, decode rooms, patch
+  static entries, generate logical rooms, load authored JSON maps, and compile
+  logical rooms into physical location-entry payloads.
+
+Open cautions for next time
+
+- Stage 5 should connect the logical model to the physical 5-room cross by
+  rewriting all five physical room entries.
+- The current JSON loader prepares room payloads, but does not yet inject an
+  authored map into the active physical cross automatically.
+- Objects and items are accepted and persisted in JS state, but are not yet
+  fully compiled into all original runtime tables.
+- frameCompleted remains too late or at least risky for seamless recentering;
+  the earlier hook/watchpoint question is still open.
+- Keep avoiding location-entry resizing until a deliberate safe strategy exists.
+
+End-of-day note
+
+This was a big day for making the project understandable to humans, not just to
+the emulator. The map is now something a person can name, edit, copy from, and
+reason about.

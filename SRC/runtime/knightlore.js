@@ -1,7 +1,15 @@
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage3-square-cross-20260629-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage45-json-format-20260630-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
+    const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
+    const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
+    let renderStage4LogicalMapNow = null;
+    let logicalMapLoadStatus = {
+        attempted: false,
+        done: true,
+        message: 'Using built-in authored rooms plus deterministic generation.',
+    };
 
     const KL_STAGE1 = {
         workStart: 0x5ba0,
@@ -71,6 +79,41 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         ],
     };
 
+    const KL_STAGE4 = {
+        coordinateConvention: 'north is y + 1; south is y - 1',
+        compileProbeRoom: 0x88,
+        sampleQueries: [
+            {label: 'origin', x: 0, y: 0},
+            {label: 'east neighbour', x: 1, y: 0},
+            {label: 'exit criterion', x: 12, y: -4},
+        ],
+    };
+
+    const KL_STAGE4_AUTHORED_ROOMS = [
+        {
+            label: '0x88',
+            coord: {x: 0, y: 0},
+            title: 'authored origin cross',
+            size: {selector: 0},
+            colour: 6,
+            theme: 'stone',
+            exits: {north: 'arch', east: 'arch', south: 'arch', west: 'arch'},
+            blocks: [
+                {
+                    type: 0x03,
+                    positions: [
+                        {x: 2, y: 3, z: 0},
+                        {x: 5, y: 3, z: 0},
+                        {x: 2, y: 4, z: 0},
+                        {x: 5, y: 4, z: 0},
+                    ],
+                },
+            ],
+            objects: [],
+            items: [],
+        },
+    ];
+
     const KL_BACKGROUND_NAMES = [
         'arch north', 'arch east', 'arch south', 'arch west',
         'tree arch north', 'tree arch east', 'tree arch south', 'tree arch west',
@@ -91,6 +134,483 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         'ball up/down offset x',
     ];
 
+    const KL_SIZE_SELECTORS = {
+        0: {selector: 0, x: 64, y: 64, z: 128, wallId: 0x0c, allowedExits: ['north', 'east', 'south', 'west']},
+        1: {selector: 1, x: 32, y: 64, z: 128, wallId: 0x0e, allowedExits: ['north', 'south']},
+        2: {selector: 2, x: 64, y: 32, z: 128, wallId: 0x0d, allowedExits: ['east', 'west']},
+    };
+
+    const KL_STONE_ARCH_IDS = {
+        north: 0x00,
+        east: 0x01,
+        south: 0x02,
+        west: 0x03,
+    };
+
+    const KL_TREE_ARCH_IDS = {
+        north: 0x04,
+        east: 0x05,
+        south: 0x06,
+        west: 0x07,
+    };
+
+    const KL_DIRECTIONS = ['north', 'east', 'south', 'west'];
+
+    const cloneData = value => JSON.parse(JSON.stringify(value));
+    const logicalCoordKey = (x, y) => `${x},${y}`;
+    const normalizeLabel = value => String(value).trim();
+    const sameCoord = (a, b) => a && b && a.x === b.x && a.y === b.y;
+    const getCoord = coord => {
+        const x = Number(coord.x);
+        const y = Number(coord.y);
+        if (!Number.isInteger(x) || !Number.isInteger(y)) {
+            throw new Error(`Logical coordinates must be integers; received (${coord.x}, ${coord.y}).`);
+        }
+        return {x, y};
+    };
+
+    const hashLogicalCoord = (x, y, salt = 0) => {
+        let hash = 0x811c9dc5;
+        hash = Math.imul(hash ^ (x | 0), 0x01000193);
+        hash = Math.imul(hash ^ (y | 0), 0x01000193);
+        hash = Math.imul(hash ^ (salt | 0), 0x01000193);
+        hash ^= hash >>> 16;
+        hash = Math.imul(hash, 0x7feb352d);
+        hash ^= hash >>> 15;
+        hash = Math.imul(hash, 0x846ca68b);
+        hash ^= hash >>> 16;
+        return hash >>> 0;
+    };
+
+    const normalizeExits = exits => {
+        const result = {};
+        for (const direction of KL_DIRECTIONS) {
+            result[direction] = exits && exits[direction] ? exits[direction] : false;
+        }
+        return result;
+    };
+
+    const normalizeBlockRuns = blocks => (
+        (blocks || []).map(block => ({
+            type: Number(block.type),
+            positions: (block.positions || []).map(position => ({
+                x: Number(position.x),
+                y: Number(position.y),
+                z: Number(position.z),
+            })),
+        })).filter(block => block.positions.length)
+    );
+
+    const buildBackgrounds = room => {
+        if (Array.isArray(room.backgrounds)) return [...room.backgrounds];
+
+        const selectorInfo = KL_SIZE_SELECTORS[room.size.selector];
+        if (!selectorInfo) return [];
+
+        const exits = room.exits || {};
+        const theme = room.theme || 'stone';
+        const archIds = theme === 'tree' ? KL_TREE_ARCH_IDS : KL_STONE_ARCH_IDS;
+        const backgrounds = [];
+
+        for (const direction of KL_DIRECTIONS) {
+            if (exits[direction]) backgrounds.push(archIds[direction]);
+        }
+
+        if (theme === 'tree' && room.size.selector === 0) {
+            backgrounds.push(0x0f, 0x10, 0x11);
+        } else {
+            backgrounds.push(selectorInfo.wallId);
+        }
+
+        return backgrounds;
+    };
+
+    const createGeneratedLogicalRoom = (x, y) => {
+        const hash = hashLogicalCoord(x, y, 0x4b4c);
+        const colour = 3 + (hash & 0x03);
+        const theme = (hash & 0x08) ? 'tree' : 'stone';
+        const count = 1 + ((hash >>> 4) & 0x03);
+        const positions = [];
+
+        for (let index = 0; index < count; index++) {
+            const offsetHash = hashLogicalCoord(x, y, 0x100 + index);
+            positions.push({
+                x: 2 + (offsetHash & 0x03),
+                y: 2 + ((offsetHash >>> 3) & 0x03),
+                z: 0,
+            });
+        }
+
+        return {
+            coord: {x, y},
+            label: `generated:${logicalCoordKey(x, y)}`,
+            title: `generated ${logicalCoordKey(x, y)}`,
+            source: 'generated',
+            size: {selector: 0},
+            colour,
+            theme,
+            exits: {north: 'arch', east: 'arch', south: 'arch', west: 'arch'},
+            blocks: [
+                {
+                    type: theme === 'tree' ? 0x00 : 0x03,
+                    positions,
+                },
+            ],
+            objects: [],
+            items: [],
+        };
+    };
+
+    const normalizeLogicalRoomDefinition = (definition, source) => {
+        const coord = getCoord(definition.coord);
+        const selector = definition.size && definition.size.selector !== undefined
+            ? Number(definition.size.selector)
+            : 0;
+        const selectorInfo = KL_SIZE_SELECTORS[selector];
+        const fallbackLabel = definition.originalRoomHex ||
+            (definition.originalRoomId !== undefined ? `0x${Number(definition.originalRoomId).toString(16).toUpperCase().padStart(2, '0')}` : null) ||
+            `${source}:${logicalCoordKey(coord.x, coord.y)}`;
+        const label = normalizeLabel(definition.label !== undefined ? definition.label : fallbackLabel);
+        const room = {
+            key: logicalCoordKey(coord.x, coord.y),
+            coord,
+            label,
+            title: definition.title || label,
+            aliases: Array.from(new Set(
+                (definition.aliases || [])
+                    .map(normalizeLabel)
+                    .filter(alias => alias && alias !== label)
+            )),
+            source,
+            size: {
+                selector,
+                x: selectorInfo ? selectorInfo.x : null,
+                y: selectorInfo ? selectorInfo.y : null,
+                z: selectorInfo ? selectorInfo.z : null,
+            },
+            colour: definition.colour !== undefined ? Number(definition.colour) : 6,
+            theme: definition.theme || 'stone',
+            exits: normalizeExits(definition.exits),
+            backgrounds: null,
+            blocks: normalizeBlockRuns(definition.blocks),
+            objects: cloneData(definition.objects || []),
+            items: cloneData(definition.items || []),
+            originalRoomId: definition.originalRoomId !== undefined ? Number(definition.originalRoomId) : null,
+            meta: cloneData(definition.meta || {}),
+        };
+
+        room.backgrounds = buildBackgrounds({
+            ...room,
+            backgrounds: definition.backgrounds,
+        });
+
+        return room;
+    };
+
+    const validateLogicalRoom = room => {
+        const errors = [];
+        const selectorInfo = KL_SIZE_SELECTORS[room.size.selector];
+        if (!room.label) errors.push('Room label must be a non-empty string.');
+        if (!Number.isInteger(room.size.selector) || !selectorInfo) errors.push(`Unsupported size selector ${room.size.selector}.`);
+        if (!Number.isInteger(room.colour) || room.colour < 0 || room.colour > 7) errors.push(`Invalid colour ${room.colour}.`);
+        if (!room.backgrounds.length) errors.push('Room must have at least one background id.');
+        for (const background of room.backgrounds) {
+            if (!Number.isInteger(background) || background < 0 || background > 0xff) {
+                errors.push(`Invalid background id ${background}.`);
+            }
+        }
+
+        if (selectorInfo) {
+            for (const direction of KL_DIRECTIONS) {
+                if (room.exits[direction] && !selectorInfo.allowedExits.includes(direction)) {
+                    errors.push(`Exit ${direction} is not valid for size selector ${room.size.selector}.`);
+                }
+            }
+        }
+
+        for (const block of room.blocks) {
+            if (!Number.isInteger(block.type) || block.type < 0 || block.type > 0x1f) {
+                errors.push(`Invalid block type ${block.type}.`);
+            }
+            for (const position of block.positions) {
+                if (
+                    !Number.isInteger(position.x) || position.x < 0 || position.x > 7 ||
+                    !Number.isInteger(position.y) || position.y < 0 || position.y > 7 ||
+                    !Number.isInteger(position.z) || position.z < 0 || position.z > 3
+                ) {
+                    errors.push(`Invalid block position ${JSON.stringify(position)}.`);
+                }
+            }
+        }
+
+        return errors;
+    };
+
+    const compileBlockRuns = blocks => {
+        const bytes = [];
+        for (const block of blocks) {
+            for (let index = 0; index < block.positions.length; index += 8) {
+                const chunk = block.positions.slice(index, index + 8);
+                bytes.push((block.type << 3) | (chunk.length - 1));
+                for (const position of chunk) {
+                    bytes.push((position.z << 6) | (position.y << 3) | position.x);
+                }
+            }
+        }
+        return bytes;
+    };
+
+    const compileLogicalRoomToLocationEntry = (room, physicalRoomId = KL_STAGE2.centerRoom) => {
+        const errors = validateLogicalRoom(room);
+        if (errors.length) {
+            return {
+                valid: false,
+                errors,
+                physicalRoomId,
+                bytes: [],
+                payload: [],
+                entrySize: 0,
+            };
+        }
+
+        const blockBytes = compileBlockRuns(room.blocks);
+        const header = (room.size.selector << 3) | (room.colour & 0x07);
+        const payload = [header, ...room.backgrounds, 0xff, ...blockBytes];
+        const entrySize = payload.length + 1;
+        const bytes = [physicalRoomId & 0xff, entrySize, ...payload];
+
+        return {
+            valid: entrySize <= 0xff,
+            errors: entrySize <= 0xff ? [] : [`Location entry is too large: ${entrySize} bytes.`],
+            physicalRoomId: physicalRoomId & 0xff,
+            entrySize,
+            payload,
+            bytes,
+            backgroundCount: room.backgrounds.length,
+            blockByteCount: blockBytes.length,
+        };
+    };
+
+    function createKnightLoreLogicalMap(authoredRooms = []) {
+        const authored = new Map();
+        const generated = new Map();
+        const persistent = new Map();
+        const labels = new Map();
+        let activeDocument = {
+            format: KL_MAP_FORMAT,
+            title: 'Built-in Stage 4 seed',
+            sourceUrl: null,
+        };
+
+        const ensurePersistentState = room => {
+            if (!persistent.has(room.key)) {
+                persistent.set(room.key, {
+                    coord: cloneData(room.coord),
+                    visited: false,
+                    revision: 0,
+                    objects: cloneData(room.objects),
+                    items: cloneData(room.items),
+                });
+            }
+            return persistent.get(room.key);
+        };
+
+        const getRoomAt = (x, y) => {
+            const coord = getCoord({x, y});
+            const key = logicalCoordKey(coord.x, coord.y);
+            let definition = authored.get(key);
+            let source = 'authored';
+
+            if (!definition) {
+                source = 'generated';
+                if (!generated.has(key)) {
+                    generated.set(key, createGeneratedLogicalRoom(coord.x, coord.y));
+                }
+                definition = generated.get(key);
+            }
+
+            const room = normalizeLogicalRoomDefinition(definition, source);
+            room.state = ensurePersistentState(room);
+            return room;
+        };
+
+        const loadAuthoredRooms = rooms => {
+            const staged = [];
+            const stagedLabels = new Map(labels);
+            const stagedCoords = new Set();
+
+            const unregisterLabels = definition => {
+                if (!definition) return;
+                const previous = normalizeLogicalRoomDefinition(definition, 'authored');
+                stagedLabels.delete(previous.label);
+                for (const alias of previous.aliases) stagedLabels.delete(alias);
+            };
+
+            const registerLabel = (label, coord) => {
+                const existing = stagedLabels.get(label);
+                if (existing && !sameCoord(existing, coord)) {
+                    throw new Error(`Duplicate room label or alias "${label}" for coordinates ${logicalCoordKey(existing.x, existing.y)} and ${logicalCoordKey(coord.x, coord.y)}.`);
+                }
+                stagedLabels.set(label, cloneData(coord));
+            };
+
+            for (const room of rooms || []) {
+                const coord = getCoord(room.coord);
+                const key = logicalCoordKey(coord.x, coord.y);
+                if (stagedCoords.has(key)) {
+                    throw new Error(`Duplicate room coordinate ${key} in map JSON.`);
+                }
+                stagedCoords.add(key);
+
+                const previous = authored.get(key);
+                const copy = cloneData(room);
+                const normalized = normalizeLogicalRoomDefinition(copy, 'authored');
+                const errors = validateLogicalRoom(normalized);
+                if (errors.length) {
+                    throw new Error(`Invalid room ${normalized.label} at ${key}: ${errors.join('; ')}`);
+                }
+
+                unregisterLabels(previous);
+                registerLabel(normalized.label, coord);
+                for (const alias of normalized.aliases) registerLabel(alias, coord);
+                staged.push({key, coord, copy});
+            }
+
+            labels.clear();
+            for (const [label, coord] of stagedLabels.entries()) {
+                labels.set(label, coord);
+            }
+
+            for (const {key, copy} of staged) {
+                authored.set(key, copy);
+                generated.delete(key);
+            }
+        };
+
+        const loadMapDocument = (document, options = {}) => {
+            const rooms = Array.isArray(document) ? document : document.rooms;
+            if (!Array.isArray(rooms)) {
+                throw new Error('Map JSON must be an array of rooms or an object with a rooms array.');
+            }
+
+            const replace = options.replace !== false;
+            const previousAuthored = new Map(authored);
+            const previousGenerated = new Map(generated);
+            const previousPersistent = new Map(persistent);
+            const previousLabels = new Map(labels);
+            const previousDocument = activeDocument;
+
+            activeDocument = {
+                format: Array.isArray(document) ? 'rooms-array' : (document.format || 'unknown'),
+                title: Array.isArray(document) ? 'Anonymous rooms array' : (document.title || document.label || 'Untitled logical map'),
+                sourceUrl: options.sourceUrl || null,
+            };
+
+            try {
+                if (replace) {
+                    authored.clear();
+                    labels.clear();
+                    generated.clear();
+                    persistent.clear();
+                }
+                loadAuthoredRooms(rooms);
+            } catch (err) {
+                authored.clear();
+                generated.clear();
+                persistent.clear();
+                labels.clear();
+                for (const [key, value] of previousAuthored.entries()) authored.set(key, value);
+                for (const [key, value] of previousGenerated.entries()) generated.set(key, value);
+                for (const [key, value] of previousPersistent.entries()) persistent.set(key, value);
+                for (const [key, value] of previousLabels.entries()) labels.set(key, value);
+                activeDocument = previousDocument;
+                throw err;
+            }
+
+            return {
+                ...activeDocument,
+                loadedRooms: rooms.length,
+            };
+        };
+
+        const getRoomByLabel = label => {
+            const coord = labels.get(String(label));
+            return coord ? getRoomAt(coord.x, coord.y) : null;
+        };
+
+        loadAuthoredRooms(authoredRooms);
+
+        return {
+            getRoomAt,
+            getRoomByLabel,
+            compileRoomAt: (x, y, physicalRoomId = KL_STAGE2.centerRoom) => (
+                compileLogicalRoomToLocationEntry(getRoomAt(x, y), physicalRoomId)
+            ),
+            compileRoom: compileLogicalRoomToLocationEntry,
+            loadAuthoredRooms,
+            loadMapDocument,
+            getPersistentState: (x, y) => ensurePersistentState(getRoomAt(x, y)),
+            markVisited: (x, y) => {
+                const state = ensurePersistentState(getRoomAt(x, y));
+                state.visited = true;
+                state.revision++;
+                return state;
+            },
+            stats: () => ({
+                activeDocument: cloneData(activeDocument),
+                authoredRooms: authored.size,
+                generatedRooms: generated.size,
+                persistentRooms: persistent.size,
+                labels: labels.size,
+            }),
+        };
+    }
+
+    const logicalMap = createKnightLoreLogicalMap(KL_STAGE4_AUTHORED_ROOMS);
+
+    const loadLogicalMapDocument = (document, options = {}) => {
+        const result = logicalMap.loadMapDocument(document, options);
+        logicalMapLoadStatus = {
+            attempted: true,
+            done: true,
+            message: `Loaded JSON map "${result.title}" with ${result.loadedRooms} authored rooms.`,
+        };
+        if (renderStage4LogicalMapNow) renderStage4LogicalMapNow();
+        return result;
+    };
+
+    const loadLogicalMapFromUrl = async url => {
+        logicalMapLoadStatus = {
+            attempted: true,
+            done: false,
+            message: `Loading JSON map from ${url}.`,
+        };
+        if (renderStage4LogicalMapNow) renderStage4LogicalMapNow();
+
+        try {
+            if (typeof fetch !== 'function') {
+                throw new Error('fetch is not available in this environment.');
+            }
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} while loading ${url}.`);
+            }
+            const document = await response.json();
+            return loadLogicalMapDocument(document, {
+                replace: true,
+                sourceUrl: url,
+            });
+        } catch (err) {
+            logicalMapLoadStatus = {
+                attempted: true,
+                done: false,
+                message: `Failed to load JSON map from ${url}: ${err.message || err}.`,
+            };
+            if (renderStage4LogicalMapNow) renderStage4LogicalMapNow();
+            throw err;
+        }
+    };
+
     function startKnightLore() {
         emu = JSSpeccyImpl(document.getElementById('jsspeccy'), {
             zoom: 2,
@@ -99,12 +619,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             openUrl: 'Knight Lore (1984)(Ultimate).z80',
         });
         installKnightLoreDiagnostics(emu);
+        if (KL_STAGE45_MAP_URL) {
+            loadLogicalMapFromUrl(KL_STAGE45_MAP_URL).catch(err => {
+                console.error(err);
+            });
+        }
     }
 
     function installKnightLoreDiagnostics(emu) {
         const tbody = document.getElementById('stage1-diagnostics-body');
         const crossTbody = document.getElementById('stage2-cross-body');
         const stage2Status = document.getElementById('stage2-status');
+        const logicalTbody = document.getElementById('stage4-logical-body');
+        const stage4Status = document.getElementById('stage4-status');
         const rowEls = new Map();
         let sampleCount = 0;
         let frameCompletedCount = 0;
@@ -176,6 +703,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const z = (value >> 6) & 0x03;
             return `${hexByte(value)}=(x${x},y${y},z${z})`;
         };
+        const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        })[char]);
 
         const readRange = async (start, end) => {
             const result = await emu.readMemory(start, end - start);
@@ -496,6 +1030,58 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             }).join('');
         };
 
+        const formatLogicalExits = room => (
+            KL_DIRECTIONS.map(direction => (
+                `${direction[0].toUpperCase()}:${room.exits[direction] ? room.exits[direction] : '-'}`
+            )).join(' ')
+        );
+
+        const formatLogicalBlocks = room => {
+            if (!room.blocks.length) return 'none';
+            return room.blocks.map(block => {
+                const name = KL_BLOCK_NAMES[block.type] || 'unknown';
+                return `${hexByte(block.type)} ${name}: ${block.positions.length}`;
+            }).join('; ');
+        };
+
+        const renderStage4LogicalMap = () => {
+            if (!logicalTbody || !stage4Status) return;
+
+            const rows = KL_STAGE4.sampleQueries.map(query => {
+                const room = logicalMap.getRoomAt(query.x, query.y);
+                const compiled = logicalMap.compileRoom(room, KL_STAGE4.compileProbeRoom);
+                const backgroundSummary = room.backgrounds.map(value => fmtNamedId(value, KL_BACKGROUND_NAMES)).join('; ');
+                const byteSummary = compiled.valid ? fmtBytes(compiled.bytes, 28) : compiled.errors.join('; ');
+                const state = compiled.valid ? 'ok' : 'bad';
+
+                return `
+                    <tr class="state-${state}">
+                        <td>${escapeHtml(query.label)}</td>
+                        <td>${escapeHtml(room.label)}</td>
+                        <td>(${room.coord.x}, ${room.coord.y})</td>
+                        <td>${escapeHtml(room.source)}</td>
+                        <td>sel ${room.size.selector}; ${room.size.x}/${room.size.y}/${room.size.z}; attr ${room.colour}</td>
+                        <td>${escapeHtml(formatLogicalExits(room))}</td>
+                        <td>${escapeHtml(backgroundSummary)}</td>
+                        <td>${escapeHtml(formatLogicalBlocks(room))}</td>
+                        <td>${escapeHtml(byteSummary)}</td>
+                        <td>${escapeHtml(compiled.valid ? `valid; entry size ${compiled.entrySize}; state rev ${room.state.revision}` : 'invalid')}</td>
+                    </tr>
+                `;
+            }).join('');
+            const stats = logicalMap.stats();
+
+            stage4Status.textContent = [
+                logicalMapLoadStatus.message,
+                `Coordinate convention: ${KL_STAGE4.coordinateConvention}.`,
+                `Document: ${stats.activeDocument.title}.`,
+                `Authored rooms: ${stats.authoredRooms}; labels: ${stats.labels}; generated cache: ${stats.generatedRooms}; persistent states: ${stats.persistentRooms}.`,
+                'Probe APIs: window.KnightLoreInfinity.logicalMap.getRoomAt(12, -4), getRoomByLabel("0x88"), loadLogicalMapFromUrl("maps/knight-lore-original-map.json").',
+            ].join(' ');
+
+            logicalTbody.innerHTML = rows;
+        };
+
         const describeDirection = (fromRoom, toRoom) => {
             if ((fromRoom & 0xf0) === (toRoom & 0xf0)) {
                 if (((fromRoom - 1) & 0x0f) === (toRoom & 0x0f)) return 'west';
@@ -789,6 +1375,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
                 renderTransitionRows();
                 renderStage2Cross(staticRange, sample);
+                renderStage4LogicalMap();
                 previousSample = sample;
             } catch (err) {
                 setRow('sampler', 'Error', String(err), 'bad');
@@ -808,6 +1395,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             );
         }
 
+        renderStage4LogicalMap();
         sample('initial');
         window.setInterval(() => {
             if (frameCompletedCount === 0) {
@@ -820,5 +1408,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     return {
         start: startKnightLore,
         installDiagnostics: installKnightLoreDiagnostics,
+        logicalMap,
+        getLogicalRoom: logicalMap.getRoomAt,
+        getLogicalRoomByLabel: logicalMap.getRoomByLabel,
+        compileLogicalRoom: logicalMap.compileRoom,
+        loadLogicalMapDocument,
+        loadLogicalMapFromUrl,
     };
 }
