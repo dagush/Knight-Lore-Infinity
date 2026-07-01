@@ -256,6 +256,54 @@ onmessage = (e) => {
             });
             break;
         }
+        case 'writeMemoryReadPrevious': {
+            if (!core) {
+                postMessage({
+                    message: 'memoryWritten',
+                    id: e.data.id,
+                    addr: e.data.addr,
+                    error: 'Core is not ready',
+                });
+                break;
+            }
+            const previousData = readMemory(e.data.addr, e.data.data.length);
+            writeMemory(e.data.addr, e.data.data);
+            postMessage({
+                message: 'memoryWritten',
+                id: e.data.id,
+                addr: e.data.addr,
+                length: e.data.data.length,
+                previousData,
+            }, [previousData.buffer]);
+            break;
+        }
+        case 'writeMemoryReadPreviousUnlessAny': {
+            if (!core) {
+                postMessage({
+                    message: 'memoryWritten',
+                    id: e.data.id,
+                    addr: e.data.addr,
+                    error: 'Core is not ready',
+                });
+                break;
+            }
+            const previousData = readMemory(e.data.addr, e.data.data.length);
+            const previousByte = previousData.length ? previousData[0] : null;
+            const skipValues = Array.isArray(e.data.skipValues)
+                ? e.data.skipValues.map(value => value & 0xff)
+                : [];
+            const didWrite = previousByte !== null && !skipValues.includes(previousByte);
+            if (didWrite) writeMemory(e.data.addr, e.data.data);
+            postMessage({
+                message: 'memoryWritten',
+                id: e.data.id,
+                addr: e.data.addr,
+                length: e.data.data.length,
+                previousData,
+                didWrite,
+            }, [previousData.buffer]);
+            break;
+        }
         case 'loadSnapshot':
             loadSnapshot(e.data.snapshot);
             postMessage({

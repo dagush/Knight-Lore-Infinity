@@ -636,3 +636,230 @@ End-of-day note
 This was a big day for making the project understandable to humans, not just to
 the emulator. The map is now something a person can name, edit, copy from, and
 reason about.
+
+
+================================================
+| Logbook entry - 2026 07 01                  |
+| Stage 5 - Five-Room Cross Injection         |
+================================================
+
+Today completed Stage 5. The original goal was to prove that the JavaScript
+side can control a small physical room set by rewriting runtime/static map
+data, without modifying the original game source and without touching the
+renderer.
+
+------------------------------------------------
+Room-id force experiment
+
+The first Stage 5 experiment was deliberately tiny: write only the live current
+room byte at 0x5C10.
+
+The first version rewrote 0x5C10 back to 0x88 immediately after a drawn frame.
+The manual result was surprising and useful:
+
+- leaving room 0x88 did not enter the physical neighbour;
+- instead, the game generated room 0x88 on the other side.
+
+This showed that 0x5C10 is not merely a label to normalize after a transition.
+It is effectively the room id that retrieve_screen uses when deciding which
+static location entry to decode.
+
+The experiment was then generalized into a destination dial:
+
+- ?stage5force=0x78
+- ?stage5force=0x98
+- ?stage5force=0x87
+- ?stage5force=0x89
+- ?stage5force=0x88
+
+The force-dial logic:
+
+- waits until the game is stably in 0x88;
+- reads 0x5C10 after each drawn frame;
+- skips writes while 0x5C10 is 0x88;
+- skips writes while 0x5C10 is already the forced target;
+- otherwise writes only 0x5C10 to the forced target room id.
+
+Manual testing with ?stage5force=0x78 confirmed the model:
+
+- exiting 0x88 in any direction entered/generated 0x78;
+- exiting 0x78 north naturally returned to 0x88, because 0x88 is explicitly
+  skipped by the force logic;
+- exiting 0x78 in other directions forced the destination back to 0x78;
+- the player appeared on the correct side of the destination room.
+
+This is strong evidence that transition positioning and room generation can be
+controlled separately enough for sliding-window virtualization.
+
+------------------------------------------------
+3x3 Static Map Fixture
+
+A small authored static-map fixture was generated in the existing logical-map
+JSON format:
+
+- SRC/static/maps/knight-lore-3x3-static-map.json
+
+The requested square was centered on original room 0x88:
+
+- top row:    0x97, 0x98, 0x99
+- middle row: 0x87, 0x88, 0x89
+- bottom row: 0x77, 0x78, 0x79
+
+Original room 0x99 does not exist in the dumped location table, so the fixture
+contains eight authored rooms rather than nine.
+
+For consistency, every exit/background arch that would point outside the
+authored room set was removed. This also avoids any door pointing into the
+missing 0x99 coordinate.
+
+Room 0x88 in the fixture is the cleaned test-room version:
+
+- four cardinal exits;
+- original block data;
+- no wizard or cauldron background ids 0x12/0x13.
+
+The generated fixture was validated by loading it through the runtime logical
+map loader and compiling all eight rooms successfully.
+
+------------------------------------------------
+Static Location Table Erase/Inject
+
+An opt-in static-table injection path was added:
+
+- http://127.0.0.1:8000/index.html?stage5static3x3=1
+
+When enabled, the JavaScript side:
+
+1. fetches maps/knight-lore-3x3-static-map.json;
+2. compiles each authored room into original Knight Lore compact location-entry
+   bytes;
+3. erases the original location table range 0x6251..0x6BD0;
+4. writes the compact injected table back starting at 0x6251.
+
+Stage 3 fixed-address one-room injection is suppressed while this static-map
+injection is active, because the original 0x88 entry address is no longer safe
+after the table is erased and rewritten compactly.
+
+The diagnostics table gained a row:
+
+- Stage 5 static map injection
+
+The row reports the loaded map, number of injected rooms, original table range,
+compiled byte count, and per-room entry sizes.
+
+After the final fix, the injected table reports:
+
+- Injected 8 rooms
+- 157/2432 compiled bytes
+- 0x97:15 0x98:25 0x87:23 0x88:17 0x89:19 0x77:5 0x78:24 0x79:21
+
+Manual testing showed that the game can run on this erased-and-rewritten compact
+static map.
+
+------------------------------------------------
+Important 0xFF Background-Only Room Rule
+
+During manual testing, entering room 0x77 reset/crashed the emulator before the
+room was shown. This revealed a critical original-data rule.
+
+Original room 0x77 has no foreground block data and its original compact entry
+does not contain a 0xFF separator. The first compiler version always emitted
+0xFF after the background list. For a background-only room this produced:
+
+- id, size, header, backgrounds..., 0xFF
+
+with no block/count data after the 0xFF. In retrieve_screen, that makes the
+engine enter the foreground-object decoder with no foreground bytes left. It
+can then read the next room id as block data, which is exactly the kind of
+fragile data mistake that can crash or reset the game.
+
+The compiler rule is now:
+
+- if foreground block groups exist:
+  id, entrySize, header, backgrounds..., 0xFF, block/count groups...
+- if no foreground block groups exist:
+  id, entrySize, header, backgrounds...
+
+Room 0x77 now compiles as:
+
+- 77 05 03 00 01 0C
+
+This rule was documented in:
+
+- Docs/info.txt
+- Docs/logical-map-json-format.txt
+
+------------------------------------------------
+Files and Runtime Pieces Added/Changed
+
+Main runtime work:
+
+- SRC/runtime/knightlore.js
+  - Stage 5 force-destination experiment
+  - static JSON map compilation to compact location entries
+  - location-table erase/inject path
+  - background-only room compiler fix
+
+- SRC/runtime/jsspeccy.js
+  - memory write helpers that can report previous values
+  - conditional write helper used by the room-id force experiment
+
+- SRC/runtime/worker.js
+  - worker-side conditional read-previous/write command
+
+- SRC/static/index.html
+  - diagnostics/cache marker updates
+
+New fixture:
+
+- SRC/static/maps/knight-lore-3x3-static-map.json
+
+Documentation:
+
+- Docs/info.txt
+- Docs/logical-map-json-format.txt
+
+------------------------------------------------
+Verification
+
+Checks run during this stage included:
+
+- JavaScript syntax checks for SRC/runtime/knightlore.js
+- JavaScript syntax checks for SRC/runtime/jsspeccy.js
+- JavaScript syntax checks for SRC/runtime/worker.js
+- runtime load/compile checks for the 3x3 JSON fixture
+- validation that no authored fixture exit points outside the authored room set
+- validation that 0x77 compiles without 0xFF
+- webpack rebuild of SRC/dist/jsspeccy/jsspeccy.js
+- refreshed SRC/dist/index.html
+- refreshed SRC/dist/maps/knight-lore-3x3-static-map.json
+- local browser smoke tests for:
+  - ?stage5force=0x78
+  - ?stage5static3x3=1
+- git diff whitespace checks
+
+Current cache/diagnostic marker:
+
+- stage5-static-map-20260701-1
+
+------------------------------------------------
+Stage 5 conclusion
+
+Stage 5 is complete.
+
+The important proof is no longer only that we can rewrite one room. We have now
+shown that:
+
+- 0x5C10 can choose the next room generated by retrieve_screen;
+- transition-side positioning still works while forcing destinations;
+- the original location table can be erased at runtime;
+- a compact authored static table can be written in its place;
+- the original engine can scan and decode that injected table;
+- background-only entries must follow the original no-0xFF convention.
+
+This validates the core sliding-map assumption: while the player is inside a
+room, the original static map can be considered disposable. It only needs to be
+valid when the engine leaves the current room and scans for the next location.
+
+Next natural step: use the same injection machinery to rewrite the physical
+window whenever the logical coordinate changes.

@@ -162,6 +162,8 @@ class Emulator extends EventEmitter {
                             resolution.resolve({
                                 addr: e.data.addr,
                                 length: e.data.length,
+                                previousData: e.data.previousData,
+                                didWrite: e.data.didWrite,
                             });
                         }
                     }
@@ -308,6 +310,35 @@ class Emulator extends EventEmitter {
             id: writeID,
             addr,
             data: payload,
+        });
+        return new Promise((resolve, reject) => {
+            this.memoryWritePromiseResolutions[writeID] = {resolve, reject};
+        });
+    }
+
+    writeMemoryReadPrevious(addr, data) {
+        const writeID = this.nextMemoryWriteID++;
+        const payload = data instanceof Uint8Array ? data : new Uint8Array(data);
+        this.worker.postMessage({
+            message: 'writeMemoryReadPrevious',
+            id: writeID,
+            addr,
+            data: payload,
+        });
+        return new Promise((resolve, reject) => {
+            this.memoryWritePromiseResolutions[writeID] = {resolve, reject};
+        });
+    }
+
+    writeMemoryReadPreviousUnlessAny(addr, data, skipValues) {
+        const writeID = this.nextMemoryWriteID++;
+        const payload = data instanceof Uint8Array ? data : new Uint8Array(data);
+        this.worker.postMessage({
+            message: 'writeMemoryReadPreviousUnlessAny',
+            id: writeID,
+            addr,
+            data: payload,
+            skipValues: skipValues.map(value => value & 0xff),
         });
         return new Promise((resolve, reject) => {
             this.memoryWritePromiseResolutions[writeID] = {resolve, reject};
@@ -787,6 +818,10 @@ window.JSSpeccy = (container, opts) => {
         on: (...args) => emu.on(...args),
         readMemory: (addr, length) => emu.readMemory(addr, length),
         writeMemory: (addr, data) => emu.writeMemory(addr, data),
+        writeMemoryReadPrevious: (addr, data) => emu.writeMemoryReadPrevious(addr, data),
+        writeMemoryReadPreviousUnlessAny: (addr, data, skipValues) => (
+            emu.writeMemoryReadPreviousUnlessAny(addr, data, skipValues)
+        ),
         openFileDialog: () => {openFileDialog();},
         openUrl: (url) => {
             emu.openUrl(url).catch((err) => {alert(err);});

@@ -1,0 +1,1028 @@
+{
+  "format": "knight-lore-infinity-logical-map-v1",
+  "title": "Knight Lore 3x3 static map proof fixture",
+  "generatedFrom": "SRC/static/maps/knight-lore-original-map.json",
+  "coordinateConvention": "north is y + 1; south is y - 1; room 0x88 is logical (0, 0)",
+  "origin": {
+    "label": "0x88",
+    "coord": {
+      "x": 0,
+      "y": 0
+    }
+  },
+  "physicalRoomPlan": {
+    "center": "0x88",
+    "requestedSquare": [
+      [
+        "0x97",
+        "0x98",
+        "0x99"
+      ],
+      [
+        "0x87",
+        "0x88",
+        "0x89"
+      ],
+      [
+        "0x77",
+        "0x78",
+        "0x79"
+      ]
+    ],
+    "authoredRooms": [
+      "0x97",
+      "0x98",
+      "0x87",
+      "0x88",
+      "0x89",
+      "0x77",
+      "0x78",
+      "0x79"
+    ],
+    "omittedRooms": [
+      "0x99"
+    ]
+  },
+  "notes": [
+    "Proof fixture for the map-erasing/static-map-injection stage.",
+    "The requested 3x3 square is centered on original room 0x88. Original room 0x99 is not present in the source location table, so this authored map has eight rooms.",
+    "Every authored exit that would point outside the authored room set was removed from both exits and compact background arch ids. This also guarantees no room points into the omitted 0x99 coordinate.",
+    "The center room 0x88 is the current cleaned test-room shape: four cardinal exits and original block data, with wizard/cauldron background ids 0x12 and 0x13 removed from the JSON background list.",
+    "Portcullis/high-arch background ids are not treated as semantic exits by this fixture; only stone/tree arch ids 0x00..0x07 drive exits."
+  ],
+  "rooms": [
+    {
+      "label": "0x97",
+      "aliases": [],
+      "title": "3x3 static map room 0x97",
+      "coord": {
+        "x": -1,
+        "y": 1
+      },
+      "originalRoomId": 151,
+      "size": {
+        "selector": 1
+      },
+      "colour": 4,
+      "exits": {
+        "north": false,
+        "east": false,
+        "south": "arch",
+        "west": false
+      },
+      "backgrounds": [
+        2,
+        14
+      ],
+      "blocks": [
+        {
+          "type": 0,
+          "positions": [
+            {
+              "x": 2,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 3,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 4,
+          "positions": [
+            {
+              "x": 2,
+              "y": 3,
+              "z": 1
+            },
+            {
+              "x": 3,
+              "y": 3,
+              "z": 1
+            },
+            {
+              "x": 4,
+              "y": 3,
+              "z": 1
+            },
+            {
+              "x": 5,
+              "y": 3,
+              "z": 1
+            }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x97",
+        "originalRoomId": 151,
+        "sourceLocationEntryAddress": 26721,
+        "sourceLocationEntrySize": 16,
+        "originalBackgrounds": [
+          0,
+          2,
+          14
+        ],
+        "originalBackgroundNames": [
+          "arch north",
+          "arch south",
+          "wall size 3"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "north",
+            "background": 0,
+            "name": "arch north"
+          }
+        ],
+        "note": "Copied from the original room dump; exits/background arches that point outside the authored 3x3 room set were removed."
+      }
+    },
+    {
+      "label": "0x98",
+      "aliases": [],
+      "title": "3x3 static map room 0x98",
+      "coord": {
+        "x": 0,
+        "y": 1
+      },
+      "originalRoomId": 152,
+      "size": {
+        "selector": 1
+      },
+      "colour": 3,
+      "exits": {
+        "north": false,
+        "east": false,
+        "south": "arch",
+        "west": false
+      },
+      "backgrounds": [
+        2,
+        14
+      ],
+      "blocks": [
+        {
+          "type": 0,
+          "positions": [
+            {
+              "x": 3,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 1,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 21,
+          "positions": [
+            {
+              "x": 3,
+              "y": 5,
+              "z": 1
+            },
+            {
+              "x": 4,
+              "y": 2,
+              "z": 1
+            }
+          ]
+        },
+        {
+          "type": 5,
+          "positions": [
+            {
+              "x": 2,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 3,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 22,
+          "positions": [
+            {
+              "x": 3,
+              "y": 4,
+              "z": 2
+            },
+            {
+              "x": 4,
+              "y": 4,
+              "z": 2
+            },
+            {
+              "x": 3,
+              "y": 3,
+              "z": 2
+            },
+            {
+              "x": 4,
+              "y": 3,
+              "z": 2
+            }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x98",
+        "originalRoomId": 152,
+        "sourceLocationEntryAddress": 26738,
+        "sourceLocationEntrySize": 26,
+        "originalBackgrounds": [
+          0,
+          2,
+          14
+        ],
+        "originalBackgroundNames": [
+          "arch north",
+          "arch south",
+          "wall size 3"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "north",
+            "background": 0,
+            "name": "arch north"
+          }
+        ],
+        "note": "Copied from the original room dump; exits/background arches that point outside the authored 3x3 room set were removed."
+      }
+    },
+    {
+      "label": "0x87",
+      "aliases": [],
+      "title": "3x3 static map room 0x87",
+      "coord": {
+        "x": -1,
+        "y": 0
+      },
+      "originalRoomId": 135,
+      "size": {
+        "selector": 0
+      },
+      "colour": 5,
+      "exits": {
+        "north": "arch",
+        "east": "arch",
+        "south": "arch",
+        "west": false
+      },
+      "backgrounds": [
+        0,
+        1,
+        2,
+        12
+      ],
+      "blocks": [
+        {
+          "type": 0,
+          "positions": [
+            {
+              "x": 2,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 2,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 5,
+          "positions": [
+            {
+              "x": 2,
+              "y": 5,
+              "z": 1
+            },
+            {
+              "x": 5,
+              "y": 5,
+              "z": 1
+            },
+            {
+              "x": 2,
+              "y": 2,
+              "z": 1
+            },
+            {
+              "x": 5,
+              "y": 2,
+              "z": 1
+            }
+          ]
+        },
+        {
+          "type": 26,
+          "positions": [
+            {
+              "x": 3,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 2,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 27,
+          "positions": [
+            {
+              "x": 2,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 3,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x87",
+        "originalRoomId": 135,
+        "sourceLocationEntryAddress": 26530,
+        "sourceLocationEntrySize": 24,
+        "originalBackgrounds": [
+          0,
+          1,
+          2,
+          3,
+          12
+        ],
+        "originalBackgroundNames": [
+          "arch north",
+          "arch east",
+          "arch south",
+          "arch west",
+          "wall size 1"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "west",
+            "background": 3,
+            "name": "arch west"
+          }
+        ],
+        "note": "Copied from the original room dump; exits/background arches that point outside the authored 3x3 room set were removed."
+      }
+    },
+    {
+      "label": "0x88",
+      "aliases": [
+        "cauldron"
+      ],
+      "title": "3x3 static map center room 0x88",
+      "coord": {
+        "x": 0,
+        "y": 0
+      },
+      "originalRoomId": 136,
+      "size": {
+        "selector": 0
+      },
+      "colour": 6,
+      "exits": {
+        "north": "arch",
+        "east": "arch",
+        "south": "arch",
+        "west": "arch"
+      },
+      "backgrounds": [
+        0,
+        1,
+        2,
+        3,
+        12
+      ],
+      "blocks": [
+        {
+          "type": 0,
+          "positions": [
+            {
+              "x": 2,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": 6,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 6,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": 1,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x88",
+        "originalRoomId": 136,
+        "sourceLocationEntryAddress": 26555,
+        "sourceLocationEntrySize": 19,
+        "originalBackgrounds": [
+          0,
+          1,
+          2,
+          3,
+          18,
+          19,
+          12
+        ],
+        "originalBackgroundNames": [
+          "arch north",
+          "arch east",
+          "arch south",
+          "arch west",
+          "wizard",
+          "cauldron",
+          "wall size 1"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "clean-center",
+            "background": 18,
+            "name": "wizard"
+          },
+          {
+            "direction": "clean-center",
+            "background": 19,
+            "name": "cauldron"
+          }
+        ],
+        "note": "Center room keeps original 0x88 exits and blocks, with wizard/cauldron background ids removed to match the current cleaned test room."
+      }
+    },
+    {
+      "label": "0x89",
+      "aliases": [],
+      "title": "3x3 static map room 0x89",
+      "coord": {
+        "x": 1,
+        "y": 0
+      },
+      "originalRoomId": 137,
+      "size": {
+        "selector": 2
+      },
+      "colour": 5,
+      "exits": {
+        "north": false,
+        "east": false,
+        "south": false,
+        "west": "arch"
+      },
+      "backgrounds": [
+        3,
+        13
+      ],
+      "blocks": [
+        {
+          "type": 0,
+          "positions": [
+            {
+              "x": 4,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 5,
+              "z": 1
+            },
+            {
+              "x": 4,
+              "y": 5,
+              "z": 2
+            },
+            {
+              "x": 4,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 2,
+              "z": 1
+            },
+            {
+              "x": 4,
+              "y": 2,
+              "z": 2
+            }
+          ]
+        },
+        {
+          "type": 4,
+          "positions": [
+            {
+              "x": 4,
+              "y": 5,
+              "z": 3
+            },
+            {
+              "x": 4,
+              "y": 2,
+              "z": 3
+            }
+          ]
+        },
+        {
+          "type": 10,
+          "positions": [
+            {
+              "x": 4,
+              "y": 4,
+              "z": 1
+            }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x89",
+        "originalRoomId": 137,
+        "sourceLocationEntryAddress": 26575,
+        "sourceLocationEntrySize": 20,
+        "originalBackgrounds": [
+          1,
+          3,
+          13
+        ],
+        "originalBackgroundNames": [
+          "arch east",
+          "arch west",
+          "wall size 2"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "east",
+            "background": 1,
+            "name": "arch east"
+          }
+        ],
+        "note": "Copied from the original room dump; exits/background arches that point outside the authored 3x3 room set were removed."
+      }
+    },
+    {
+      "label": "0x77",
+      "aliases": [],
+      "title": "3x3 static map room 0x77",
+      "coord": {
+        "x": -1,
+        "y": -1
+      },
+      "originalRoomId": 119,
+      "size": {
+        "selector": 0
+      },
+      "colour": 3,
+      "exits": {
+        "north": "arch",
+        "east": "arch",
+        "south": false,
+        "west": false
+      },
+      "backgrounds": [
+        0,
+        1,
+        12
+      ],
+      "blocks": [],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x77",
+        "originalRoomId": 119,
+        "sourceLocationEntryAddress": 26382,
+        "sourceLocationEntrySize": 7,
+        "originalBackgrounds": [
+          0,
+          1,
+          2,
+          3,
+          12
+        ],
+        "originalBackgroundNames": [
+          "arch north",
+          "arch east",
+          "arch south",
+          "arch west",
+          "wall size 1"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "south",
+            "background": 2,
+            "name": "arch south"
+          },
+          {
+            "direction": "west",
+            "background": 3,
+            "name": "arch west"
+          }
+        ],
+        "note": "Copied from the original room dump; exits/background arches that point outside the authored 3x3 room set were removed."
+      }
+    },
+    {
+      "label": "0x78",
+      "aliases": [],
+      "title": "3x3 static map room 0x78",
+      "coord": {
+        "x": 0,
+        "y": -1
+      },
+      "originalRoomId": 120,
+      "size": {
+        "selector": 0
+      },
+      "colour": 4,
+      "exits": {
+        "north": "arch",
+        "east": "arch",
+        "south": false,
+        "west": "arch"
+      },
+      "backgrounds": [
+        0,
+        1,
+        3,
+        12
+      ],
+      "blocks": [
+        {
+          "type": 5,
+          "positions": [
+            {
+              "x": 1,
+              "y": 7,
+              "z": 0
+            },
+            {
+              "x": 7,
+              "y": 7,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": 0,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 7,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 3,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 5,
+          "positions": [
+            {
+              "x": 1,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 1,
+              "z": 0
+            },
+            {
+              "x": 6,
+              "y": 1,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 13,
+          "positions": [
+            {
+              "x": 7,
+              "y": 2,
+              "z": 0
+            }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x78",
+        "originalRoomId": 120,
+        "sourceLocationEntryAddress": 26390,
+        "sourceLocationEntrySize": 25,
+        "originalBackgrounds": [
+          0,
+          1,
+          2,
+          3,
+          12
+        ],
+        "originalBackgroundNames": [
+          "arch north",
+          "arch east",
+          "arch south",
+          "arch west",
+          "wall size 1"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "south",
+            "background": 2,
+            "name": "arch south"
+          }
+        ],
+        "note": "Copied from the original room dump; exits/background arches that point outside the authored 3x3 room set were removed."
+      }
+    },
+    {
+      "label": "0x79",
+      "aliases": [],
+      "title": "3x3 static map room 0x79",
+      "coord": {
+        "x": 1,
+        "y": -1
+      },
+      "originalRoomId": 121,
+      "size": {
+        "selector": 2
+      },
+      "colour": 3,
+      "exits": {
+        "north": false,
+        "east": false,
+        "south": false,
+        "west": "arch"
+      },
+      "backgrounds": [
+        3,
+        13
+      ],
+      "blocks": [
+        {
+          "type": 22,
+          "positions": [
+            {
+              "x": 2,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 2,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 5,
+              "y": 3,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 5,
+          "positions": [
+            {
+              "x": 3,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 3,
+              "z": 0
+            },
+            {
+              "x": 3,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": 4,
+              "y": 2,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "type": 12,
+          "positions": [
+            {
+              "x": 3,
+              "y": 3,
+              "z": 3
+            }
+          ]
+        }
+      ],
+      "objects": [],
+      "items": [],
+      "meta": {
+        "source": "SRC/static/maps/knight-lore-original-map.json",
+        "originalRoomHex": "0x79",
+        "originalRoomId": 121,
+        "sourceLocationEntryAddress": 26416,
+        "sourceLocationEntrySize": 22,
+        "originalBackgrounds": [
+          1,
+          3,
+          13
+        ],
+        "originalBackgroundNames": [
+          "arch east",
+          "arch west",
+          "wall size 2"
+        ],
+        "removedBackgrounds": [
+          {
+            "direction": "east",
+            "background": 1,
+            "name": "arch east"
+          }
+        ],
+        "note": "Copied from the original room dump; exits/background arches that point outside the authored 3x3 room set were removed."
+      }
+    }
+  ]
+}

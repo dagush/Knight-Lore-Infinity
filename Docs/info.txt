@@ -68,8 +68,14 @@ Current Room
 
 Room/location shape and background presets:
      In the static location entry, byte +2 combines the room size selector with the
-     low 3-bit attribute/colour value. The background ids follow this byte and
-     continue until 0xFF.
+     low 3-bit attribute/colour value. The background ids follow this byte.
+     If foreground block data exists, the background list is followed by 0xFF
+     and then the block/count groups.
+     If there is no foreground block data, do not write a 0xFF separator. Let
+     the entry end after the background ids. Original room 0x77 follows this
+     background-only pattern. Adding 0xFF with no block bytes after it can make
+     retrieve_screen enter the foreground decoder and read the next room id as
+     block data, which can crash or reset the game.
      The visual wall shape is not controlled by a separate hidden attribute: the
      size selector and the chosen wall/background preset ids must agree.
      This explains the Stage 3 test where 0x5BAB..0x5BAE correctly reported a

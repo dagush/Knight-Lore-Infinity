@@ -164,7 +164,8 @@ Room fields:
 
 - blocks:
   Compact foreground block runs, represented as block type plus grid
-  positions.
+  positions. If blocks is empty, the compiler must not emit a 0xFF separator
+  after the backgrounds; see "Compilation to a Physical Location Entry" below.
 
 - objects:
   Optional dynamic object authoring/state placeholder. Accepted by the runtime
@@ -323,9 +324,18 @@ Known block type names:
 Compilation to a Physical Location Entry
 ----------------------------------------
 
-The compiler turns a logical room into:
+For rooms with foreground block groups, the compiler turns a logical room into:
 
     id, entrySize, header, backgrounds..., 0xFF, block/count groups...
+
+For background-only rooms, the compiler omits the 0xFF separator:
+
+    id, entrySize, header, backgrounds...
+
+This matches original Knight Lore data such as room 0x77. The original
+retrieve_screen routine can safely finish a background-only entry when the
+entry byte counter reaches zero; adding a 0xFF to an otherwise empty foreground
+section can make it read the next room id as block data.
 
 Header:
 
@@ -388,5 +398,5 @@ The generated dump intentionally avoids redundant editable block data:
 
 Some original background-only rooms omit the 0xFF background terminator in the
 original compact data. The dump records this in meta.foundBackgroundTerminator.
-The logical compiler always emits clean semantic entries with a 0xFF separator.
-
+The logical compiler follows this convention: it emits 0xFF only when foreground
+block/count data follows.

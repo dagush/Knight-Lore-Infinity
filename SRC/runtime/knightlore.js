@@ -1,15 +1,40 @@
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage45-json-format-20260630-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage5-static-map-20260701-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
+    const KL_STAGE5_STATIC_MAP_URL = KL_URL_PARAMS.get('stage5staticmap') ||
+        (KL_URL_PARAMS.get('stage5static3x3') === '1'
+            ? 'maps/knight-lore-3x3-static-map.json'
+            : null);
     let renderStage4LogicalMapNow = null;
     let logicalMapLoadStatus = {
         attempted: false,
         done: true,
         message: 'Using built-in authored rooms plus deterministic generation.',
     };
+    const KL_STAGE5_FORCE_ROOM_PARAM = (() => {
+        const raw = KL_URL_PARAMS.get('stage5force');
+        if (raw === null) return {present: false, value: null, raw: null, error: null};
+
+        const text = raw.trim();
+        if (!/^0x[0-9a-f]{1,2}$/i.test(text)) {
+            return {
+                present: true,
+                value: null,
+                raw,
+                error: `Invalid stage5force value "${raw}". Use a hex byte such as 0x78, 0x88, or 0x98.`,
+            };
+        }
+
+        return {
+            present: true,
+            value: Number.parseInt(text.slice(2), 16),
+            raw,
+            error: null,
+        };
+    })();
 
     const KL_STAGE1 = {
         workStart: 0x5ba0,
@@ -36,6 +61,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             ['blockPositions', 'Packed block positions'],
             ['attrCompare', 'Attribute compare'],
             ['sizeCompare', 'Size selector compare'],
+            ['stage5StaticMap', 'Stage 5 static map injection'],
+            ['stage5Recenter', 'Stage 5 room-id force test'],
             ['transition', 'Latest room transition'],
             ['timing', 'frameCompleted timing'],
         ],
@@ -87,6 +114,18 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             {label: 'east neighbour', x: 1, y: 0},
             {label: 'exit criterion', x: 12, y: -4},
         ],
+    };
+
+    const KL_STAGE5_ROOM_ID_FORCE_TEST = {
+        enabled: KL_STAGE5_FORCE_ROOM_PARAM.present ||
+            KL_URL_PARAMS.get('stage5test') === '1' ||
+            KL_URL_PARAMS.get('stage5roomid') === '1',
+        centerRoom: KL_STAGE2.centerRoom,
+        forceRoom: KL_STAGE5_FORCE_ROOM_PARAM.value === null
+            ? KL_STAGE2.centerRoom
+            : KL_STAGE5_FORCE_ROOM_PARAM.value,
+        configError: KL_STAGE5_FORCE_ROOM_PARAM.error,
+        currentRoomAddr: 0x5c10,
     };
 
     const KL_STAGE4_AUTHORED_ROOMS = [
@@ -375,7 +414,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const blockBytes = compileBlockRuns(room.blocks);
         const header = (room.size.selector << 3) | (room.colour & 0x07);
-        const payload = [header, ...room.backgrounds, 0xff, ...blockBytes];
+        const payload = blockBytes.length
+            ? [header, ...room.backgrounds, 0xff, ...blockBytes]
+            : [header, ...room.backgrounds];
         const entrySize = payload.length + 1;
         const bytes = [physicalRoomId & 0xff, entrySize, ...payload];
 
@@ -611,6 +652,68 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         }
     };
 
+    const parsePhysicalRoomId = definition => {
+        if (definition.originalRoomId !== undefined) {
+            const value = Number(definition.originalRoomId);
+            if (Number.isInteger(value) && value >= 0 && value <= 0xff) return value;
+        }
+
+        if (typeof definition.label === 'string' && /^0x[0-9a-f]{1,2}$/i.test(definition.label)) {
+            return Number.parseInt(definition.label.slice(2), 16);
+        }
+
+        return null;
+    };
+
+    const compileStaticMapDocumentToLocationTable = document => {
+        const rooms = Array.isArray(document) ? document : document.rooms;
+        if (!Array.isArray(rooms) || !rooms.length) {
+            throw new Error('Static map JSON must contain a non-empty rooms array.');
+        }
+
+        const tempMap = createKnightLoreLogicalMap([]);
+        tempMap.loadMapDocument(document, {replace: true});
+
+        const bytes = [];
+        const roomSummaries = [];
+        for (const definition of rooms) {
+            const physicalRoomId = parsePhysicalRoomId(definition);
+            if (physicalRoomId === null) {
+                throw new Error(`Room "${definition.label || '(unlabelled)'}" needs originalRoomId or a 0xNN label for static table injection.`);
+            }
+
+            const coord = getCoord(definition.coord);
+            const room = tempMap.getRoomAt(coord.x, coord.y);
+            const compiled = tempMap.compileRoom(room, physicalRoomId);
+            if (!compiled.valid) {
+                throw new Error(`Room ${room.label} failed to compile: ${compiled.errors.join('; ')}`);
+            }
+
+            bytes.push(...compiled.bytes);
+            roomSummaries.push({
+                label: room.label,
+                physicalRoomId,
+                entrySize: compiled.entrySize,
+                byteCount: compiled.bytes.length,
+                backgroundCount: compiled.backgroundCount,
+                blockByteCount: compiled.blockByteCount,
+            });
+        }
+
+        const capacity = KL_STAGE1.locationEnd - KL_STAGE1.locationStart;
+        if (bytes.length > capacity) {
+            throw new Error(`Compiled static map is ${bytes.length} bytes but the original location table has only ${capacity} bytes.`);
+        }
+
+        return {
+            title: Array.isArray(document) ? 'rooms array' : (document.title || 'Untitled static map'),
+            bytes,
+            roomSummaries,
+            roomCount: roomSummaries.length,
+            capacity,
+        };
+    };
+
     function startKnightLore() {
         emu = JSSpeccyImpl(document.getElementById('jsspeccy'), {
             zoom: 2,
@@ -651,9 +754,41 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         let stage3OneRoomInjectionTest = {
             attempted: false,
             done: false,
-            message: KL_STAGE3_ONE_ROOM_INJECTION_TEST.enabled
+            message: KL_STAGE5_STATIC_MAP_URL
+                ? 'Stage 3 one-room injection test is suppressed while a Stage 5 static map injection is enabled.'
+                : KL_STAGE3_ONE_ROOM_INJECTION_TEST.enabled
                 ? 'Stage 3 one-room injection test is enabled by ?stage3test=1 and waiting to patch.'
                 : 'Stage 3 one-room injection test is disabled; add ?stage3test=1 to the URL to run it.',
+        };
+        let stage5StaticMapInjection = {
+            enabled: !!KL_STAGE5_STATIC_MAP_URL,
+            url: KL_STAGE5_STATIC_MAP_URL,
+            loading: false,
+            loaded: false,
+            compiled: null,
+            attempted: false,
+            done: false,
+            lastError: null,
+            message: KL_STAGE5_STATIC_MAP_URL
+                ? `Waiting to load static map ${KL_STAGE5_STATIC_MAP_URL}.`
+                : 'Disabled; add ?stage5static3x3=1 to erase and inject the 3x3 static map fixture.',
+        };
+        let stage5RoomIdRecenterTest = {
+            enabled: KL_STAGE5_ROOM_ID_FORCE_TEST.enabled,
+            armed: false,
+            queued: 0,
+            completed: 0,
+            writes: 0,
+            intercepts: 0,
+            lastPreviousRoom: null,
+            lastInterceptRoom: null,
+            lastFrame: null,
+            forceEntryFound: null,
+            lastError: null,
+            inFlight: false,
+            api: typeof emu.writeMemoryReadPreviousUnlessAny === 'function'
+                ? 'conditional-read-previous'
+                : 'missing',
         };
 
         tbody.innerHTML = KL_STAGE1.rows.map(([id, label]) => `
@@ -822,6 +957,140 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return null;
         };
 
+        const renderStage5StaticMapRow = () => {
+            const start = KL_STAGE1.locationStart;
+            const end = KL_STAGE1.locationEnd - 1;
+
+            if (!stage5StaticMapInjection.enabled) {
+                setRow(
+                    'stage5StaticMap',
+                    'Disabled',
+                    stage5StaticMapInjection.message,
+                    'muted'
+                );
+                return;
+            }
+
+            if (stage5StaticMapInjection.lastError) {
+                setRow(
+                    'stage5StaticMap',
+                    'Error',
+                    stage5StaticMapInjection.lastError,
+                    'bad'
+                );
+                return;
+            }
+
+            if (!stage5StaticMapInjection.loaded) {
+                setRow(
+                    'stage5StaticMap',
+                    stage5StaticMapInjection.loading ? 'Loading' : 'Waiting',
+                    stage5StaticMapInjection.message,
+                    'warn'
+                );
+                return;
+            }
+
+            const compiled = stage5StaticMapInjection.compiled;
+            const roomText = compiled.roomSummaries
+                .map(item => `${hexByte(item.physicalRoomId)}:${item.entrySize}`)
+                .join(' ');
+            const value = stage5StaticMapInjection.done
+                ? `Injected ${compiled.roomCount} rooms`
+                : `Loaded ${compiled.roomCount} rooms`;
+            const state = stage5StaticMapInjection.done ? 'ok' : 'warn';
+            const action = stage5StaticMapInjection.done
+                ? `Erased ${hexWord(start)}..${hexWord(end)} and wrote ${compiled.bytes.length}/${compiled.capacity} compiled bytes.`
+                : `Ready to erase ${hexWord(start)}..${hexWord(end)} and write ${compiled.bytes.length}/${compiled.capacity} compiled bytes.`;
+            setRow(
+                'stage5StaticMap',
+                value,
+                `${stage5StaticMapInjection.message} ${action} Entries ${roomText}.`,
+                state
+            );
+        };
+
+        const loadStage5StaticMapDocument = async () => {
+            if (!stage5StaticMapInjection.enabled || stage5StaticMapInjection.loading || stage5StaticMapInjection.loaded) return;
+            stage5StaticMapInjection = {
+                ...stage5StaticMapInjection,
+                loading: true,
+                message: `Loading static map from ${stage5StaticMapInjection.url}.`,
+            };
+            renderStage5StaticMapRow();
+
+            try {
+                const response = await fetch(stage5StaticMapInjection.url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} while loading ${stage5StaticMapInjection.url}.`);
+                }
+                const document = await response.json();
+                const compiled = compileStaticMapDocumentToLocationTable(document);
+                stage5StaticMapInjection = {
+                    ...stage5StaticMapInjection,
+                    loading: false,
+                    loaded: true,
+                    compiled,
+                    message: `Loaded "${compiled.title}" from ${stage5StaticMapInjection.url}.`,
+                };
+            } catch (err) {
+                stage5StaticMapInjection = {
+                    ...stage5StaticMapInjection,
+                    loading: false,
+                    lastError: `Failed to prepare static map injection: ${err.message || err}`,
+                };
+            }
+            renderStage5StaticMapRow();
+        };
+
+        const applyStage5StaticMapInjection = async () => {
+            if (!stage5StaticMapInjection.enabled || stage5StaticMapInjection.done) return;
+            if (!stage5StaticMapInjection.loaded || !stage5StaticMapInjection.compiled) return;
+
+            if (typeof emu.writeMemory !== 'function') {
+                stage5StaticMapInjection = {
+                    ...stage5StaticMapInjection,
+                    attempted: true,
+                    done: false,
+                    lastError: 'writeMemory is not available; cannot erase and inject the static location table.',
+                };
+                renderStage5StaticMapRow();
+                return;
+            }
+
+            stage5StaticMapInjection = {
+                ...stage5StaticMapInjection,
+                attempted: true,
+            };
+
+            try {
+                const compiled = stage5StaticMapInjection.compiled;
+                const capacity = KL_STAGE1.locationEnd - KL_STAGE1.locationStart;
+                await emu.writeMemory(KL_STAGE1.locationStart, new Uint8Array(capacity));
+                await emu.writeMemory(KL_STAGE1.locationStart, Uint8Array.from(compiled.bytes));
+                stage5StaticMapInjection = {
+                    ...stage5StaticMapInjection,
+                    done: true,
+                    message: `Injected "${compiled.title}" into the original location table.`,
+                };
+            } catch (err) {
+                const errorText = String(err);
+                const canRetry = errorText.includes('Core is not ready');
+                stage5StaticMapInjection = {
+                    ...stage5StaticMapInjection,
+                    attempted: !canRetry,
+                    done: false,
+                    lastError: canRetry
+                        ? null
+                        : `Failed to inject static map: ${err.message || err}`,
+                    message: canRetry
+                        ? 'Core was not ready for static map injection; retrying on the next sample.'
+                        : stage5StaticMapInjection.message,
+                };
+            }
+            renderStage5StaticMapRow();
+        };
+
         const applyStage2StartRoomPoke = async () => {
             if (stage2StartPoke.attempted) return;
             if (typeof emu.writeMemory !== 'function') {
@@ -892,6 +1161,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         };
 
         const applyStage3OneRoomInjectionTest = async () => {
+            if (stage5StaticMapInjection.enabled) return;
             if (!KL_STAGE3_ONE_ROOM_INJECTION_TEST.enabled || stage3OneRoomInjectionTest.attempted) return;
             if (typeof emu.writeMemory !== 'function') {
                 stage3OneRoomInjectionTest = {
@@ -1093,6 +1363,161 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return `unknown delta ${delta}`;
         };
 
+        const renderStage5RecenterRow = () => {
+            const center = KL_STAGE5_ROOM_ID_FORCE_TEST.centerRoom;
+            const forceRoom = KL_STAGE5_ROOM_ID_FORCE_TEST.forceRoom;
+            const addr = KL_STAGE5_ROOM_ID_FORCE_TEST.currentRoomAddr;
+
+            if (!stage5RoomIdRecenterTest.enabled) {
+                setRow(
+                    'stage5Recenter',
+                    'Disabled',
+                    `Add ?stage5force=0x78, ?stage5force=0x98, or ?stage5test=1 to override only ${hexWord(addr)} after each drawn frame.`,
+                    'muted'
+                );
+                return;
+            }
+
+            if (KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {
+                setRow(
+                    'stage5Recenter',
+                    'Invalid force target',
+                    KL_STAGE5_ROOM_ID_FORCE_TEST.configError,
+                    'bad'
+                );
+                return;
+            }
+
+            if (stage5RoomIdRecenterTest.api === 'missing') {
+                setRow(
+                    'stage5Recenter',
+                    'Missing conditional poke',
+                    'This JSSpeccy bundle cannot run the conditional read-previous/poke command; rebuild and refresh before running Stage 5.',
+                    'bad'
+                );
+                return;
+            }
+
+            if (stage5RoomIdRecenterTest.lastError) {
+                setRow(
+                    'stage5Recenter',
+                    'Error',
+                    stage5RoomIdRecenterTest.lastError,
+                    'bad'
+                );
+                return;
+            }
+
+            if (stage5RoomIdRecenterTest.forceEntryFound === false) {
+                setRow(
+                    'stage5Recenter',
+                    `Invalid target ${hexByte(forceRoom)}`,
+                    `No location-table entry was found for forced room ${hexByte(forceRoom)}, so the experiment is not armed.`,
+                    'bad'
+                );
+                return;
+            }
+
+            if (!stage5RoomIdRecenterTest.armed) {
+                setRow(
+                    'stage5Recenter',
+                    'Enabled; waiting to arm',
+                    `Target ${hexByte(forceRoom)}. The conditional poke starts only after the sampler sees stable ${hexWord(addr)} = ${hexByte(center)} and confirms the target has a location entry.`,
+                    'warn'
+                );
+                return;
+            }
+
+            const previousText = stage5RoomIdRecenterTest.lastPreviousRoom === null
+                ? 'none yet'
+                : `${hexByte(stage5RoomIdRecenterTest.lastPreviousRoom)} -> ${hexByte(forceRoom)}`;
+            const interceptText = stage5RoomIdRecenterTest.lastInterceptRoom === null
+                ? 'No destination override has been needed yet.'
+                : `Last overridden room byte was ${hexByte(stage5RoomIdRecenterTest.lastInterceptRoom)} (${describeDirection(center, stage5RoomIdRecenterTest.lastInterceptRoom)} from center).`;
+            const pendingText = stage5RoomIdRecenterTest.inFlight ? ' One poke is still awaiting acknowledgement.' : '';
+
+            setRow(
+                'stage5Recenter',
+                `Force ${hexByte(forceRoom)}; last ${previousText}`,
+                `Conditional read-previous/poke. Completed ${stage5RoomIdRecenterTest.completed}/${stage5RoomIdRecenterTest.queued} post-draw checks; writes ${stage5RoomIdRecenterTest.writes}; destination overrides ${stage5RoomIdRecenterTest.intercepts}. ${interceptText} Skips writes while ${hexWord(addr)} is ${hexByte(center)} or already ${hexByte(forceRoom)}. Only ${hexWord(addr)} is changed; object slots are deliberately untouched.${pendingText}`,
+                stage5RoomIdRecenterTest.intercepts ? 'ok' : 'warn'
+            );
+        };
+
+        const queueStage5RoomIdRecenterAfterDraw = () => {
+            if (
+                !stage5RoomIdRecenterTest.enabled ||
+                KL_STAGE5_ROOM_ID_FORCE_TEST.configError ||
+                stage5RoomIdRecenterTest.forceEntryFound === false ||
+                !stage5RoomIdRecenterTest.armed ||
+                stage5RoomIdRecenterTest.inFlight
+            ) return;
+            if (stage5RoomIdRecenterTest.api === 'missing') {
+                renderStage5RecenterRow();
+                return;
+            }
+
+            const center = KL_STAGE5_ROOM_ID_FORCE_TEST.centerRoom;
+            const forceRoom = KL_STAGE5_ROOM_ID_FORCE_TEST.forceRoom;
+            const addr = KL_STAGE5_ROOM_ID_FORCE_TEST.currentRoomAddr;
+            const skipRooms = Array.from(new Set([center, forceRoom]));
+            stage5RoomIdRecenterTest = {
+                ...stage5RoomIdRecenterTest,
+                queued: stage5RoomIdRecenterTest.queued + 1,
+                lastFrame: frameCompletedCount + 1,
+                inFlight: true,
+            };
+            renderStage5RecenterRow();
+
+            const writePromise = emu.writeMemoryReadPreviousUnlessAny(
+                addr,
+                Uint8Array.from([forceRoom]),
+                skipRooms
+            );
+
+            writePromise.then(result => {
+                const previousData = result && result.previousData ? Array.from(result.previousData) : [];
+                const previousRoom = previousData.length ? previousData[0] : null;
+                const didWrite = !!(result && result.didWrite);
+                const wasDestinationOverride = didWrite && previousRoom !== forceRoom;
+                stage5RoomIdRecenterTest = {
+                    ...stage5RoomIdRecenterTest,
+                    completed: stage5RoomIdRecenterTest.completed + 1,
+                    writes: stage5RoomIdRecenterTest.writes + (didWrite ? 1 : 0),
+                    intercepts: stage5RoomIdRecenterTest.intercepts + (wasDestinationOverride ? 1 : 0),
+                    lastPreviousRoom: previousRoom,
+                    lastInterceptRoom: wasDestinationOverride
+                        ? previousRoom
+                        : stage5RoomIdRecenterTest.lastInterceptRoom,
+                    lastError: null,
+                    inFlight: false,
+                };
+                renderStage5RecenterRow();
+            }).catch(err => {
+                stage5RoomIdRecenterTest = {
+                    ...stage5RoomIdRecenterTest,
+                    lastError: `Failed Stage 5 room-id force poke: ${err}`,
+                    inFlight: false,
+                };
+                renderStage5RecenterRow();
+            });
+        };
+
+        const armStage5RoomIdRecenterWhenStable = sample => {
+            if (!stage5RoomIdRecenterTest.enabled || stage5RoomIdRecenterTest.armed) return;
+            if (
+                stage5RoomIdRecenterTest.forceEntryFound &&
+                sample.room0 === KL_STAGE5_ROOM_ID_FORCE_TEST.centerRoom &&
+                sample.attrOk &&
+                sample.sizeOk
+            ) {
+                stage5RoomIdRecenterTest = {
+                    ...stage5RoomIdRecenterTest,
+                    armed: true,
+                };
+            }
+        };
+
         const updateTransition = sample => {
             if (!previousSample || previousSample.room0 === sample.room0) return;
             const direction = describeDirection(previousSample.room0, sample.room0);
@@ -1185,6 +1610,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             try {
                 await applyStage2StartRoomPoke();
                 await applyStage2RoomCleanPatch();
+                await applyStage5StaticMapInjection();
                 // Dormant by default. Open index.html?stage3test=1 to run
                 // this fixed-size one-room injection before the next
                 // retrieve_screen rebuild.
@@ -1229,6 +1655,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 };
 
                 const entry = decodeLocationEntry(staticRange, sample.room0);
+                if (stage5RoomIdRecenterTest.enabled && !KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {
+                    const forceEntry = decodeLocationEntry(staticRange, KL_STAGE5_ROOM_ID_FORCE_TEST.forceRoom);
+                    stage5RoomIdRecenterTest = {
+                        ...stage5RoomIdRecenterTest,
+                        forceEntryFound: !!forceEntry,
+                    };
+                }
                 let decodedSize = null;
                 sample.attrOk = false;
                 sample.sizeOk = false;
@@ -1244,6 +1677,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 }
 
                 updateTransition(sample);
+                armStage5RoomIdRecenterWhenStable(sample);
 
                 setRow(
                     'sampler',
@@ -1374,6 +1808,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 }
 
                 renderTransitionRows();
+                renderStage5StaticMapRow();
+                renderStage5RecenterRow();
                 renderStage2Cross(staticRange, sample);
                 renderStage4LogicalMap();
                 previousSample = sample;
@@ -1385,7 +1821,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         };
 
         if (typeof emu.on === 'function') {
-            emu.on('frameCompleted', () => sample('frameCompleted'));
+            emu.on('frameCompleted', () => {
+                queueStage5RoomIdRecenterAfterDraw();
+                sample('frameCompleted');
+            });
         } else {
             setRow(
                 'sampler',
@@ -1395,7 +1834,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             );
         }
 
+        renderStage5StaticMapRow();
+        renderStage5RecenterRow();
         renderStage4LogicalMap();
+        loadStage5StaticMapDocument();
         sample('initial');
         window.setInterval(() => {
             if (frameCompletedCount === 0) {
