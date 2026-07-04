@@ -90,6 +90,56 @@ Top-level fields:
   Array of room definitions.
 
 
+Infinite and Finite Maps
+------------------------
+
+The logical map model is coordinate-based, not array-size-based. The runtime
+can ask for any integer coordinate:
+
+    logicalMap.getRoomAt(12, -4)
+
+If an authored room exists at that coordinate, the authored room is used. If
+no authored room exists, the current Stage 7 provider creates a deterministic
+procedural answer from the coordinate. The answer may be an open generated
+room or a missing/closed cell. That means the generated map is algorithmically
+unbounded: revisiting the same coordinate gives the same result, and only
+browser memory, save-file size, and practical integer ranges limit how much
+persistent state can be kept.
+
+Current generated provider:
+
+    SRC/runtime/knightlore-mapgen.js
+
+Current algorithm:
+
+- split the plane into deterministic 8x8 chunks;
+- choose edge connector positions from shared edge seeds so neighbouring
+  chunks agree where cross-chunk doors can exist;
+- carve guaranteed paths through each chunk to keep the infinite map
+  traversable;
+- add deterministic corridor branches from the connected core until the local
+  room density is close to the original game's 128/256 occupied cells;
+- use original-game rectangular room shapes only for legal small-side exits:
+  north/south rooms use selector 1, east/west rooms use selector 2;
+- throttle legal rectangular candidates deterministically so the generated
+  rectangle ratio stays close to the original game's 58/128 rooms;
+- keep corner, T-junction, and four-exit generated rooms square;
+- return missing cells as closed wall-only payloads, not as open rooms.
+
+Exits are then derived from room existence:
+
+    east exit exists if room(x + 1, y) exists
+
+and similarly for the other cardinal directions. This keeps generated exits
+reciprocal by construction before the Stage 7 reciprocal safety overlay runs.
+
+A finite map uses the same structure. It is not a different file format.
+Authors make a finite edge by omitting exits at the boundary, or by providing
+a map/provider policy that closes exits where no room should be reachable.
+The sliding physical five-room cross is unchanged; only the logical room
+provider decides whether a neighbour exists as an open room or a closed wall.
+
+
 Room Definition
 ---------------
 
@@ -212,8 +262,83 @@ Door rule for rectangular rooms:
 - selector 2 uses east/west exits and wall id 0x0D;
 - avoid long-side doors in rectangular rooms.
 
-For early sliding-window stages, generated rooms remain square to avoid
-rectangular-door ambiguity.
+The current procedural generator only creates rectangular rooms when the exit
+mask uses the narrow side(s) of a rectangle:
+
+    north, south, or north + south -> selector 1 candidate
+    east, west, or east + west     -> selector 2 candidate
+
+Legal candidates are not always rectangular. They are throttled by a
+deterministic coordinate hash so that the generated rectangle ratio is close
+to the original data:
+
+    original map occupancy:   128 / 256 cells = 50%
+    original rectangle ratio: 58 / 128 rooms  = 45.31%
+
+If a generated room cannot be represented with small-side doors only, or if
+the deterministic throttle leaves it square, it falls back to a square room
+with the corresponding doors. Generated rectangular rooms are currently
+stone-only and have no procedural block runs, which keeps this first
+rectangular pass close to the safest original-game patterns.
+
+Generated wooden rooms use square-room tree background patterns copied from
+original rooms by exit mask. If a generated or reciprocal-overlay exit mask
+has no known safe tree pattern, the compiler falls back to a stone room for
+that compiled payload rather than guessing an unsafe tree filler/arch
+combination.
+
+
+Starting Room Safety
+--------------------
+
+The starting room must have a clear spawn area. If the player starts inside a
+blocking foreground block, blocking object, or large central background, the
+original engine can leave the character trapped immediately after room load.
+This happened with the original room 0x88 before the wizard/cauldron expansion
+data was removed.
+
+Authoring rule:
+
+- keep the center of the origin room empty;
+- do not place foreground blocks on the central floor cells;
+- do not place blocking dynamic objects/items at the spawn point;
+- avoid central blocking background ids such as 0x12 wizard and 0x13 cauldron
+  in the starting room unless the runtime deliberately disables their expanded
+  data.
+
+Until the exact player collision footprint is fully documented, use this
+conservative grid clearance for the origin room:
+
+    no block at z=0 on x=3..4, y=3..4
+
+It is fine to place decorative or blocking content elsewhere in the starting
+room, including around the center, as long as the player has a clear initial
+standing area and can walk to at least one intended exit.
+
+
+Reciprocal Exit Safety
+----------------------
+
+For sliding-window play, a visible door must have a matching return door in
+the contiguous logical room. Otherwise the original engine can transition into
+a room whose wall/background data does not contain the entrance side, leaving
+the player apparently behind a wall.
+
+The Stage 7 runtime compiles a reciprocal-exit overlay before writing the
+physical five-room cross. The source JSON is not modified. For each adjacent
+pair:
+
+- if either authored room defines a door, both compiled rooms get the matching
+  door when both room shapes allow it;
+- if a generated room borders an authored room, the authored room controls the
+  boundary, so generated four-exit defaults do not punch new holes into an
+  authored map edge;
+- if either room shape cannot legally host that door direction, the compiled
+  pair is closed rather than emitting an invalid rectangular-room door.
+
+The original dump intentionally remains a faithful dump. It contains some
+one-way exits in raw JSON, so use the Stage 7 diagnostics row to see whether
+the reciprocal overlay added or removed exits in the current physical cross.
 
 
 Backgrounds
@@ -225,7 +350,15 @@ If backgrounds is omitted, the runtime builds backgrounds from theme + exits:
   arch ids 0x00..0x03 and wall id 0x0C.
 
 - tree + selector 0:
-  tree arch ids 0x04..0x07 and tree room ids 0x0F, 0x10, 0x11.
+  original-derived square-room tree patterns by exit mask. Do not assume every
+  wooden room uses all filler ids 0x0F, 0x10, and 0x11. For example, a safe
+  four-exit wooden room uses:
+
+      0x04 0x05 0x06 0x07 0x0F
+
+  rather than:
+
+      0x04 0x05 0x06 0x07 0x0F 0x10 0x11
 
 - rectangular stone:
   selector 1 wall id 0x0E;

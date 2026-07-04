@@ -863,3 +863,220 @@ valid when the engine leaves the current room and scans for the next location.
 
 Next natural step: use the same injection machinery to rewrite the physical
 window whenever the logical coordinate changes.
+
+
++============================================================+
+| 2026 07 03 - Stage 6, Stage 7, and Procedural Map          |
++============================================================+
+
+2026 07 03
+----------
+
+This entry covers the work after the Stage 5 static-table injection milestone.
+The project moved from "we can erase and rewrite the map" to a working
+four-direction sliding-window proof with an unbounded deterministic logical
+map provider.
+
+The important rule stayed unchanged: no original Knight Lore source code was
+modified, and no alternate renderer was added. The original Spectrum/JSSpeccy
+display remains the only visual output. All map virtualization is still done
+from JavaScript by rewriting the emulator's runtime memory and static location
+table.
+
+------------------------------------------------
+Stage 6 - One-Direction Recenter Proof
+
+Stage 6 was considered already proven by the earlier 0x5C10 force-destination
+experiments.
+
+The key observation was that changing only the current-room byte after a room
+has been drawn can control which room retrieve_screen loads on the next
+transition. When the player leaves the current room, the original engine scans
+the location table for the room id in 0x5C10, decompresses that location entry
+into working memory, and then resumes play from the correct transition side.
+
+Manual testing confirmed the expected behaviour:
+
+- leaving physical 0x88 in any direction can force the next generated room;
+- entering a forced destination still places the player on the correct side;
+- forcing can be skipped for selected rooms, allowing natural transitions back
+  to those rooms.
+
+This established that transition positioning, current-room selection, and
+static-table content are separable enough for a recentering model.
+
+------------------------------------------------
+Stage 7 - Four-Direction Sliding Cross
+
+Implemented the first full sliding physical cross.
+
+The physical room ids remain fixed:
+
+- center: 0x88
+- west: 0x87
+- east: 0x89
+- south: 0x78
+- north: 0x98
+
+The logical map is external and coordinate-based. The runtime tracks a logical
+center coordinate, initially (0, 0). Whenever 0x5C10 shows that the original
+engine has entered one of the four physical neighbour rooms, the JavaScript
+side:
+
+1. detects the transition direction from the physical room id;
+2. updates the logical center coordinate;
+3. compiles the new center plus its four logical neighbours;
+4. erases and rewrites the physical five-room location table entries;
+5. patches active working-memory room-id bytes from the entered physical
+   neighbour back to 0x88.
+
+This makes the original game continue as if the player is always centered
+around physical room 0x88, while the external logical coordinate keeps moving.
+
+Manual movement tests covered:
+
+- repeated movement in one direction;
+- east/east/west/west style backtracking;
+- north/south alternation;
+- small loops;
+- alternating axes.
+
+The first generated maps exposed a real authoring/runtime problem: a visible
+door must have a corresponding return door in the contiguous logical room. If
+not, Knight Lore can transition into a room whose wall/background data has no
+matching entrance side, leaving the player behind a wall. A reciprocal-exit
+overlay was added at compile time. The source logical map is not modified, but
+the compiled physical payload is made safe:
+
+- authored exits are mirrored when both room shapes can legally host them;
+- generated-to-generated exits are reciprocal by construction;
+- generated rooms do not reopen authored map edges on their own;
+- illegal rectangular long-side exits are closed rather than emitted.
+
+After this fix, repeated manual walking in all directions worked without the
+wall-lock problem.
+
+------------------------------------------------
+Logical Map Model and Authored JSON
+
+The logical map model now supports authored rooms, labels, aliases, generated
+fallback rooms, and persistent room state outside the emulator.
+
+Important pieces:
+
+- SRC/runtime/knightlore.js owns the logical map facade and Stage 7 physical
+  cross compiler.
+- SRC/static/maps/knight-lore-original-map.json contains a JSON dump of the
+  original Knight Lore room set.
+- Docs/logical-map-json-format.txt documents the editable JSON format.
+
+Labels were added so authored rooms can be referred to by names such as
+"0x88" or "cauldron". The original map dump gives users a copy/paste source
+for building new maps from original rooms, while the runtime still treats room
+coordinates as the real addressing system.
+
+The JSON documentation was expanded with:
+
+- finite versus infinite map notes;
+- reciprocal-exit safety rules;
+- starting-room clearance requirements;
+- original-game rectangular room size rules;
+- safe wooden-room background combinations;
+- the critical background-only no-0xFF compiler rule.
+
+------------------------------------------------
+Procedural Infinite Map Provider
+
+Added a dedicated procedural map generator:
+
+- SRC/runtime/knightlore-mapgen.js
+
+The generator answers "what room exists at logical coordinate (x, y)?" without
+requiring a finite map array. Its answers are deterministic: the same world
+seed and coordinate always produce the same room.
+
+The first version split the plane into deterministic chunks, carved guaranteed
+paths between shared edge connectors, and added branch rooms. This proved the
+infinite-map idea, but manual play showed the early generator produced too many
+dense square/T/four-way areas and too few rectangular rooms.
+
+The generator was then tuned against the original Knight Lore map:
+
+- original occupancy: 128 rooms in a 16x16 map = 50%;
+- original rectangular rooms: 58 out of 128 rooms = 45.31%.
+
+The current algorithm:
+
+- uses deterministic 8x8 chunks;
+- chooses matching cross-chunk connector positions from shared edge hashes;
+- carves paths from the four edge connectors to a deterministic hub;
+- forces the origin and its four cardinal neighbours to exist;
+- grows deterministic corridor branches until local occupancy is near 50%;
+- derives exits from neighbouring-room existence;
+- returns missing cells as closed wall-only payloads;
+- creates original-style rectangular rooms only when exits are on the smaller
+  side(s) of the rectangle;
+- uses a deterministic throttle so not every legal rectangle candidate becomes
+  rectangular.
+
+The latest measured sample was close to the original proportions:
+
+- generated occupancy: about 49.84%;
+- generated rectangular rooms: about 45.12%.
+
+Rectangular generated rooms are intentionally conservative for now:
+
+- selector 1 for north/south-side candidates;
+- selector 2 for east/west-side candidates;
+- no long-side doors;
+- stone-only;
+- no procedural block runs.
+
+Square generated rooms may be stone or wooden. Procedural foreground blocks
+avoid the central starting floor cells, so a generated origin room does not
+trap the player immediately.
+
+A separate explanation was added:
+
+- Docs/map-generation-algorithm.txt
+
+------------------------------------------------
+Verification
+
+Checks and probes run during this stage included:
+
+- JavaScript syntax checks for SRC/runtime/knightlore.js;
+- JavaScript syntax checks for SRC/runtime/knightlore-mapgen.js;
+- generated-map reciprocal-exit probes;
+- rectangular-room legality probes;
+- generated occupancy and rectangle-density measurements against the original
+  map dump;
+- reachability probes with an outer margin and inner target window;
+- manual walking tests in all directions;
+- webpack rebuilds of SRC/dist/jsspeccy/jsspeccy.js;
+- refreshed SRC/dist/index.html.
+
+Current cache/diagnostic marker:
+
+- stage7-balanced-rectangles-20260704-1
+
+------------------------------------------------
+Stage 7 status
+
+Stage 7 is working as a practical proof.
+
+The original engine sees only a fixed five-room physical cross, while the
+JavaScript side keeps an arbitrary logical coordinate system, rewrites the
+physical room entries around the new center, and keeps the player effectively
+centered on 0x88.
+
+Known cautions remain:
+
+- all timing still depends on patching at a safe point around room loading;
+- more complex objects/items are not yet persistent across revisits;
+- generated rectangular rooms are deliberately simple until more original
+  rectangular/background patterns are tested;
+- authored special rooms still need careful spawn and reciprocal-exit checks.
+
+The next natural work is content enrichment: hazards, treasures, authored
+special rooms, persistent object/item state, and more varied room dressing.

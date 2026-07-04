@@ -1,13 +1,18 @@
+import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
+
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage5-static-map-20260701-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage7-balanced-rectangles-20260704-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
-    const KL_STAGE5_STATIC_MAP_URL = KL_URL_PARAMS.get('stage5staticmap') ||
+    const KL_STAGE7_SLIDING_CROSS_ENABLED =
+        KL_URL_PARAMS.get('stage7sliding') === '1' ||
+        KL_URL_PARAMS.get('stage7') === '1';
+    const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
             ? 'maps/knight-lore-3x3-static-map.json'
-            : null);
+            : null));
     let renderStage4LogicalMapNow = null;
     let logicalMapLoadStatus = {
         attempted: false,
@@ -63,6 +68,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             ['sizeCompare', 'Size selector compare'],
             ['stage5StaticMap', 'Stage 5 static map injection'],
             ['stage5Recenter', 'Stage 5 room-id force test'],
+            ['stage7Sliding', 'Stage 7 sliding cross'],
             ['transition', 'Latest room transition'],
             ['timing', 'frameCompleted timing'],
         ],
@@ -85,6 +91,29 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             {role: 'south', id: 0x78},
             {role: 'north', id: 0x98},
         ],
+    };
+
+    const KL_STAGE7_SLIDING_CROSS = {
+        enabled: KL_STAGE7_SLIDING_CROSS_ENABLED,
+        centerRoom: KL_STAGE2.centerRoom,
+        currentRoomAddr: 0x5c10,
+        slotStart: 0x5c08,
+        slotEnd: KL_STAGE1.workEnd,
+        slotSize: 0x20,
+        slotRoomOffset: 0x08,
+        physicalCross: [
+            {role: 'center', id: 0x88, offset: {x: 0, y: 0}},
+            {role: 'west', id: 0x87, offset: {x: -1, y: 0}},
+            {role: 'east', id: 0x89, offset: {x: 1, y: 0}},
+            {role: 'south', id: 0x78, offset: {x: 0, y: -1}},
+            {role: 'north', id: 0x98, offset: {x: 0, y: 1}},
+        ],
+        directionDeltas: {
+            north: {x: 0, y: 1},
+            east: {x: 1, y: 0},
+            south: {x: 0, y: -1},
+            west: {x: -1, y: 0},
+        },
     };
 
     const KL_STAGE3_ONE_ROOM_INJECTION_TEST = {
@@ -194,6 +223,44 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     };
 
     const KL_DIRECTIONS = ['north', 'east', 'south', 'west'];
+    const KL_OPPOSITE_DIRECTIONS = {
+        north: 'south',
+        east: 'west',
+        south: 'north',
+        west: 'east',
+    };
+    const KL_DIRECTION_DELTAS = {
+        north: {x: 0, y: 1},
+        east: {x: 1, y: 0},
+        south: {x: 0, y: -1},
+        west: {x: -1, y: 0},
+    };
+    const KL_ARCH_IDS_BY_DIRECTION = {
+        north: [KL_STONE_ARCH_IDS.north, KL_TREE_ARCH_IDS.north],
+        east: [KL_STONE_ARCH_IDS.east, KL_TREE_ARCH_IDS.east],
+        south: [KL_STONE_ARCH_IDS.south, KL_TREE_ARCH_IDS.south],
+        west: [KL_STONE_ARCH_IDS.west, KL_TREE_ARCH_IDS.west],
+    };
+    const KL_ALL_CARDINAL_ARCH_IDS = new Set(
+        Object.values(KL_ARCH_IDS_BY_DIRECTION).flat()
+    );
+    const KL_SIZE_WALL_IDS = new Set(
+        Object.values(KL_SIZE_SELECTORS).map(selector => selector.wallId)
+    );
+    const KL_TREE_FILLER_IDS = new Set([0x0f, 0x10, 0x11]);
+    const KL_TREE_SQUARE_BACKGROUNDS_BY_EXIT_MASK = {
+        ES: [0x05, 0x06, 0x0f, 0x10, 0x11],
+        ESW: [0x05, 0x06, 0x07, 0x0f, 0x11],
+        EW: [0x05, 0x07, 0x0f, 0x11],
+        NE: [0x04, 0x05, 0x0f, 0x10],
+        NES: [0x04, 0x05, 0x06, 0x0f, 0x10],
+        NESW: [0x04, 0x05, 0x06, 0x07, 0x0f],
+        NEW: [0x04, 0x05, 0x07, 0x0f],
+        NS: [0x04, 0x06, 0x0f, 0x10],
+        NSW: [0x04, 0x06, 0x07, 0x0f],
+        NW: [0x04, 0x07, 0x0f],
+        SW: [0x06, 0x07, 0x0f, 0x11],
+    };
 
     const cloneData = value => JSON.parse(JSON.stringify(value));
     const logicalCoordKey = (x, y) => `${x},${y}`;
@@ -206,19 +273,6 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             throw new Error(`Logical coordinates must be integers; received (${coord.x}, ${coord.y}).`);
         }
         return {x, y};
-    };
-
-    const hashLogicalCoord = (x, y, salt = 0) => {
-        let hash = 0x811c9dc5;
-        hash = Math.imul(hash ^ (x | 0), 0x01000193);
-        hash = Math.imul(hash ^ (y | 0), 0x01000193);
-        hash = Math.imul(hash ^ (salt | 0), 0x01000193);
-        hash ^= hash >>> 16;
-        hash = Math.imul(hash, 0x7feb352d);
-        hash ^= hash >>> 15;
-        hash = Math.imul(hash, 0x846ca68b);
-        hash ^= hash >>> 16;
-        return hash >>> 0;
     };
 
     const normalizeExits = exits => {
@@ -240,6 +294,40 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         })).filter(block => block.positions.length)
     );
 
+    const getExitMask = exits => (
+        KL_DIRECTIONS
+            .filter(direction => exits && exits[direction])
+            .map(direction => direction[0].toUpperCase())
+            .join('')
+    );
+
+    const buildStoneBackgroundsWithExits = (room, exits) => {
+        const selectorInfo = KL_SIZE_SELECTORS[room.size.selector];
+        if (!selectorInfo) return [];
+        return [
+            ...KL_DIRECTIONS
+                .filter(direction => exits && exits[direction])
+                .map(direction => KL_STONE_ARCH_IDS[direction]),
+            selectorInfo.wallId,
+        ];
+    };
+
+    const buildTreeSquareBackgroundsWithExits = (room, exits) => {
+        if (room.size.selector !== 0) return null;
+
+        const mask = getExitMask(exits);
+        const baseBackgrounds = KL_TREE_SQUARE_BACKGROUNDS_BY_EXIT_MASK[mask];
+        if (!baseBackgrounds) return null;
+
+        const specialBackgrounds = (room.backgrounds || []).filter(value => (
+            !KL_ALL_CARDINAL_ARCH_IDS.has(value) &&
+            !KL_TREE_FILLER_IDS.has(value) &&
+            !KL_SIZE_WALL_IDS.has(value)
+        ));
+
+        return [...baseBackgrounds, ...specialBackgrounds];
+    };
+
     const buildBackgrounds = room => {
         if (Array.isArray(room.backgrounds)) return [...room.backgrounds];
 
@@ -248,56 +336,51 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const exits = room.exits || {};
         const theme = room.theme || 'stone';
-        const archIds = theme === 'tree' ? KL_TREE_ARCH_IDS : KL_STONE_ARCH_IDS;
-        const backgrounds = [];
-
-        for (const direction of KL_DIRECTIONS) {
-            if (exits[direction]) backgrounds.push(archIds[direction]);
+        if (theme === 'tree') {
+            const treeBackgrounds = buildTreeSquareBackgroundsWithExits(room, exits);
+            if (treeBackgrounds) return treeBackgrounds;
         }
 
-        if (theme === 'tree' && room.size.selector === 0) {
-            backgrounds.push(0x0f, 0x10, 0x11);
-        } else {
-            backgrounds.push(selectorInfo.wallId);
-        }
-
-        return backgrounds;
+        return buildStoneBackgroundsWithExits(room, exits);
     };
 
-    const createGeneratedLogicalRoom = (x, y) => {
-        const hash = hashLogicalCoord(x, y, 0x4b4c);
-        const colour = 3 + (hash & 0x03);
-        const theme = (hash & 0x08) ? 'tree' : 'stone';
-        const count = 1 + ((hash >>> 4) & 0x03);
-        const positions = [];
+    const roomAllowsExit = (room, direction) => {
+        const selectorInfo = KL_SIZE_SELECTORS[room.size.selector];
+        return !!(selectorInfo && selectorInfo.allowedExits.includes(direction));
+    };
 
-        for (let index = 0; index < count; index++) {
-            const offsetHash = hashLogicalCoord(x, y, 0x100 + index);
-            positions.push({
-                x: 2 + (offsetHash & 0x03),
-                y: 2 + ((offsetHash >>> 3) & 0x03),
-                z: 0,
-            });
+    const chooseArchIdForRoom = (room, direction) => {
+        const [stoneId, treeId] = KL_ARCH_IDS_BY_DIRECTION[direction];
+        if (room.backgrounds && room.backgrounds.includes(treeId)) return treeId;
+        if (room.theme === 'tree') return treeId;
+        const hasTreeArchitecture = (room.backgrounds || []).some(value => (
+            value >= 0x04 && value <= 0x07
+        ));
+        return hasTreeArchitecture ? treeId : stoneId;
+    };
+
+    const buildBackgroundsWithExits = (room, exits) => {
+        const hasTreeArchitecture = room.theme === 'tree' || (room.backgrounds || []).some(value => (
+            (value >= 0x04 && value <= 0x07) || KL_TREE_FILLER_IDS.has(value)
+        ));
+        if (hasTreeArchitecture) {
+            const treeBackgrounds = buildTreeSquareBackgroundsWithExits(room, exits);
+            if (treeBackgrounds) return treeBackgrounds;
+
+            const specialBackgrounds = (room.backgrounds || []).filter(value => (
+                !KL_ALL_CARDINAL_ARCH_IDS.has(value) &&
+                !KL_TREE_FILLER_IDS.has(value) &&
+                !KL_SIZE_WALL_IDS.has(value)
+            ));
+            return [...buildStoneBackgroundsWithExits(room, exits), ...specialBackgrounds];
         }
 
-        return {
-            coord: {x, y},
-            label: `generated:${logicalCoordKey(x, y)}`,
-            title: `generated ${logicalCoordKey(x, y)}`,
-            source: 'generated',
-            size: {selector: 0},
-            colour,
-            theme,
-            exits: {north: 'arch', east: 'arch', south: 'arch', west: 'arch'},
-            blocks: [
-                {
-                    type: theme === 'tree' ? 0x00 : 0x03,
-                    positions,
-                },
-            ],
-            objects: [],
-            items: [],
-        };
+        const nonArchBackgrounds = (room.backgrounds || [])
+            .filter(value => !KL_ALL_CARDINAL_ARCH_IDS.has(value));
+        const archBackgrounds = KL_DIRECTIONS
+            .filter(direction => exits[direction])
+            .map(direction => chooseArchIdForRoom(room, direction));
+        return [...archBackgrounds, ...nonArchBackgrounds];
     };
 
     const normalizeLogicalRoomDefinition = (definition, source) => {
@@ -437,6 +520,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const generated = new Map();
         const persistent = new Map();
         const labels = new Map();
+        const proceduralMap = createKnightLoreProceduralMap();
         let activeDocument = {
             format: KL_MAP_FORMAT,
             title: 'Built-in Stage 4 seed',
@@ -465,7 +549,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             if (!definition) {
                 source = 'generated';
                 if (!generated.has(key)) {
-                    generated.set(key, createGeneratedLogicalRoom(coord.x, coord.y));
+                    generated.set(key, proceduralMap.getRoomDefinition(coord.x, coord.y));
                 }
                 definition = generated.get(key);
             }
@@ -603,6 +687,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 generatedRooms: generated.size,
                 persistentRooms: persistent.size,
                 labels: labels.size,
+                procedural: proceduralMap.stats(),
             }),
         };
     }
@@ -714,6 +799,135 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         };
     };
 
+    const createReciprocalExitRoom = (room, getRoomAt) => {
+        const exits = {...room.exits};
+        const adjustments = [];
+
+        for (const direction of KL_DIRECTIONS) {
+            const delta = KL_DIRECTION_DELTAS[direction];
+            const opposite = KL_OPPOSITE_DIRECTIONS[direction];
+            const neighbour = getRoomAt(room.coord.x + delta.x, room.coord.y + delta.y);
+            const roomHasExit = !!room.exits[direction];
+            const neighbourHasReturn = !!neighbour.exits[opposite];
+            const roomExists = room.meta && room.meta.procedural
+                ? room.meta.procedural.exists !== false
+                : true;
+            const neighbourExists = neighbour.meta && neighbour.meta.procedural
+                ? neighbour.meta.procedural.exists !== false
+                : true;
+            const roomIsGenerated = room.source === 'generated';
+            const neighbourIsGenerated = neighbour.source === 'generated';
+            const pairHasAuthoredExit =
+                (!roomIsGenerated && roomHasExit) ||
+                (!neighbourIsGenerated && neighbourHasReturn);
+            const pairHasGeneratedExit =
+                roomIsGenerated &&
+                neighbourIsGenerated &&
+                (roomHasExit || neighbourHasReturn);
+            const pairShouldHaveDoor = roomExists && neighbourExists && (
+                pairHasAuthoredExit || pairHasGeneratedExit
+            );
+
+            if (!pairShouldHaveDoor) {
+                if (roomHasExit) {
+                    adjustments.push({
+                        type: 'removed',
+                        direction,
+                        neighbourLabel: neighbour.label,
+                        neighbourCoord: cloneData(neighbour.coord),
+                        reason: `${neighbour.label} has no authored ${opposite} exit`,
+                    });
+                }
+                exits[direction] = false;
+                continue;
+            }
+
+            if (roomAllowsExit(room, direction) && roomAllowsExit(neighbour, opposite)) {
+                if (!roomHasExit && neighbourHasReturn) {
+                    adjustments.push({
+                        type: 'added',
+                        direction,
+                        neighbourLabel: neighbour.label,
+                        neighbourCoord: cloneData(neighbour.coord),
+                        reason: `${neighbour.label} has ${opposite}`,
+                    });
+                }
+                exits[direction] = room.exits[direction] || neighbour.exits[opposite] || 'arch';
+            } else {
+                if (roomHasExit) {
+                    adjustments.push({
+                        type: 'removed',
+                        direction,
+                        neighbourLabel: neighbour.label,
+                        neighbourCoord: cloneData(neighbour.coord),
+                        reason: roomAllowsExit(room, direction)
+                            ? `${neighbour.label} cannot host ${opposite}`
+                            : `${room.label} cannot host ${direction}`,
+                    });
+                }
+                exits[direction] = false;
+            }
+        }
+
+        if (!adjustments.length) return {room, adjustments};
+
+        const patchedRoom = {
+            ...room,
+            exits,
+            backgrounds: buildBackgroundsWithExits(room, exits),
+        };
+
+        return {
+            room: patchedRoom,
+            adjustments,
+        };
+    };
+
+    const compileStage7SlidingCrossToLocationTable = centerCoord => {
+        const bytes = [];
+        const roomSummaries = [];
+
+        for (const physical of KL_STAGE7_SLIDING_CROSS.physicalCross) {
+            const logicalCoord = {
+                x: centerCoord.x + physical.offset.x,
+                y: centerCoord.y + physical.offset.y,
+            };
+            const room = logicalMap.getRoomAt(logicalCoord.x, logicalCoord.y);
+            const reciprocal = createReciprocalExitRoom(room, logicalMap.getRoomAt);
+            const compiled = logicalMap.compileRoom(reciprocal.room, physical.id);
+            if (!compiled.valid) {
+                throw new Error(`Logical room ${room.label} at ${logicalCoordKey(logicalCoord.x, logicalCoord.y)} failed to compile for physical ${physical.role} ${physical.id.toString(16)}: ${compiled.errors.join('; ')}`);
+            }
+
+            bytes.push(...compiled.bytes);
+            roomSummaries.push({
+                role: physical.role,
+                physicalRoomId: physical.id,
+                logicalCoord,
+                label: room.label,
+                source: room.source,
+                entrySize: compiled.entrySize,
+                byteCount: compiled.bytes.length,
+                backgroundCount: compiled.backgroundCount,
+                blockByteCount: compiled.blockByteCount,
+                reciprocalExitAdjustments: reciprocal.adjustments,
+            });
+        }
+
+        const capacity = KL_STAGE1.locationEnd - KL_STAGE1.locationStart;
+        if (bytes.length > capacity) {
+            throw new Error(`Compiled Stage 7 sliding cross is ${bytes.length} bytes but the original location table has only ${capacity} bytes.`);
+        }
+
+        return {
+            title: `Stage 7 sliding cross centered at ${logicalCoordKey(centerCoord.x, centerCoord.y)}`,
+            bytes,
+            roomSummaries,
+            roomCount: roomSummaries.length,
+            capacity,
+        };
+    };
+
     function startKnightLore() {
         emu = JSSpeccyImpl(document.getElementById('jsspeccy'), {
             zoom: 2,
@@ -721,15 +935,16 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             autoStart: true,
             openUrl: 'Knight Lore (1984)(Ultimate).z80',
         });
-        installKnightLoreDiagnostics(emu);
-        if (KL_STAGE45_MAP_URL) {
-            loadLogicalMapFromUrl(KL_STAGE45_MAP_URL).catch(err => {
+        const logicalMapLoadPromise = KL_STAGE45_MAP_URL
+            ? loadLogicalMapFromUrl(KL_STAGE45_MAP_URL).catch(err => {
                 console.error(err);
-            });
-        }
+                return null;
+            })
+            : null;
+        installKnightLoreDiagnostics(emu, logicalMapLoadPromise);
     }
 
-    function installKnightLoreDiagnostics(emu) {
+    function installKnightLoreDiagnostics(emu, logicalMapLoadPromise = null) {
         const tbody = document.getElementById('stage1-diagnostics-body');
         const crossTbody = document.getElementById('stage2-cross-body');
         const stage2Status = document.getElementById('stage2-status');
@@ -754,8 +969,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         let stage3OneRoomInjectionTest = {
             attempted: false,
             done: false,
-            message: KL_STAGE5_STATIC_MAP_URL
-                ? 'Stage 3 one-room injection test is suppressed while a Stage 5 static map injection is enabled.'
+            message: KL_STAGE5_STATIC_MAP_URL || KL_STAGE7_SLIDING_CROSS.enabled
+                ? `Stage 3 one-room injection test is suppressed while ${KL_STAGE7_SLIDING_CROSS.enabled ? 'Stage 7 sliding cross' : 'a Stage 5 static map injection'} is enabled.`
                 : KL_STAGE3_ONE_ROOM_INJECTION_TEST.enabled
                 ? 'Stage 3 one-room injection test is enabled by ?stage3test=1 and waiting to patch.'
                 : 'Stage 3 one-room injection test is disabled; add ?stage3test=1 to the URL to run it.',
@@ -774,7 +989,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 : 'Disabled; add ?stage5static3x3=1 to erase and inject the 3x3 static map fixture.',
         };
         let stage5RoomIdRecenterTest = {
-            enabled: KL_STAGE5_ROOM_ID_FORCE_TEST.enabled,
+            enabled: KL_STAGE5_ROOM_ID_FORCE_TEST.enabled && !KL_STAGE7_SLIDING_CROSS.enabled,
             armed: false,
             queued: 0,
             completed: 0,
@@ -790,6 +1005,38 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 ? 'conditional-read-previous'
                 : 'missing',
         };
+        let stage7SlidingCross = {
+            enabled: KL_STAGE7_SLIDING_CROSS.enabled,
+            center: {x: 0, y: 0},
+            generation: 0,
+            attempted: false,
+            done: false,
+            inFlight: false,
+            mapLoadPending: !!logicalMapLoadPromise,
+            lastError: null,
+            lastCompiled: null,
+            lastTransition: null,
+            lastPatchedSlots: [],
+            message: KL_STAGE7_SLIDING_CROSS.enabled
+                ? 'Enabled by ?stage7sliding=1; waiting to inject the first five-room physical cross.'
+                : 'Disabled; add ?stage7sliding=1 to run the four-direction sliding cross proof.',
+        };
+
+        if (logicalMapLoadPromise) {
+            logicalMapLoadPromise.finally(() => {
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    mapLoadPending: false,
+                    done: false,
+                    attempted: false,
+                    message: KL_STAGE7_SLIDING_CROSS.enabled
+                        ? 'Logical map load finished; waiting to inject the Stage 7 physical cross.'
+                        : stage7SlidingCross.message,
+                };
+                renderStage7SlidingRow();
+                renderStage4LogicalMap();
+            });
+        }
 
         tbody.innerHTML = KL_STAGE1.rows.map(([id, label]) => `
             <tr data-row="${id}" class="state-muted">
@@ -957,6 +1204,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return null;
         };
 
+        const writeCompiledLocationTable = async compiled => {
+            const capacity = KL_STAGE1.locationEnd - KL_STAGE1.locationStart;
+            await emu.writeMemory(KL_STAGE1.locationStart, new Uint8Array(capacity));
+            await emu.writeMemory(KL_STAGE1.locationStart, Uint8Array.from(compiled.bytes));
+        };
+
         const renderStage5StaticMapRow = () => {
             const start = KL_STAGE1.locationStart;
             const end = KL_STAGE1.locationEnd - 1;
@@ -1065,9 +1318,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
             try {
                 const compiled = stage5StaticMapInjection.compiled;
-                const capacity = KL_STAGE1.locationEnd - KL_STAGE1.locationStart;
-                await emu.writeMemory(KL_STAGE1.locationStart, new Uint8Array(capacity));
-                await emu.writeMemory(KL_STAGE1.locationStart, Uint8Array.from(compiled.bytes));
+                await writeCompiledLocationTable(compiled);
                 stage5StaticMapInjection = {
                     ...stage5StaticMapInjection,
                     done: true,
@@ -1161,7 +1412,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         };
 
         const applyStage3OneRoomInjectionTest = async () => {
-            if (stage5StaticMapInjection.enabled) return;
+            if (stage5StaticMapInjection.enabled || stage7SlidingCross.enabled) return;
             if (!KL_STAGE3_ONE_ROOM_INJECTION_TEST.enabled || stage3OneRoomInjectionTest.attempted) return;
             if (typeof emu.writeMemory !== 'function') {
                 stage3OneRoomInjectionTest = {
@@ -1346,6 +1597,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `Coordinate convention: ${KL_STAGE4.coordinateConvention}.`,
                 `Document: ${stats.activeDocument.title}.`,
                 `Authored rooms: ${stats.authoredRooms}; labels: ${stats.labels}; generated cache: ${stats.generatedRooms}; persistent states: ${stats.persistentRooms}.`,
+                `Procedural: ${stats.procedural.algorithm}; seed ${stats.procedural.worldSeed}; chunk ${stats.procedural.chunkSize}x${stats.procedural.chunkSize}; chunks ${stats.procedural.generatedChunks}.`,
                 'Probe APIs: window.KnightLoreInfinity.logicalMap.getRoomAt(12, -4), getRoomByLabel("0x88"), loadLogicalMapFromUrl("maps/knight-lore-original-map.json").',
             ].join(' ');
 
@@ -1363,6 +1615,235 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return `unknown delta ${delta}`;
         };
 
+        const fmtLogicalCoord = coord => `(${coord.x}, ${coord.y})`;
+
+        const getStage7PhysicalRole = roomId => (
+            KL_STAGE7_SLIDING_CROSS.physicalCross.find(item => item.id === roomId) || null
+        );
+
+        const collectStage7RoomIdPatchAddrs = (workRange, fromRoom) => {
+            const addrs = [];
+            const firstRoomAddr = KL_STAGE7_SLIDING_CROSS.slotStart + KL_STAGE7_SLIDING_CROSS.slotRoomOffset;
+            for (
+                let addr = firstRoomAddr;
+                addr < KL_STAGE7_SLIDING_CROSS.slotEnd;
+                addr += KL_STAGE7_SLIDING_CROSS.slotSize
+            ) {
+                if (readByte(workRange, addr) === fromRoom) addrs.push(addr);
+            }
+            return addrs;
+        };
+
+        const formatStage7Mapping = compiled => {
+            if (!compiled) return 'No physical cross has been injected yet.';
+            return compiled.roomSummaries.map(item => (
+                `${item.role} ${hexByte(item.physicalRoomId)}=${fmtLogicalCoord(item.logicalCoord)} ${item.label}`
+            )).join('; ');
+        };
+
+        const formatStage7ReciprocalAdjustments = compiled => {
+            if (!compiled) return 'Reciprocal exit overlay has not compiled yet.';
+            const adjustments = compiled.roomSummaries.flatMap(item => (
+                (item.reciprocalExitAdjustments || []).map(adjustment => (
+                    `${item.label} ${adjustment.type} ${adjustment.direction} (${adjustment.reason})`
+                ))
+            ));
+            if (!adjustments.length) return 'Reciprocal exit overlay: no changes needed for this cross.';
+            const head = adjustments.slice(0, 4).join('; ');
+            const tail = adjustments.length > 4 ? `; +${adjustments.length - 4} more` : '';
+            return `Reciprocal exit overlay: ${head}${tail}.`;
+        };
+
+        const renderStage7SlidingRow = () => {
+            if (!stage7SlidingCross.enabled) {
+                setRow(
+                    'stage7Sliding',
+                    'Disabled',
+                    stage7SlidingCross.message,
+                    'muted'
+                );
+                return;
+            }
+
+            if (stage7SlidingCross.lastError) {
+                setRow(
+                    'stage7Sliding',
+                    'Error',
+                    stage7SlidingCross.lastError,
+                    'bad'
+                );
+                return;
+            }
+
+            if (stage7SlidingCross.mapLoadPending) {
+                setRow(
+                    'stage7Sliding',
+                    'Waiting for logical map',
+                    `${stage7SlidingCross.message} The physical cross will not be written until the optional ?map= JSON load settles.`,
+                    'warn'
+                );
+                return;
+            }
+
+            if (logicalMapLoadStatus.attempted && !logicalMapLoadStatus.done) {
+                setRow(
+                    'stage7Sliding',
+                    'Logical map unavailable',
+                    `${logicalMapLoadStatus.message} Stage 7 is paused to avoid compiling the wrong room set.`,
+                    'bad'
+                );
+                return;
+            }
+
+            const transition = stage7SlidingCross.lastTransition
+                ? ` Last transition ${stage7SlidingCross.lastTransition.direction} via ${hexByte(stage7SlidingCross.lastTransition.viaPhysicalRoom)}: ${fmtLogicalCoord(stage7SlidingCross.lastTransition.previousCenter)} -> ${fmtLogicalCoord(stage7SlidingCross.lastTransition.newCenter)}.`
+                : ' No recenter transition has been observed yet.';
+            const patched = stage7SlidingCross.lastPatchedSlots.length
+                ? ` Patched ${stage7SlidingCross.lastPatchedSlots.length} slot room byte(s): ${stage7SlidingCross.lastPatchedSlots.map(hexWord).join(' ')}.`
+                : ' No working-memory slot patch has been needed yet.';
+            const state = stage7SlidingCross.done ? 'ok' : 'warn';
+
+            setRow(
+                'stage7Sliding',
+                `Center ${fmtLogicalCoord(stage7SlidingCross.center)}; gen ${stage7SlidingCross.generation}`,
+                `${stage7SlidingCross.message} ${formatStage7Mapping(stage7SlidingCross.lastCompiled)} ${formatStage7ReciprocalAdjustments(stage7SlidingCross.lastCompiled)}${transition}${patched}`,
+                state
+            );
+        };
+
+        const applyStage7CrossInjection = async reason => {
+            if (!stage7SlidingCross.enabled || stage7SlidingCross.inFlight || stage7SlidingCross.done) return;
+            if (stage7SlidingCross.mapLoadPending) {
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    message: 'Waiting for the logical map JSON load before injecting the five-room physical cross.',
+                };
+                renderStage7SlidingRow();
+                return;
+            }
+            if (logicalMapLoadStatus.attempted && !logicalMapLoadStatus.done) {
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    lastError: logicalMapLoadStatus.message,
+                };
+                renderStage7SlidingRow();
+                return;
+            }
+            if (typeof emu.writeMemory !== 'function') {
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    attempted: true,
+                    done: false,
+                    lastError: 'writeMemory is not available; cannot erase and inject the Stage 7 physical cross.',
+                };
+                renderStage7SlidingRow();
+                return;
+            }
+
+            stage7SlidingCross = {
+                ...stage7SlidingCross,
+                attempted: true,
+                inFlight: true,
+                message: `${reason}; compiling the five-room physical cross.`,
+            };
+            renderStage7SlidingRow();
+
+            try {
+                const compiled = compileStage7SlidingCrossToLocationTable(stage7SlidingCross.center);
+                await writeCompiledLocationTable(compiled);
+                logicalMap.markVisited(stage7SlidingCross.center.x, stage7SlidingCross.center.y);
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    done: true,
+                    inFlight: false,
+                    lastError: null,
+                    lastCompiled: compiled,
+                    generation: stage7SlidingCross.generation + 1,
+                    message: `${reason}; erased ${hexWord(KL_STAGE1.locationStart)}..${hexWord(KL_STAGE1.locationEnd - 1)} and wrote ${compiled.bytes.length}/${compiled.capacity} bytes.`,
+                };
+            } catch (err) {
+                const errorText = String(err);
+                const canRetry = errorText.includes('Core is not ready');
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    attempted: !canRetry,
+                    done: false,
+                    inFlight: false,
+                    lastError: canRetry
+                        ? null
+                        : `Failed Stage 7 physical cross injection: ${err.message || err}`,
+                    message: canRetry
+                        ? 'Core was not ready for Stage 7 physical cross injection; retrying on the next sample.'
+                        : stage7SlidingCross.message,
+                };
+            }
+            renderStage7SlidingRow();
+        };
+
+        const patchStage7WorkingRoomIds = async (workRange, fromRoom) => {
+            const addrs = collectStage7RoomIdPatchAddrs(workRange, fromRoom);
+            for (const addr of addrs) {
+                await emu.writeMemory(addr, Uint8Array.from([KL_STAGE7_SLIDING_CROSS.centerRoom]));
+            }
+            return addrs;
+        };
+
+        const handleStage7SlidingTransition = async (sample, workRange) => {
+            if (!stage7SlidingCross.enabled || !stage7SlidingCross.done) return null;
+            if (sample.room0 === KL_STAGE7_SLIDING_CROSS.centerRoom) return null;
+
+            const physical = getStage7PhysicalRole(sample.room0);
+            if (!physical || physical.role === 'center') return null;
+
+            const direction = physical.role;
+            const delta = KL_STAGE7_SLIDING_CROSS.directionDeltas[direction];
+            if (!delta) return null;
+
+            const previousCenter = {...stage7SlidingCross.center};
+            const newCenter = {
+                x: previousCenter.x + delta.x,
+                y: previousCenter.y + delta.y,
+            };
+
+            stage7SlidingCross = {
+                ...stage7SlidingCross,
+                center: newCenter,
+                done: false,
+                lastTransition: {
+                    frame: frameCompletedCount,
+                    sample: sampleCount,
+                    source: sample.source,
+                    direction,
+                    viaPhysicalRoom: sample.room0,
+                    previousCenter,
+                    newCenter,
+                },
+                lastPatchedSlots: [],
+                message: `Detected ${direction} transition through physical ${hexByte(sample.room0)}; refreshing the cross around ${fmtLogicalCoord(newCenter)}.`,
+            };
+            renderStage7SlidingRow();
+
+            await applyStage7CrossInjection(`Recentered ${direction} to ${fmtLogicalCoord(newCenter)}`);
+            if (!stage7SlidingCross.done || stage7SlidingCross.lastError) return null;
+
+            const patchedSlots = await patchStage7WorkingRoomIds(workRange, sample.room0);
+            stage7SlidingCross = {
+                ...stage7SlidingCross,
+                lastPatchedSlots: patchedSlots,
+                message: `${stage7SlidingCross.message} Rewrote room ids from ${hexByte(sample.room0)} back to ${hexByte(KL_STAGE7_SLIDING_CROSS.centerRoom)} in working memory.`,
+            };
+            renderStage7SlidingRow();
+
+            return {
+                recentered: true,
+                direction,
+                fromRoom: sample.room0,
+                previousCenter,
+                newCenter,
+                patchedSlots,
+            };
+        };
+
         const renderStage5RecenterRow = () => {
             const center = KL_STAGE5_ROOM_ID_FORCE_TEST.centerRoom;
             const forceRoom = KL_STAGE5_ROOM_ID_FORCE_TEST.forceRoom;
@@ -1372,7 +1853,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 setRow(
                     'stage5Recenter',
                     'Disabled',
-                    `Add ?stage5force=0x78, ?stage5force=0x98, or ?stage5test=1 to override only ${hexWord(addr)} after each drawn frame.`,
+                    KL_STAGE7_SLIDING_CROSS.enabled
+                        ? 'Suppressed while Stage 7 sliding cross is active.'
+                        : `Add ?stage5force=0x78, ?stage5force=0x98, or ?stage5test=1 to override only ${hexWord(addr)} after each drawn frame.`,
                     'muted'
                 );
                 return;
@@ -1615,44 +2098,76 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 // this fixed-size one-room injection before the next
                 // retrieve_screen rebuild.
                 await applyStage3OneRoomInjectionTest();
-                const [workRange, staticRange, startLocationsRange, ...cleanRoomRanges] = await Promise.all([
-                    readRange(KL_STAGE1.workStart, KL_STAGE1.workEnd),
-                    readRange(KL_STAGE1.staticStart, KL_STAGE1.staticEnd),
-                    readRange(
-                        KL_STAGE2.startLocationsAddr,
-                        KL_STAGE2.startLocationsAddr + KL_STAGE2.startLocationsPatched.length
-                    ),
-                    ...KL_STAGE2.cleanRoomPatches.map(patch => (
-                        readRange(patch.addr, patch.addr + patch.length)
-                    )),
-                ]);
+                await applyStage7CrossInjection('Initial Stage 7 physical cross injection');
 
-                const sample = {
-                    source,
-                    room0: readByte(workRange, 0x5c10),
-                    room1: readByte(workRange, 0x5c30),
-                    body: {
-                        x: readByte(workRange, 0x5c09),
-                        y: readByte(workRange, 0x5c0a),
-                        z: readByte(workRange, 0x5c0b),
-                    },
-                    head: {
-                        x: readByte(workRange, 0x5c29),
-                        y: readByte(workRange, 0x5c2a),
-                        z: readByte(workRange, 0x5c2b),
-                    },
-                    flags0: readByte(workRange, 0x5c14),
-                    flags1: readByte(workRange, 0x5c34),
-                    sizeX: readByte(workRange, 0x5bab),
-                    sizeY: readByte(workRange, 0x5bac),
-                    attrWork: readByte(workRange, 0x5bad),
-                    sizeZ: readByte(workRange, 0x5bae),
-                    startLocations: Array.from(startLocationsRange.data),
-                    cleanRoomPatches: cleanRoomRanges.map((range, index) => ({
-                        ...KL_STAGE2.cleanRoomPatches[index],
-                        bytes: Array.from(range.data),
-                    })),
+                const readDiagnosticSnapshot = async () => {
+                    const [workRange, staticRange, startLocationsRange, ...cleanRoomRanges] = await Promise.all([
+                        readRange(KL_STAGE1.workStart, KL_STAGE1.workEnd),
+                        readRange(KL_STAGE1.staticStart, KL_STAGE1.staticEnd),
+                        readRange(
+                            KL_STAGE2.startLocationsAddr,
+                            KL_STAGE2.startLocationsAddr + KL_STAGE2.startLocationsPatched.length
+                        ),
+                        ...KL_STAGE2.cleanRoomPatches.map(patch => (
+                            readRange(patch.addr, patch.addr + patch.length)
+                        )),
+                    ]);
+
+                    return {
+                        workRange,
+                        staticRange,
+                        sample: {
+                            source,
+                            room0: readByte(workRange, 0x5c10),
+                            room1: readByte(workRange, 0x5c30),
+                            body: {
+                                x: readByte(workRange, 0x5c09),
+                                y: readByte(workRange, 0x5c0a),
+                                z: readByte(workRange, 0x5c0b),
+                            },
+                            head: {
+                                x: readByte(workRange, 0x5c29),
+                                y: readByte(workRange, 0x5c2a),
+                                z: readByte(workRange, 0x5c2b),
+                            },
+                            flags0: readByte(workRange, 0x5c14),
+                            flags1: readByte(workRange, 0x5c34),
+                            sizeX: readByte(workRange, 0x5bab),
+                            sizeY: readByte(workRange, 0x5bac),
+                            attrWork: readByte(workRange, 0x5bad),
+                            sizeZ: readByte(workRange, 0x5bae),
+                            startLocations: Array.from(startLocationsRange.data),
+                            cleanRoomPatches: cleanRoomRanges.map((range, index) => ({
+                                ...KL_STAGE2.cleanRoomPatches[index],
+                                bytes: Array.from(range.data),
+                            })),
+                        },
+                    };
                 };
+
+                let {workRange, staticRange, sample} = await readDiagnosticSnapshot();
+                let stage7Action = null;
+
+                if (stage7SlidingCross.enabled) {
+                    const preRecenterEntry = decodeLocationEntry(staticRange, sample.room0);
+                    sample.attrOk = false;
+                    sample.sizeOk = false;
+                    if (preRecenterEntry) {
+                        const preRecenterSize = decodeSize(staticRange, preRecenterEntry.selector);
+                        sample.attrOk = (sample.attrWork & 0x07) === preRecenterEntry.attr;
+                        sample.sizeOk = (
+                            preRecenterSize.x === sample.sizeX &&
+                            preRecenterSize.y === sample.sizeY &&
+                            preRecenterSize.z === sample.sizeZ
+                        );
+                    }
+                    updateTransition(sample);
+                    stage7Action = await handleStage7SlidingTransition(sample, workRange);
+                    if (stage7Action && stage7Action.recentered) {
+                        ({workRange, staticRange, sample} = await readDiagnosticSnapshot());
+                        sample.stage7Action = stage7Action;
+                    }
+                }
 
                 const entry = decodeLocationEntry(staticRange, sample.room0);
                 if (stage5RoomIdRecenterTest.enabled && !KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {
@@ -1676,7 +2191,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     );
                 }
 
-                updateTransition(sample);
+                if (!stage7SlidingCross.enabled) updateTransition(sample);
                 armStage5RoomIdRecenterWhenStable(sample);
 
                 setRow(
@@ -1810,6 +2325,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 renderTransitionRows();
                 renderStage5StaticMapRow();
                 renderStage5RecenterRow();
+                renderStage7SlidingRow();
                 renderStage2Cross(staticRange, sample);
                 renderStage4LogicalMap();
                 previousSample = sample;
@@ -1836,6 +2352,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         renderStage5StaticMapRow();
         renderStage5RecenterRow();
+        renderStage7SlidingRow();
         renderStage4LogicalMap();
         loadStage5StaticMapDocument();
         sample('initial');

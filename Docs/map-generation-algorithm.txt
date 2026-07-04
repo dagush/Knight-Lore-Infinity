@@ -1,0 +1,310 @@
+Knight Lore Infinity Map Generation Algorithm
+=============================================
+
+Purpose
+-------
+
+The procedural map generator provides logical Knight Lore rooms outside the
+original game. The original ZX Spectrum game still sees only a small physical
+five-room cross. JavaScript asks the generator for the logical center room and
+its four cardinal neighbours, compiles those logical rooms into original
+Knight Lore compact location entries, and writes them into emulator memory.
+
+The generator lives in:
+
+    SRC/runtime/knightlore-mapgen.js
+
+The current algorithm name reported by stats() is:
+
+    chunk-connected-v2
+
+The generator is deterministic. Given the same options, world seed, and
+coordinate, it must always return the same room payload.
+
+
+Coordinate Model
+----------------
+
+Logical rooms use integer coordinates:
+
+    (x, y)
+
+The Stage 7 runtime begins at:
+
+    (0, 0)
+
+Moving east increments x. Moving west decrements x. Moving north increments y.
+Moving south decrements y.
+
+The coordinate plane is algorithmically unbounded. There is no stored 2D array
+of the whole world. Rooms are generated on demand and cached by the runtime.
+
+Negative coordinates are handled with floor division and positive modulo, so
+chunk boundaries behave consistently on both sides of the origin.
+
+
+Important Options
+-----------------
+
+Current defaults:
+
+    chunkSize: 8
+    worldSeed: 0x4b1d1984
+    targetRoomDensityPercent: 50
+    rectangularCandidatePercent: 84
+    branchCorridorAttempts: 64
+    branchCorridorMaxLength: 5
+
+The density target was chosen from the original game:
+
+    original map: 128 rooms in a 16x16 grid = 50% occupied cells
+
+The rectangle throttle was tuned against the original room dump:
+
+    original rectangular rooms: 58 / 128 = 45.31%
+
+The throttle is applied only after a room has a legal rectangular exit mask.
+It does not permit long-side rectangular doors.
+
+
+Chunk Generation
+----------------
+
+The plane is split into deterministic 8x8 chunks.
+
+For each chunk, the generator creates four edge connectors:
+
+- west edge connector;
+- east edge connector;
+- south edge connector;
+- north edge connector.
+
+Connector positions are chosen with shared edge seeds. This means two
+neighbouring chunks agree about where the cross-chunk connection is allowed to
+exist. For example, the east connector of chunk (cx, cy) and the west connector
+of chunk (cx + 1, cy) are derived from the same edge coordinate.
+
+Each chunk also has a deterministic hub cell. The generator carves paths from
+all four edge connectors to the hub. Each path is an L-shaped path, with the
+horizontal-first versus vertical-first choice determined by the hash.
+
+This gives every chunk a connected core and keeps neighbouring chunks connected
+to one another.
+
+
+Forced Origin Rooms
+-------------------
+
+The origin and its four immediate cardinal neighbours are always present:
+
+    (0, 0)
+    (1, 0)
+    (-1, 0)
+    (0, 1)
+    (0, -1)
+
+This guarantees that the initial Stage 7 physical cross can be compiled
+immediately and that the starting room has all four logical neighbours
+available for manual testing.
+
+
+Corridor Branch Growth
+----------------------
+
+The first procedural version added branch rooms by growing from any adjacent
+cell. That made the map too dense and produced many T-junctions and four-way
+rooms. Rectangular rooms were rare because exact straight corridors were rare.
+
+The current version grows short corridor branches instead.
+
+The branch algorithm repeatedly:
+
+1. finds existing cells that can extend into an empty neighbouring cell;
+2. rejects an empty cell if adding it would touch existing rooms other than
+   the branch's entry cell;
+3. chooses a start deterministically from the candidate list;
+4. extends in one direction for a deterministic length;
+5. stops when the chunk reaches its target room count or no safe extension
+   remains.
+
+This preserves more one-cell-wide corridors, which produces a map closer to
+Knight Lore's original mix of corridors, junctions, and missing cells.
+
+
+Room Existence and Exits
+------------------------
+
+For an existing generated room, exits are derived from neighbouring room
+existence:
+
+    east exit exists if room(x + 1, y) exists
+
+and similarly for north, south, and west.
+
+This makes generated-to-generated exits reciprocal by construction. If the
+current room has an east exit, the eastern neighbour has a west exit.
+
+For a missing generated room, the returned payload is a closed wall-only room:
+
+- selector 0;
+- colour 0;
+- stone theme;
+- no exits;
+- no blocks;
+- meta.procedural.exists = false.
+
+The missing-room payload is useful for diagnostics and safety checks, but the
+sliding cross should not open a door into it.
+
+
+Rectangular Room Selection
+--------------------------
+
+Knight Lore has three confirmed room size selectors:
+
+    selector 0: 64, 64, 128  square room
+    selector 1: 32, 64, 128  rectangular room
+    selector 2: 64, 32, 128  rectangular room
+
+Rectangular rooms may only have entrances on the smaller sides:
+
+    selector 1 allows north/south-side exits
+    selector 2 allows east/west-side exits
+
+The generator therefore treats only these masks as rectangular candidates:
+
+    N, S, NS -> selector 1 candidate
+    E, W, EW -> selector 2 candidate
+
+These masks are never rectangular:
+
+    corners, T-junctions, four-way rooms
+
+Even legal candidates are not always rectangular. The generator applies a
+deterministic coordinate hash and compares it with rectangularCandidatePercent.
+If the candidate does not pass the throttle, it falls back to a square room
+with the same doors.
+
+This is deliberate. The original game has some square rooms with straight or
+single-side exits, so using rectangles for every legal candidate would overdo
+the effect.
+
+
+Generated Room Payloads
+-----------------------
+
+Existing generated rooms return a logical room definition with:
+
+- coord;
+- label of the form generated:x,y;
+- title of the form generated x,y;
+- size selector;
+- colour;
+- theme;
+- exits;
+- blocks;
+- objects;
+- items;
+- procedural metadata.
+
+Current rectangular generated rooms are conservative:
+
+- stone theme only;
+- no procedural blocks;
+- no long-side doors.
+
+Current square generated rooms may be stone or wooden. They receive a small
+deterministic block run:
+
+- stone rooms use rock block type 0x03;
+- wooden rooms use block type 0x00;
+- block positions avoid the central floor cells x=3..4, y=3..4.
+
+The center-clearance rule avoids trapping the player immediately in the
+starting room or in a generated room that later becomes the logical origin for
+a test.
+
+
+Runtime Integration
+-------------------
+
+The generator is used by the logical map facade in:
+
+    SRC/runtime/knightlore.js
+
+Lookup order:
+
+1. If an authored JSON room exists at the coordinate, use it.
+2. Otherwise, ask createKnightLoreProceduralMap().getRoomDefinition(x, y).
+3. Cache the generated result for stable diagnostics and persistent state.
+
+Before writing the physical five-room cross, Stage 7 applies a reciprocal-exit
+overlay. This overlay does not modify the source logical room. It only changes
+the compiled physical payload when needed.
+
+Important overlay rules:
+
+- generated-to-generated exits should already be reciprocal;
+- authored exits can be mirrored if both room shapes allow the door;
+- generated rooms do not automatically reopen authored map edges;
+- if a room shape cannot legally host a door direction, that compiled pair is
+  closed instead of emitting an invalid rectangular-room door.
+
+
+Measured Behaviour
+------------------
+
+The original dump currently reports:
+
+    occupied cells: 128 / 256 = 50%
+    rectangular rooms: 58 / 128 = 45.31%
+
+The current generator was checked over large coordinate samples and tuned to
+land close to those values. A representative sample produced:
+
+    generated occupied cells: about 49.84%
+    generated rectangular rooms: about 45.12%
+
+The exact local ratio varies slightly by sampled coordinate window, but it is
+now close enough that rectangular rooms should appear regularly during normal
+walking.
+
+
+Verification Invariants
+-----------------------
+
+The generator should keep these invariants:
+
+- origin and four cardinal neighbours exist;
+- generated exits are reciprocal;
+- missing cells do not expose exits;
+- selector 1 rooms only use N, S, or NS exits;
+- selector 2 rooms only use E, W, or EW exits;
+- rectangular generated rooms have no procedural block runs;
+- no generated block appears on central floor cells x=3..4, y=3..4;
+- an inner sampled window is reachable from the origin when using a larger
+  outer margin for the search.
+
+These invariants are checked with ad hoc Node probes during development and
+should eventually become automated tests.
+
+
+Known Limits and Future Work
+----------------------------
+
+The current generator is a topology and room-shape provider, not a full content
+director.
+
+Open future work:
+
+- richer hazard placement;
+- treasure placement;
+- authored special-room injection;
+- biome/style zones;
+- persistent item/object state across revisits;
+- more original rectangular-room background patterns;
+- automated invariant tests.
+
+The algorithm is intentionally conservative where Knight Lore data fragility is
+known. When a room shape cannot be represented safely, the correct fallback is
+a square room with the corresponding doors.
