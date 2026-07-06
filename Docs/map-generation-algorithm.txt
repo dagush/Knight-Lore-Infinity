@@ -16,7 +16,7 @@ The generator lives in:
 
 The current algorithm name reported by stats() is:
 
-    chunk-connected-v2
+    chunk-connected-v4
 
 The generator is deterministic. Given the same options, world seed, and
 coordinate, it must always return the same room payload.
@@ -52,6 +52,7 @@ Current defaults:
     worldSeed: 0x4b1d1984
     targetRoomDensityPercent: 50
     rectangularCandidatePercent: 84
+    styleRegionChunks: 2
     branchCorridorAttempts: 64
     branchCorridorMaxLength: 5
 
@@ -131,6 +132,63 @@ This preserves more one-cell-wide corridors, which produces a map closer to
 Knight Lore's original mix of corridors, junctions, and missing cells.
 
 
+Biome / Style Layer
+-------------------
+
+After topology is known, the generator assigns a deterministic style region.
+This is not a modern graphics biome and it does not add a renderer. It is a
+room-dressing policy that still compiles into original Knight Lore compact
+location data.
+
+Style regions are based on chunk coordinates:
+
+    styleRegionChunks: 2
+
+With the current 8x8 chunk size, one style region covers a 16x16 logical-room
+area. This is intentionally close to the original Knight Lore map footprint,
+so a player can feel a region before wandering into another one.
+
+Current generated styles:
+
+    stone-halls
+    wooden-wing
+    rock-vaults
+    quiet-gallery
+    spike-yard
+
+Styles currently influence:
+
+- generated room label and title;
+- procedural metadata;
+- room colour;
+- stone versus tree theme for square rooms;
+- simple foreground block type;
+- simple foreground block count.
+
+The origin and its four cardinal neighbours are forced to stone-halls. This
+keeps the starting cross calm and avoids making first-load testing depend on a
+hazard-heavy style roll.
+
+The current style layer is conservative:
+
+- rectangular rooms have no procedural block runs;
+- wooden/tree rectangular rooms are experimental: Stage 7 installs custom
+  tree-wall background records in the unused tail of the erased location table
+  and repoints ids 0x12/0x13 to them, while tree arch ids 0x04..0x07 provide
+  the legal narrow-side exits; the custom wall records keep only source
+  records already at Z/base byte 0x80 and discard raised stone layers; the
+  long doorless side is filled by replacing the stone-derived ground wall
+  records with full 8-row square-tree wall patterns translated to x=0x5F
+  for selector 1 and y=0xA0 for selector 2;
+- square wooden/tree output still uses original-derived safe square tree
+  background patterns, otherwise it falls back to stone backgrounds;
+- spike-yard uses original static spike block type 0x05, not moving enemies;
+- no dynamic objects or item tables are emitted by the generator yet.
+
+This means the style layer gives the infinite map visible character without
+changing the renderer or depending on still-unfinished object/item persistence.
+
+
 Room Existence and Exits
 ------------------------
 
@@ -196,8 +254,8 @@ Generated Room Payloads
 Existing generated rooms return a logical room definition with:
 
 - coord;
-- label of the form generated:x,y;
-- title of the form generated x,y;
+- label of the form generated:biome-id:x,y;
+- title of the form Biome title x,y;
 - size selector;
 - colour;
 - theme;
@@ -209,15 +267,59 @@ Existing generated rooms return a logical room definition with:
 
 Current rectangular generated rooms are conservative:
 
-- stone theme only;
 - no procedural blocks;
 - no long-side doors.
 
-Current square generated rooms may be stone or wooden. They receive a small
+Wooden-wing rectangular rooms are an experimental extension. They combine the
+original rectangular wall geometry with tree wall sprites in custom background
+records, plus tree arch ids on legal exits. This keeps the shape valid while
+making wooden regions visually more coherent, but it is not a combination
+observed in the original 1984 room set.
+
+The current Stage 7 rectangular tree-wall patch uses two custom background ids
+installed at runtime:
+
+    0x12 custom tree wall size 2 -> selector 2, 64x32 rooms
+    0x13 custom tree wall size 3 -> selector 1, 32x64 rooms
+
+For selector 1 rooms, custom 0x13 replaces the stone-derived west-wall records
+with the full original square-tree west-wall sequence translated to x=0x5F:
+
+    0x80 0x5F 0x49 0x80 0x00 0x08 0x2C 0x10
+    0x81 0x5F 0x58 0x80 0x00 0x08 0x2C 0x10
+    0x82 0x5F 0x68 0x80 0x00 0x08 0x2C 0x10
+    0x80 0x5F 0x78 0x80 0x00 0x08 0x2C 0x10
+    0x81 0x5F 0x88 0x80 0x00 0x08 0x2C 0x10
+    0x80 0x5F 0x98 0x80 0x00 0x08 0x2C 0x10
+    0x81 0x5F 0xA8 0x80 0x00 0x08 0x2C 0x10
+    0x82 0x5F 0xB8 0x80 0x00 0x08 0x2C 0x10
+
+For selector 2 rooms, custom 0x12 replaces the stone-derived north-wall records
+with the full original square-tree north-wall sequence translated to y=0xA0:
+
+    0x80 0x48 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x81 0x58 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x82 0x68 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x80 0x78 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x81 0x88 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x80 0x98 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x81 0xA8 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x82 0xB8 0xA0 0x80 0x08 0x00 0x2C 0x50
+
+This was found empirically. Partial filler-only patterns left holes, lowering
+raised source records could cover exits, and hand-filled records caused
+unstable emulator/player behaviour. Replacing the matching ground wall records
+with these full translated original-derived patterns is the current safe rule.
+
+Current square generated rooms may be stone or wooden, depending on their
+style region and safe background availability. They receive a small
 deterministic block run:
 
-- stone rooms use rock block type 0x03;
-- wooden rooms use block type 0x00;
+- stone-halls use rock block type 0x03;
+- wooden-wing uses block type 0x00;
+- rock-vaults use more rock block type 0x03;
+- quiet-gallery uses fewer rock blocks;
+- spike-yard uses spike block type 0x05;
 - block positions avoid the central floor cells x=3..4, y=3..4.
 
 The center-clearance rule avoids trapping the player immediately in the

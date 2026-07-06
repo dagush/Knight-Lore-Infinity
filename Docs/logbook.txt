@@ -1080,3 +1080,232 @@ Known cautions remain:
 
 The next natural work is content enrichment: hazards, treasures, authored
 special rooms, persistent object/item state, and more varied room dressing.
+
+
++============================================================+
+| 2026 07 06 - Wooden Rectangular Rooms and Wall Patterns    |
++============================================================+
+
+2026 07 06
+----------
+
+This entry covers the Stage 7 content/dressing work after the deterministic
+sliding-cross proof. The main goal was to make generated wooden/tree regions
+visually coherent without changing the original renderer or original game
+source. Everything remains JavaScript-side emulator work: static location table
+rewriting, custom background data in emulator memory, and diagnostics below the
+JSSpeccy display.
+
+------------------------------------------------
+Biome / Style Decisions
+
+The meaning of "biome/style decisions" was clarified. In this project it does
+not mean a new renderer, modern graphics, or external scene drawing. It means a
+room-dressing policy that still compiles into original Knight Lore compact
+location data:
+
+- generated labels and titles;
+- procedural metadata;
+- room colour/attribute;
+- stone versus tree theme;
+- simple block dressing for square rooms;
+- rectangular room shape selection where original Knight Lore rules allow it.
+
+A Stage 7 "Current Generated Cross" diagnostics table was added immediately
+below the emulator. It shows the five logical rooms currently compiled into the
+physical cross:
+
+- physical role and room id;
+- logical coordinate;
+- generated/authored label;
+- biome/style region;
+- size selector and decoded dimensions;
+- theme and colour;
+- exits;
+- block summary;
+- compact entry/background summary.
+
+This made it possible to see when a room was logically wooden-wing but still
+visually stone because rectangular tree-wall data was not yet available.
+
+------------------------------------------------
+Rectangular Room Rules
+
+The generator keeps the original Knight Lore rectangular-room legality rule:
+
+- selector 1 is 32x64x128 and only allows north/south exits;
+- selector 2 is 64x32x128 and only allows east/west exits;
+- long-side doors are not emitted;
+- corners, T-junctions, and four-exit rooms remain square.
+
+Generated rectangular rooms still have no procedural block runs. This keeps the
+shape experiment isolated from collision and object persistence issues.
+
+The rectangle density was tuned against the original dump:
+
+- original rectangular rooms: 58 / 128 = 45.31%;
+- generated rectangular rooms remain close to this ratio after deterministic
+  throttling of legal rectangular candidates.
+
+------------------------------------------------
+Wooden Rectangular Room Problem
+
+The original game appears to use the tree/wood backgrounds 0x0F, 0x10, and
+0x11 only with square rooms. Rectangular wooden rooms therefore needed custom
+runtime background definitions.
+
+Stage 7 already erases and rewrites the original location table. The custom
+rectangular tree-wall experiment uses spare space in the unused tail of that
+erased table and repoints two background ids at runtime:
+
+- 0x12: custom tree wall size 2, for selector 2 rooms;
+- 0x13: custom tree wall size 3, for selector 1 rooms.
+
+This is Stage 7 runtime data only. In the original game data, 0x12 and 0x13
+are wizard and cauldron backgrounds. Authored maps that need those original
+visuals must not rely on those ids while the Stage 7 custom wall experiment is
+active.
+
+The first stable custom tree-wall pass kept only source wall records already
+using Z/base byte 0x80. Raised stone-wall layers were discarded rather than
+moved down. Moving raised records to ground level could cover valid arches or
+create unstable room layouts.
+
+Several unsafe/insufficient attempts were observed and reverted:
+
+- grounding all raised stone wall records covered exits;
+- hand-filling long walls with new explicit records caused player spinning and
+  emulator hangs;
+- copying only a few extra middle records was also unstable;
+- using only the two square-room filler records avoided hangs but left visible
+  holes in the long doorless walls.
+
+------------------------------------------------
+Diagnostics-Driven Wall Tuning
+
+A "Wooden Square Wall Reference" table was added above the Stage 7 cross
+diagnostics. It lists the original square wooden wall records from:
+
+- 0x0F tree room size 1;
+- 0x10 tree filler west;
+- 0x11 tree filler north.
+
+This gave a direct byte-level reference for the safe square-tree wall pattern.
+
+A slider probe was then added for the selector 1 west wall X coordinate. The
+initial question was whether the two 0x10 filler-west rows should remain at
+the original square-room X 0x3F or move to the translated rectangular wall
+plane. Manual testing found that X 0x5F is the correct value for selector 1.
+
+The diagnostics table was then expanded to show the actual live custom wall
+records being injected. This made it clear whether a wall segment was missing
+from the payload or merely hidden/occluded in the Spectrum view.
+
+------------------------------------------------
+Final Custom Tree-Wall Patterns
+
+The final rule is not to append a few filler rows over the original
+stone-derived wall. Instead, remove the matching stone-derived ground wall
+records from the custom background and replace them with the full translated
+8-row square-tree wall pattern.
+
+Selector 1 / custom 0x13 uses the full square-tree west wall pattern translated
+to x=0x5F:
+
+    0x80 0x5F 0x49 0x80 0x00 0x08 0x2C 0x10
+    0x81 0x5F 0x58 0x80 0x00 0x08 0x2C 0x10
+    0x82 0x5F 0x68 0x80 0x00 0x08 0x2C 0x10
+    0x80 0x5F 0x78 0x80 0x00 0x08 0x2C 0x10
+    0x81 0x5F 0x88 0x80 0x00 0x08 0x2C 0x10
+    0x80 0x5F 0x98 0x80 0x00 0x08 0x2C 0x10
+    0x81 0x5F 0xA8 0x80 0x00 0x08 0x2C 0x10
+    0x82 0x5F 0xB8 0x80 0x00 0x08 0x2C 0x10
+
+Selector 2 / custom 0x12 uses the full square-tree north wall pattern
+translated to y=0xA0:
+
+    0x80 0x48 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x81 0x58 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x82 0x68 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x80 0x78 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x81 0x88 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x80 0x98 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x81 0xA8 0xA0 0x80 0x08 0x00 0x2C 0x50
+    0x82 0xB8 0xA0 0x80 0x08 0x00 0x2C 0x50
+
+Manual testing confirmed:
+
+- selector 1 north/south-axis rectangular wooden rooms now look correct;
+- selector 2 east/west-axis rectangular wooden rooms were fixed by the mirrored
+  0x12 north-wall replacement;
+- walking through the generated map remains stable after the wall-pattern
+  change.
+
+The diagnostics page now shows 16 live custom wall rows:
+
+- 8 rows for custom 0x12;
+- 8 rows for custom 0x13.
+
+------------------------------------------------
+Files and Documentation Updated
+
+Runtime/frontend:
+
+- SRC/runtime/knightlore.js
+  - custom rectangular tree-wall builders;
+  - full 8-row translated west-wall pattern for 0x13;
+  - full 8-row translated north-wall pattern for 0x12;
+  - filtering of matching stone-derived ground wall records before appending
+    translated tree records;
+  - Stage 7 diagnostics for the live custom wall rows.
+
+- SRC/static/index.html
+  - Wooden Square Wall Reference table;
+  - selector 1 west-wall X slider, defaulting to 0x5F;
+  - live custom 0x12/0x13 wall-record diagnostics.
+
+Documentation:
+
+- Docs/info.txt
+  - quick-reference note updated from the earlier filler-only strategy to the
+    full 8-row custom wall patterns.
+
+- Docs/logical-map-json-format.txt
+  - rectangular tree-room format caveat updated with the exact 0x12 and 0x13
+    custom wall records and the "replace, do not append" rule.
+
+- Docs/map-generation-algorithm.txt
+  - procedural wooden-wing rectangular room notes updated to describe the final
+    custom wall strategy.
+
+------------------------------------------------
+Verification
+
+Checks and probes run during this work included:
+
+- JavaScript syntax checks for SRC/runtime/knightlore.js;
+- git diff whitespace checks for edited runtime/static files;
+- webpack rebuilds of SRC/dist/jsspeccy/jsspeccy.js;
+- refreshed SRC/dist/index.html;
+- browser smoke tests for the diagnostics page;
+- checks that the live diagnostics table shows 8 custom 0x12 rows and 8 custom
+  0x13 rows;
+- manual walking tests through rectangular wooden rooms in both orientations.
+
+Current cache/diagnostic marker:
+
+- stage7-full-rect-walls-20260706-1
+
+------------------------------------------------
+Current project state at end of 2026 07 06
+
+- Stage 7 remains a working sliding physical-cross proof.
+- Generated wooden/tree regions now support rectangular rooms in both legal
+  orientations.
+- Rectangular wooden rooms are still Stage 7 runtime-injected data, not
+  original 1984 stock data.
+- The original renderer and original game source remain untouched.
+- Objects/items and richer content are still future work.
+- The next natural content work can move on to treasures, hazards, authored
+  special rooms, and persistent state now that the basic room shape/style layer
+  is less visually brittle.

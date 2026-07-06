@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>JSSpeccy v3</title>
-        <script src="jsspeccy/jsspeccy.js?v=stage7-balanced-rectangles-20260704-1"></script>
+        <script src="jsspeccy/jsspeccy.js?v=stage7-full-rect-walls-20260706-1"></script>
         <style>
             :root {
                 color-scheme: dark;
@@ -52,6 +52,88 @@
                 color: #c7d1dc;
                 font-size: 13px;
                 line-height: 1.35;
+            }
+
+            .wood-tuning-controls {
+                display: grid;
+                grid-template-columns: minmax(160px, 1fr) minmax(180px, 2fr) minmax(92px, auto);
+                gap: 8px 12px;
+                align-items: center;
+                padding: 9px 12px;
+                border-bottom: 1px solid #3d454f;
+                color: #d9e4ee;
+                font-size: 13px;
+            }
+
+            .wood-tuning-controls label {
+                font-weight: 700;
+            }
+
+            .wood-tuning-controls input[type="range"] {
+                width: 100%;
+            }
+
+            .wood-tuning-controls output {
+                font-family: Menlo, Consolas, monospace;
+                color: #ffffff;
+                text-align: right;
+            }
+
+            .wood-tuning-status {
+                grid-column: 1 / -1;
+                margin: 0;
+                color: #c7d1dc;
+                line-height: 1.35;
+            }
+
+            .wood-tuning-records {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .wood-tuning-records th:nth-child(1),
+            .wood-tuning-records td:nth-child(1),
+            .wood-tuning-records th:nth-child(2),
+            .wood-tuning-records td:nth-child(2) {
+                width: 7%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .wood-tuning-records th:nth-child(3),
+            .wood-tuning-records td:nth-child(3) {
+                width: 14%;
+            }
+
+            .wood-tuning-records th:nth-child(4),
+            .wood-tuning-records td:nth-child(4),
+            .wood-tuning-records th:nth-child(5),
+            .wood-tuning-records td:nth-child(5),
+            .wood-tuning-records th:nth-child(6),
+            .wood-tuning-records td:nth-child(6),
+            .wood-tuning-records th:nth-child(7),
+            .wood-tuning-records td:nth-child(7),
+            .wood-tuning-records th:nth-child(8),
+            .wood-tuning-records td:nth-child(8),
+            .wood-tuning-records th:nth-child(9),
+            .wood-tuning-records td:nth-child(9) {
+                width: 7%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .wood-tuning-records th:nth-child(10),
+            .wood-tuning-records td:nth-child(10) {
+                width: 30%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            @media (max-width: 620px) {
+                .wood-tuning-controls {
+                    grid-template-columns: 1fr;
+                }
+
+                .wood-tuning-controls output {
+                    text-align: left;
+                }
             }
 
             .diagnostics-table {
@@ -213,11 +295,194 @@
             .logical-map-table td:nth-child(10) {
                 width: 6%;
             }
+
+            .style-cross-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .style-cross-table th:nth-child(1),
+            .style-cross-table td:nth-child(1) {
+                width: 7%;
+            }
+
+            .style-cross-table th:nth-child(2),
+            .style-cross-table td:nth-child(2) {
+                width: 7%;
+            }
+
+            .style-cross-table th:nth-child(3),
+            .style-cross-table td:nth-child(3) {
+                width: 8%;
+            }
+
+            .style-cross-table th:nth-child(4),
+            .style-cross-table td:nth-child(4) {
+                width: 15%;
+            }
+
+            .style-cross-table th:nth-child(5),
+            .style-cross-table td:nth-child(5) {
+                width: 12%;
+            }
+
+            .style-cross-table th:nth-child(6),
+            .style-cross-table td:nth-child(6) {
+                width: 10%;
+            }
+
+            .style-cross-table th:nth-child(7),
+            .style-cross-table td:nth-child(7) {
+                width: 11%;
+            }
+
+            .style-cross-table th:nth-child(8),
+            .style-cross-table td:nth-child(8) {
+                width: 10%;
+            }
+
+            .style-cross-table th:nth-child(9),
+            .style-cross-table td:nth-child(9) {
+                width: 12%;
+            }
+
+            .style-cross-table th:nth-child(10),
+            .style-cross-table td:nth-child(10) {
+                width: 8%;
+            }
+
+            .wood-reference-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .wood-reference-table th:nth-child(1),
+            .wood-reference-table td:nth-child(1) {
+                width: 8%;
+            }
+
+            .wood-reference-table th:nth-child(2),
+            .wood-reference-table td:nth-child(2) {
+                width: 14%;
+            }
+
+            .wood-reference-table th:nth-child(3),
+            .wood-reference-table td:nth-child(3) {
+                width: 7%;
+            }
+
+            .wood-reference-table th:nth-child(4),
+            .wood-reference-table td:nth-child(4) {
+                width: 8%;
+            }
+
+            .wood-reference-table th:nth-child(5),
+            .wood-reference-table td:nth-child(5),
+            .wood-reference-table th:nth-child(6),
+            .wood-reference-table td:nth-child(6),
+            .wood-reference-table th:nth-child(7),
+            .wood-reference-table td:nth-child(7),
+            .wood-reference-table th:nth-child(8),
+            .wood-reference-table td:nth-child(8),
+            .wood-reference-table th:nth-child(9),
+            .wood-reference-table td:nth-child(9),
+            .wood-reference-table th:nth-child(10),
+            .wood-reference-table td:nth-child(10),
+            .wood-reference-table th:nth-child(11),
+            .wood-reference-table td:nth-child(11) {
+                width: 7%;
+                font-family: Menlo, Consolas, monospace;
+            }
         </style>
     </head>
     <body onload="window.KnightLoreInfinity.start()">
         <main class="page-shell">
             <div id="jsspeccy"></div>
+            <section id="knight-lore-wood-wall-reference" class="diagnostics">
+                <h1>Wooden Square Wall Reference</h1>
+                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: stage7-full-rect-walls-20260706-1.</p>
+                <div class="wood-tuning-controls">
+                    <label for="stage7-west-filler-x-slider">Selector 1 west wall X</label>
+                    <input id="stage7-west-filler-x-slider" type="range" min="0" max="191" step="1" value="95">
+                    <output id="stage7-west-filler-x-value" for="stage7-west-filler-x-slider">0x5F (95)</output>
+                    <p id="stage7-west-filler-x-status" class="wood-tuning-status">Waiting for runtime.</p>
+                </div>
+                <table class="diagnostics-table wood-tuning-records">
+                    <thead>
+                        <tr>
+                            <th>Bg</th>
+                            <th>Rec</th>
+                            <th>Use</th>
+                            <th>Sprite</th>
+                            <th>X</th>
+                            <th>Y</th>
+                            <th>Z</th>
+                            <th>W/D</th>
+                            <th>H/F</th>
+                            <th>Bytes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage7-west-filler-records-body">
+                        <tr class="state-muted"><td colspan="10">Waiting for runtime.</td></tr>
+                    </tbody>
+                </table>
+                <table class="diagnostics-table wood-reference-table">
+                    <thead>
+                        <tr>
+                            <th>Bg</th>
+                            <th>Name</th>
+                            <th>Rec</th>
+                            <th>Use</th>
+                            <th>Sprite</th>
+                            <th>X</th>
+                            <th>Y</th>
+                            <th>Z</th>
+                            <th>Width</th>
+                            <th>Depth</th>
+                            <th>Height/Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>1</td><td>west</td><td>0x80</td><td>0x3F</td><td>0x49</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>2</td><td>west</td><td>0x81</td><td>0x3F</td><td>0x58</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>3</td><td>west</td><td>0x82</td><td>0x3F</td><td>0x68</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x10</td><td>tree filler west</td><td>1</td><td>west gap</td><td>0x80</td><td>0x3F</td><td>0x78</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x10</td><td>tree filler west</td><td>2</td><td>west gap</td><td>0x81</td><td>0x3F</td><td>0x88</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>4</td><td>west</td><td>0x80</td><td>0x3F</td><td>0x98</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>5</td><td>west</td><td>0x81</td><td>0x3F</td><td>0xA8</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>6</td><td>west</td><td>0x82</td><td>0x3F</td><td>0xB8</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>7</td><td>north</td><td>0x80</td><td>0x48</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>8</td><td>north</td><td>0x81</td><td>0x58</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>9</td><td>north</td><td>0x82</td><td>0x68</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x11</td><td>tree filler north</td><td>1</td><td>north gap</td><td>0x80</td><td>0x78</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x11</td><td>tree filler north</td><td>2</td><td>north gap</td><td>0x81</td><td>0x88</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>10</td><td>north</td><td>0x80</td><td>0x98</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>11</td><td>north</td><td>0x81</td><td>0xA8</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>12</td><td>north</td><td>0x82</td><td>0xB8</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage7-style-diagnostics" class="diagnostics">
+                <h1>Stage 7 - Current Generated Cross</h1>
+                <p id="stage7-style-status" class="stage-status">Diagnostics build: stage7-full-rect-walls-20260706-1. Waiting for the Stage 7 cross.</p>
+                <table class="diagnostics-table style-cross-table">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>Phys</th>
+                            <th>Coord</th>
+                            <th>Label</th>
+                            <th>Style</th>
+                            <th>Shape</th>
+                            <th>Theme/Colour</th>
+                            <th>Exits</th>
+                            <th>Blocks</th>
+                            <th>Entry</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage7-style-body"></tbody>
+                </table>
+            </section>
             <section id="knight-lore-stage1-diagnostics" class="diagnostics">
                 <h1>Stage 1 - Read-Only Room Loading Anatomy</h1>
                 <table class="diagnostics-table">
@@ -233,7 +498,7 @@
             </section>
             <section id="knight-lore-stage2-diagnostics" class="diagnostics">
                 <h1>Stage 2 - Physical 5-Room Cross</h1>
-                <p id="stage2-status" class="stage-status">Diagnostics build: stage7-balanced-rectangles-20260704-1. Waiting for the first Stage 2 sample.</p>
+                <p id="stage2-status" class="stage-status">Diagnostics build: stage7-full-rect-walls-20260706-1. Waiting for the first Stage 2 sample.</p>
                 <table class="diagnostics-table cross-table">
                     <thead>
                         <tr>
@@ -252,7 +517,7 @@
             </section>
             <section id="knight-lore-stage4-diagnostics" class="diagnostics">
                 <h1>Stage 4.5 - Logical Map JSON Authoring</h1>
-                <p id="stage4-status" class="stage-status">Diagnostics build: stage7-balanced-rectangles-20260704-1. Waiting for the logical map probe.</p>
+                <p id="stage4-status" class="stage-status">Diagnostics build: stage7-full-rect-walls-20260706-1. Waiting for the logical map probe.</p>
                 <table class="diagnostics-table logical-map-table">
                     <thead>
                         <tr>

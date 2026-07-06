@@ -12,9 +12,61 @@ const DEFAULT_OPTIONS = {
     worldSeed: 0x4b1d1984,
     targetRoomDensityPercent: 50,
     rectangularCandidatePercent: 84,
+    styleRegionChunks: 2,
     branchCorridorAttempts: 64,
     branchCorridorMaxLength: 5,
 };
+
+const BIOMES = [
+    {
+        id: 'stone-halls',
+        title: 'Stone halls',
+        weight: 28,
+        theme: 'stone',
+        colours: [3, 4, 5, 6],
+        blockTypes: [0x03],
+        blockCount: {min: 1, max: 3},
+    },
+    {
+        id: 'wooden-wing',
+        title: 'Wooden wing',
+        weight: 24,
+        theme: 'tree',
+        colours: [4, 5, 6],
+        blockTypes: [0x00],
+        blockCount: {min: 2, max: 4},
+    },
+    {
+        id: 'rock-vaults',
+        title: 'Rock vaults',
+        weight: 18,
+        theme: 'stone',
+        colours: [2, 3, 7],
+        blockTypes: [0x03],
+        blockCount: {min: 3, max: 5},
+    },
+    {
+        id: 'quiet-gallery',
+        title: 'Quiet gallery',
+        weight: 16,
+        theme: 'stone',
+        colours: [1, 2, 6],
+        blockTypes: [0x03],
+        blockCount: {min: 0, max: 2},
+    },
+    {
+        id: 'spike-yard',
+        title: 'Spike yard',
+        weight: 14,
+        theme: 'stone',
+        colours: [2, 5, 6],
+        blockTypes: [0x05],
+        blockCount: {min: 1, max: 2},
+    },
+];
+
+const DEFAULT_BIOME = BIOMES[0];
+const TOTAL_BIOME_WEIGHT = BIOMES.reduce((total, biome) => total + biome.weight, 0);
 
 const floorDiv = (value, divisor) => Math.floor(value / divisor);
 
@@ -65,6 +117,11 @@ const clampPercent = value => {
     return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : 0;
 };
 
+const positiveIntegerOr = (value, fallback) => {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 1 ? Math.floor(number) : fallback;
+};
+
 const chooseRoomSizeSelector = (exits, x, y, config) => {
     const mask = exitMask(exits);
     const selector = (() => {
@@ -92,6 +149,15 @@ const isCentralFloorCell = (x, y) => (
     x >= 3 && x <= 4 && y >= 3 && y <= 4
 );
 
+const chooseArrayValue = (values, hash) => values[hash % values.length];
+
+const chooseBlockCount = (biome, hash) => {
+    const min = biome.blockCount.min;
+    const max = biome.blockCount.max;
+    if (max <= min) return min;
+    return min + (hash % (max - min + 1));
+};
+
 export function createKnightLoreProceduralMap(options = {}) {
     const config = {
         ...DEFAULT_OPTIONS,
@@ -99,7 +165,9 @@ export function createKnightLoreProceduralMap(options = {}) {
     };
     const chunkSize = config.chunkSize;
     const interiorSpan = Math.max(1, chunkSize - 2);
+    const styleRegionChunks = positiveIntegerOr(config.styleRegionChunks, DEFAULT_OPTIONS.styleRegionChunks);
     const chunks = new Map();
+    const biomes = new Map();
 
     const chunkKey = (chunkX, chunkY) => `${chunkX},${chunkY}`;
 
@@ -113,6 +181,26 @@ export function createKnightLoreProceduralMap(options = {}) {
     const connectorIndex = (a, b, salt) => (
         1 + (hashInts(config.worldSeed, a, b, salt) % interiorSpan)
     );
+
+    const chooseBiome = (chunkX, chunkY) => {
+        const regionX = floorDiv(chunkX, styleRegionChunks);
+        const regionY = floorDiv(chunkY, styleRegionChunks);
+        const key = `${regionX},${regionY}`;
+        if (biomes.has(key)) return biomes.get(key);
+
+        let roll = hashInts(config.worldSeed, regionX, regionY, 0xb10e) % TOTAL_BIOME_WEIGHT;
+        const biome = BIOMES.find(candidate => {
+            if (roll < candidate.weight) return true;
+            roll -= candidate.weight;
+            return false;
+        }) || DEFAULT_BIOME;
+        const result = {
+            ...biome,
+            region: {x: regionX, y: regionY},
+        };
+        biomes.set(key, result);
+        return result;
+    };
 
     const verticalEdgeConnectorY = (edgeX, chunkY) => (
         connectorIndex(edgeX, chunkY, 0x7654)
@@ -305,11 +393,11 @@ export function createKnightLoreProceduralMap(options = {}) {
         return exits;
     };
 
-    const createBlockPositions = (x, y, count) => {
+    const createBlockPositions = (x, y, count, salt = 0x100) => {
         const positions = [];
         const seen = new Set();
         for (let attempt = 0; positions.length < count && attempt < count * 8 + 16; attempt++) {
-            const hash = hashInts(config.worldSeed, x, y, attempt, 0x100);
+            const hash = hashInts(config.worldSeed, x, y, attempt, salt);
             const px = 2 + (hash & 0x03);
             const py = 2 + ((hash >>> 3) & 0x03);
             const key = coordKey(px, py);
@@ -320,17 +408,42 @@ export function createKnightLoreProceduralMap(options = {}) {
         return positions;
     };
 
+    const createBlockRuns = (x, y, selector, biome, roomHash) => {
+        if (selector !== 0) return [];
+
+        const count = chooseBlockCount(biome, roomHash >>> 4);
+        if (count <= 0) return [];
+
+        const type = chooseArrayValue(biome.blockTypes, roomHash >>> 12);
+        const positions = createBlockPositions(x, y, count, 0x100 + type);
+        return positions.length ? [{type, positions}] : [];
+    };
+
     const getRoomDefinition = (x, y) => {
         const coord = toChunkCoord(x, y);
         const exists = roomExists(x, y);
+        const biome = isForcedGlobalRoom(x, y)
+            ? {
+                ...DEFAULT_BIOME,
+                region: {
+                    x: floorDiv(coord.chunkX, styleRegionChunks),
+                    y: floorDiv(coord.chunkY, styleRegionChunks),
+                },
+            }
+            : chooseBiome(coord.chunkX, coord.chunkY);
         const commonMeta = {
             procedural: {
-                algorithm: 'chunk-connected-v2',
+                algorithm: 'chunk-connected-v4',
                 exists,
                 worldSeed: config.worldSeed,
                 chunkSize,
                 chunk: {x: coord.chunkX, y: coord.chunkY},
                 local: {x: coord.localX, y: coord.localY},
+                style: {
+                    biome: biome.id,
+                    title: biome.title,
+                    region: biome.region,
+                },
             },
         };
 
@@ -353,25 +466,19 @@ export function createKnightLoreProceduralMap(options = {}) {
         const hash = hashInts(config.worldSeed, x, y, 0x4b4c);
         const exits = getRoomExits(x, y);
         const selector = chooseRoomSizeSelector(exits, x, y, config);
-        const theme = selector === 0 && (hash & 0x08) ? 'tree' : 'stone';
-        const blockCount = selector === 0 ? 1 + ((hash >>> 4) & 0x03) : 0;
+        const theme = biome.theme;
+        const colour = chooseArrayValue(biome.colours, hash >>> 1);
+        const blocks = createBlockRuns(x, y, selector, biome, hash);
 
         return {
             coord: {x, y},
-            label: `generated:${coordKey(x, y)}`,
-            title: `generated ${coordKey(x, y)}`,
+            label: `generated:${biome.id}:${coordKey(x, y)}`,
+            title: `${biome.title} ${coordKey(x, y)}`,
             size: {selector},
-            colour: 3 + (hash & 0x03),
+            colour,
             theme,
             exits: cloneExits(exits),
-            blocks: selector === 0
-                ? [
-                    {
-                        type: theme === 'tree' ? 0x00 : 0x03,
-                        positions: createBlockPositions(x, y, blockCount),
-                    },
-                ]
-                : [],
+            blocks,
             objects: [],
             items: [],
             meta: commonMeta,
@@ -384,11 +491,14 @@ export function createKnightLoreProceduralMap(options = {}) {
         getRoomExits,
         getChunk: (chunkX, chunkY) => getChunk(chunkX, chunkY),
         stats: () => ({
-            algorithm: 'chunk-connected-v2',
+            algorithm: 'chunk-connected-v4',
             worldSeed: config.worldSeed,
             chunkSize,
             targetRoomDensityPercent: config.targetRoomDensityPercent,
             rectangularCandidatePercent: config.rectangularCandidatePercent,
+            styleRegionChunks,
+            biomes: BIOMES.map(biome => biome.id),
+            generatedBiomeRegions: biomes.size,
             branchCorridorAttempts: config.branchCorridorAttempts,
             branchCorridorMaxLength: config.branchCorridorMaxLength,
             generatedChunks: chunks.size,

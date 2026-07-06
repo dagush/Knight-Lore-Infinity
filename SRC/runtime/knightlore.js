@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage7-balanced-rectangles-20260704-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage7-full-rect-walls-20260706-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -116,6 +116,185 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         },
     };
 
+    const makeTreeSpriteFromStoneSprite = value => {
+        if (value === 0x0d || value === 0x0a) return 0x80;
+        if (value === 0x0e || value === 0x0b) return 0x81;
+        if (value === 0x0f || value === 0x0c) return 0x82;
+        return value;
+    };
+
+    const makeBaseTreeWallFromStoneWall = (bytes, extraRecords = [], keepRecord = () => true) => {
+        const records = [];
+
+        for (let index = 0; index < bytes.length; index += 8) {
+            const sprite = bytes[index];
+            if (sprite === 0x00) break;
+
+            const record = bytes.slice(index, index + 8);
+            if (record.length < 8) break;
+            if (record[3] !== 0x80) continue;
+            if (!keepRecord(record)) continue;
+
+            records.push(makeTreeSpriteFromStoneSprite(record[0]), ...record.slice(1));
+        }
+
+        for (const record of extraRecords) records.push(...record);
+        records.push(0x00);
+        return records;
+    };
+
+    const KL_STAGE7_WEST_FILLER_X = {
+        defaultValue: 0x5f,
+        min: 0x00,
+        max: 0xbf,
+    };
+
+    const clampStage7WestFillerX = value => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return KL_STAGE7_WEST_FILLER_X.defaultValue;
+        return Math.max(
+            KL_STAGE7_WEST_FILLER_X.min,
+            Math.min(KL_STAGE7_WEST_FILLER_X.max, Math.round(numeric))
+        );
+    };
+
+    const parseStage7WestFillerX = value => {
+        if (value === null) return KL_STAGE7_WEST_FILLER_X.defaultValue;
+        const text = String(value).trim();
+        if (!text) return KL_STAGE7_WEST_FILLER_X.defaultValue;
+        const parsed = /^0x[0-9a-f]+$/i.test(text)
+            ? Number.parseInt(text.slice(2), 16)
+            : Number.parseInt(text, 10);
+        return clampStage7WestFillerX(parsed);
+    };
+
+    let stage7WoodWallTuning = {
+        westFillerX: parseStage7WestFillerX(KL_URL_PARAMS.get('stage7westx')),
+    };
+
+    const KL_STAGE7_NORTH_WALL_Y = 0xa0;
+
+    const KL_STAGE7_WEST_WOOD_WALL_PATTERN = [
+        {label: 'west panel 1', sprite: 0x80, y: 0x49},
+        {label: 'west panel 2', sprite: 0x81, y: 0x58},
+        {label: 'west panel 3', sprite: 0x82, y: 0x68},
+        {label: 'west gap lower', sprite: 0x80, y: 0x78},
+        {label: 'west gap upper', sprite: 0x81, y: 0x88},
+        {label: 'west panel 4', sprite: 0x80, y: 0x98},
+        {label: 'west panel 5', sprite: 0x81, y: 0xa8},
+        {label: 'west panel 6', sprite: 0x82, y: 0xb8},
+    ];
+
+    const buildStage7TranslatedWestWallRecords = (x = stage7WoodWallTuning.westFillerX) => (
+        KL_STAGE7_WEST_WOOD_WALL_PATTERN.map(item => ({
+            ...item,
+            bytes: [item.sprite, x, item.y, 0x80, 0x00, 0x08, 0x2c, 0x10],
+        }))
+    );
+
+    const KL_STAGE7_NORTH_WOOD_WALL_PATTERN = [
+        {label: 'north panel 1', sprite: 0x80, x: 0x48},
+        {label: 'north panel 2', sprite: 0x81, x: 0x58},
+        {label: 'north panel 3', sprite: 0x82, x: 0x68},
+        {label: 'north gap lower', sprite: 0x80, x: 0x78},
+        {label: 'north gap upper', sprite: 0x81, x: 0x88},
+        {label: 'north panel 4', sprite: 0x80, x: 0x98},
+        {label: 'north panel 5', sprite: 0x81, x: 0xa8},
+        {label: 'north panel 6', sprite: 0x82, x: 0xb8},
+    ];
+
+    const buildStage7TranslatedNorthWallRecords = (y = KL_STAGE7_NORTH_WALL_Y) => (
+        KL_STAGE7_NORTH_WOOD_WALL_PATTERN.map(item => ({
+            ...item,
+            bytes: [item.sprite, item.x, y, 0x80, 0x08, 0x00, 0x2c, 0x50],
+        }))
+    );
+
+    const isStage7GroundNorthWallRecord = record => (
+        record[3] === 0x80 &&
+        record[4] === 0x08 &&
+        record[5] === 0x00 &&
+        (record[7] === 0x10 || record[7] === 0x50)
+    );
+
+    const isStage7GroundWestWallRecord = record => (
+        record[3] === 0x80 &&
+        record[4] === 0x00 &&
+        record[5] === 0x08 &&
+        record[7] === 0x10
+    );
+
+    const buildStage7TranslatedTreeWallRecords = () => ({
+        size2North: buildStage7TranslatedNorthWallRecords().map(item => item.bytes),
+        size3West: buildStage7TranslatedWestWallRecords().map(item => item.bytes),
+    });
+
+    const KL_STAGE7_TREE_WALL_SIZE2_SOURCE = [
+        0x0d, 0x3f, 0x98, 0x80, 0x00, 0x08, 0x28, 0x10,
+        0x0e, 0x47, 0xa0, 0x80, 0x08, 0x00, 0x28, 0x10,
+        0x0f, 0x3f, 0x63, 0x80, 0x00, 0x08, 0x2c, 0x10,
+        0x0f, 0xb8, 0xa0, 0x80, 0x08, 0x00, 0x2c, 0x50,
+        0x0f, 0x3f, 0x63, 0xac, 0x00, 0x08, 0x2c, 0x10,
+        0x0f, 0xb8, 0xa0, 0xac, 0x08, 0x00, 0x2c, 0x50,
+        0x0d, 0x3f, 0x98, 0xa8, 0x00, 0x08, 0x28, 0x10,
+        0x0e, 0x47, 0xa0, 0xa8, 0x08, 0x00, 0x28, 0x10,
+        0x0f, 0xb8, 0xa0, 0xd0, 0x08, 0x00, 0x2c, 0x50,
+        0x0a, 0x80, 0xa0, 0x80, 0x14, 0x00, 0x14, 0x50,
+        0x0a, 0x3f, 0x7e, 0xb0, 0x00, 0x14, 0x14, 0x10,
+        0x0b, 0x60, 0xa0, 0x90, 0x0c, 0x00, 0x14, 0x50,
+        0x0a, 0x60, 0xa0, 0xb8, 0x14, 0x00, 0x14, 0x50,
+        0x0c, 0xa0, 0xa0, 0xb0, 0x0c, 0x00, 0x0c, 0x50,
+        0x00,
+    ];
+
+    const KL_STAGE7_TREE_WALL_SIZE3_SOURCE = [
+        0x0d, 0x5f, 0xb8, 0x80, 0x00, 0x08, 0x28, 0x10,
+        0x0e, 0x67, 0xc0, 0x80, 0x08, 0x00, 0x28, 0x10,
+        0x0f, 0x5f, 0x48, 0x80, 0x00, 0x08, 0x2c, 0x10,
+        0x0f, 0x9d, 0xc0, 0x80, 0x08, 0x00, 0x2c, 0x50,
+        0x0d, 0x5f, 0xb8, 0xa8, 0x00, 0x08, 0x28, 0x10,
+        0x0e, 0x67, 0xc0, 0xa8, 0x08, 0x00, 0x28, 0x10,
+        0x0f, 0x5f, 0x48, 0xac, 0x00, 0x08, 0x2c, 0x10,
+        0x0f, 0x9d, 0xc0, 0xac, 0x08, 0x00, 0x2c, 0x50,
+        0x0f, 0x5f, 0x48, 0xd0, 0x00, 0x08, 0x2c, 0x10,
+        0x0a, 0x5f, 0x90, 0x80, 0x00, 0x14, 0x14, 0x10,
+        0x0a, 0x84, 0xc0, 0xb0, 0x14, 0x00, 0x14, 0x50,
+        0x0b, 0x5f, 0x60, 0x90, 0x00, 0x0c, 0x14, 0x10,
+        0x0a, 0x5f, 0x68, 0xb8, 0x00, 0x14, 0x14, 0x10,
+        0x0c, 0x5f, 0xa0, 0xb0, 0x00, 0x0c, 0x0c, 0x10,
+        0x00,
+    ];
+
+    const KL_STAGE7_CUSTOM_BACKGROUNDS = {
+        baseAddr: 0x6ae0,
+        offsetTableAddr: 0x6ce2,
+        treeWallSize2Id: 0x12,
+        treeWallSize3Id: 0x13,
+    };
+
+    const refreshStage7CustomBackgrounds = () => {
+        const records = buildStage7TranslatedTreeWallRecords();
+        KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Bytes = makeBaseTreeWallFromStoneWall(
+            KL_STAGE7_TREE_WALL_SIZE2_SOURCE,
+            records.size2North,
+            record => !isStage7GroundNorthWallRecord(record)
+        );
+        KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Bytes = makeBaseTreeWallFromStoneWall(
+            KL_STAGE7_TREE_WALL_SIZE3_SOURCE,
+            records.size3West,
+            record => !isStage7GroundWestWallRecord(record)
+        );
+        KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Addr = KL_STAGE7_CUSTOM_BACKGROUNDS.baseAddr;
+        KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Addr =
+            KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Addr +
+            KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Bytes.length;
+        KL_STAGE7_CUSTOM_BACKGROUNDS.endAddr =
+            KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Addr +
+            KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Bytes.length;
+    };
+
+    refreshStage7CustomBackgrounds();
+
     const KL_STAGE3_ONE_ROOM_INJECTION_TEST = {
         enabled: KL_URL_PARAMS.get('stage3test') === '1',
         targetRoom: 0x88,
@@ -187,7 +366,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         'tree arch north', 'tree arch east', 'tree arch south', 'tree arch west',
         'portcullis north', 'portcullis east', 'portcullis south', 'portcullis west',
         'wall size 1', 'wall size 2', 'wall size 3', 'tree room size 1',
-        'tree filler west', 'tree filler north', 'wizard', 'cauldron',
+        'tree filler west', 'tree filler north', 'custom tree wall size 2', 'custom tree wall size 3',
         'high arch east', 'high arch south', 'high arch east base', 'high arch south base',
     ];
 
@@ -247,6 +426,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     const KL_SIZE_WALL_IDS = new Set(
         Object.values(KL_SIZE_SELECTORS).map(selector => selector.wallId)
     );
+    const KL_CUSTOM_TREE_RECT_WALL_IDS = new Set([
+        KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Id,
+        KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Id,
+    ]);
+    const KL_ALL_WALL_IDS = new Set([
+        ...KL_SIZE_WALL_IDS,
+        ...KL_CUSTOM_TREE_RECT_WALL_IDS,
+    ]);
     const KL_TREE_FILLER_IDS = new Set([0x0f, 0x10, 0x11]);
     const KL_TREE_SQUARE_BACKGROUNDS_BY_EXIT_MASK = {
         ES: [0x05, 0x06, 0x0f, 0x10, 0x11],
@@ -322,10 +509,31 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const specialBackgrounds = (room.backgrounds || []).filter(value => (
             !KL_ALL_CARDINAL_ARCH_IDS.has(value) &&
             !KL_TREE_FILLER_IDS.has(value) &&
-            !KL_SIZE_WALL_IDS.has(value)
+            !KL_ALL_WALL_IDS.has(value)
         ));
 
         return [...baseBackgrounds, ...specialBackgrounds];
+    };
+
+    const buildTreeRectangularBackgroundsWithExits = (room, exits) => {
+        if (room.size.selector === 0) return null;
+
+        const selectorInfo = KL_SIZE_SELECTORS[room.size.selector];
+        if (!selectorInfo) return null;
+        const customWallId = room.size.selector === 1
+            ? KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Id
+            : KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Id;
+
+        const archBackgrounds = KL_DIRECTIONS
+            .filter(direction => exits && exits[direction])
+            .map(direction => KL_TREE_ARCH_IDS[direction]);
+        const specialBackgrounds = (room.backgrounds || []).filter(value => (
+            !KL_ALL_CARDINAL_ARCH_IDS.has(value) &&
+            !KL_TREE_FILLER_IDS.has(value) &&
+            !KL_ALL_WALL_IDS.has(value)
+        ));
+
+        return [...archBackgrounds, customWallId, ...specialBackgrounds];
     };
 
     const buildBackgrounds = room => {
@@ -339,6 +547,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         if (theme === 'tree') {
             const treeBackgrounds = buildTreeSquareBackgroundsWithExits(room, exits);
             if (treeBackgrounds) return treeBackgrounds;
+
+            const treeRectangularBackgrounds = buildTreeRectangularBackgroundsWithExits(room, exits);
+            if (treeRectangularBackgrounds) return treeRectangularBackgrounds;
         }
 
         return buildStoneBackgroundsWithExits(room, exits);
@@ -367,10 +578,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const treeBackgrounds = buildTreeSquareBackgroundsWithExits(room, exits);
             if (treeBackgrounds) return treeBackgrounds;
 
+            const treeRectangularBackgrounds = buildTreeRectangularBackgroundsWithExits(room, exits);
+            if (treeRectangularBackgrounds) return treeRectangularBackgrounds;
+
             const specialBackgrounds = (room.backgrounds || []).filter(value => (
                 !KL_ALL_CARDINAL_ARCH_IDS.has(value) &&
                 !KL_TREE_FILLER_IDS.has(value) &&
-                !KL_SIZE_WALL_IDS.has(value)
+                !KL_ALL_WALL_IDS.has(value)
             ));
             return [...buildStoneBackgroundsWithExits(room, exits), ...specialBackgrounds];
         }
@@ -905,7 +1119,22 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 physicalRoomId: physical.id,
                 logicalCoord,
                 label: room.label,
+                title: reciprocal.room.title,
                 source: room.source,
+                style: cloneData(
+                    reciprocal.room.meta &&
+                    reciprocal.room.meta.procedural &&
+                    reciprocal.room.meta.procedural.style
+                        ? reciprocal.room.meta.procedural.style
+                        : null
+                ),
+                size: cloneData(reciprocal.room.size),
+                colour: reciprocal.room.colour,
+                theme: reciprocal.room.theme,
+                exits: cloneData(reciprocal.room.exits),
+                backgrounds: cloneData(reciprocal.room.backgrounds),
+                blocks: cloneData(reciprocal.room.blocks),
+                stateRevision: room.state ? room.state.revision : null,
                 entrySize: compiled.entrySize,
                 byteCount: compiled.bytes.length,
                 backgroundCount: compiled.backgroundCount,
@@ -914,9 +1143,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             });
         }
 
-        const capacity = KL_STAGE1.locationEnd - KL_STAGE1.locationStart;
+        const capacity = KL_STAGE7_CUSTOM_BACKGROUNDS.baseAddr - KL_STAGE1.locationStart;
+        if (KL_STAGE7_CUSTOM_BACKGROUNDS.endAddr > KL_STAGE1.locationEnd) {
+            throw new Error(`Custom Stage 7 background buffer ends at ${KL_STAGE7_CUSTOM_BACKGROUNDS.endAddr.toString(16)} but location table ends at ${KL_STAGE1.locationEnd.toString(16)}.`);
+        }
         if (bytes.length > capacity) {
-            throw new Error(`Compiled Stage 7 sliding cross is ${bytes.length} bytes but the original location table has only ${capacity} bytes.`);
+            throw new Error(`Compiled Stage 7 sliding cross is ${bytes.length} bytes but only ${capacity} bytes are available before the custom background buffer.`);
         }
 
         return {
@@ -925,6 +1157,15 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             roomSummaries,
             roomCount: roomSummaries.length,
             capacity,
+            customBackgrounds: {
+                treeWallSize2Id: KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Id,
+                treeWallSize2Addr: KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Addr,
+                treeWallSize2Bytes: KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Bytes.length,
+                treeWallSize3Id: KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Id,
+                treeWallSize3Addr: KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Addr,
+                treeWallSize3Bytes: KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Bytes.length,
+                westFillerX: stage7WoodWallTuning.westFillerX,
+            },
         };
     };
 
@@ -946,10 +1187,16 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
     function installKnightLoreDiagnostics(emu, logicalMapLoadPromise = null) {
         const tbody = document.getElementById('stage1-diagnostics-body');
+        const stage7StyleTbody = document.getElementById('stage7-style-body');
+        const stage7StyleStatus = document.getElementById('stage7-style-status');
         const crossTbody = document.getElementById('stage2-cross-body');
         const stage2Status = document.getElementById('stage2-status');
         const logicalTbody = document.getElementById('stage4-logical-body');
         const stage4Status = document.getElementById('stage4-status');
+        const stage7WestFillerXSlider = document.getElementById('stage7-west-filler-x-slider');
+        const stage7WestFillerXValue = document.getElementById('stage7-west-filler-x-value');
+        const stage7WestFillerXStatus = document.getElementById('stage7-west-filler-x-status');
+        const stage7WestFillerRecordsBody = document.getElementById('stage7-west-filler-records-body');
         const rowEls = new Map();
         let sampleCount = 0;
         let frameCompletedCount = 0;
@@ -1065,6 +1312,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const hexByte = value => `0x${(value & 0xff).toString(16).toUpperCase().padStart(2, '0')}`;
         const hexWord = value => `0x${(value & 0xffff).toString(16).toUpperCase().padStart(4, '0')}`;
         const fmtByte = value => `${hexByte(value)} (${value})`;
+        const fmtStage7WestFillerX = value => `${hexByte(value)} (${value})`;
         const fmtXYZ = (x, y, z) => `X=${fmtByte(x)}  Y=${fmtByte(y)}  Z=${fmtByte(z)}`;
         const fmtBytes = (bytes, limit = 24) => {
             if (!bytes.length) return '(none)';
@@ -1074,6 +1322,53 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const sameBytes = (a, b) => (
             a.length === b.length && a.every((value, index) => value === b[index])
         );
+        const renderStage7WestFillerControl = (message = null, previewValue = null) => {
+            const value = clampStage7WestFillerX(
+                previewValue === null ? stage7WoodWallTuning.westFillerX : previewValue
+            );
+            if (stage7WestFillerXSlider) stage7WestFillerXSlider.value = String(value);
+            if (stage7WestFillerXValue) stage7WestFillerXValue.textContent = fmtStage7WestFillerX(value);
+            if (stage7WestFillerRecordsBody) {
+                const records = [
+                    ...buildStage7TranslatedNorthWallRecords().map((record, index) => ({
+                        ...record,
+                        background: '0x12',
+                        recordNumber: index + 1,
+                    })),
+                    ...buildStage7TranslatedWestWallRecords(value).map((record, index) => ({
+                        ...record,
+                        background: '0x13',
+                        recordNumber: index + 1,
+                    })),
+                ];
+
+                stage7WestFillerRecordsBody.innerHTML = records.map(record => {
+                    const bytes = record.bytes;
+                    return `
+                        <tr class="state-warn">
+                            <td>${record.background}</td>
+                            <td>${record.recordNumber}</td>
+                            <td>${record.label}</td>
+                            <td>${hexByte(bytes[0])}</td>
+                            <td>${hexByte(bytes[1])}</td>
+                            <td>${hexByte(bytes[2])}</td>
+                            <td>${hexByte(bytes[3])}</td>
+                            <td>${hexByte(bytes[4])}/${hexByte(bytes[5])}</td>
+                            <td>${hexByte(bytes[6])}/${hexByte(bytes[7])}</td>
+                            <td>${fmtBytes(bytes, 8)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+            if (stage7WestFillerXStatus) {
+                stage7WestFillerXStatus.textContent = message || [
+                    `Selector 1 custom 0x13 west wall X is ${fmtStage7WestFillerX(value)}.`,
+                    `Slider range is ${hexByte(KL_STAGE7_WEST_FILLER_X.min)}..${hexByte(KL_STAGE7_WEST_FILLER_X.max)}.`,
+                    `Custom 0x12 replaces stone-derived north wall records at Y ${hexByte(KL_STAGE7_NORTH_WALL_Y)}; custom 0x13 replaces stone-derived west wall records at the slider X.`,
+                    'Release the slider to rewrite static data; re-enter a rectangular wooden room if the current screen was already drawn.',
+                ].join(' ');
+            }
+        };
         const allZero = bytes => bytes.every(value => value === 0);
         const fmtNamedId = (value, names) => {
             const name = names[value] || 'unknown';
@@ -1209,6 +1504,97 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             await emu.writeMemory(KL_STAGE1.locationStart, new Uint8Array(capacity));
             await emu.writeMemory(KL_STAGE1.locationStart, Uint8Array.from(compiled.bytes));
         };
+
+        const writeStage7CustomBackgrounds = async () => {
+            const size2 = KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Bytes;
+            const size3 = KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Bytes;
+            const size2Addr = KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Addr;
+            const size3Addr = KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Addr;
+            const offsetAddr = KL_STAGE7_CUSTOM_BACKGROUNDS.offsetTableAddr +
+                KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Id * 2;
+
+            await emu.writeMemory(size2Addr, Uint8Array.from(size2));
+            await emu.writeMemory(size3Addr, Uint8Array.from(size3));
+            await emu.writeMemory(offsetAddr, Uint8Array.from([
+                size2Addr & 0xff,
+                (size2Addr >> 8) & 0xff,
+                size3Addr & 0xff,
+                (size3Addr >> 8) & 0xff,
+            ]));
+        };
+
+        const applyStage7WestFillerX = async rawValue => {
+            const value = clampStage7WestFillerX(rawValue);
+            stage7WoodWallTuning = {
+                ...stage7WoodWallTuning,
+                westFillerX: value,
+            };
+            refreshStage7CustomBackgrounds();
+            renderStage7WestFillerControl(
+                `Prepared selector 1 west wall X ${fmtStage7WestFillerX(value)}; custom background bytes rebuilt.`
+            );
+
+            if (!stage7SlidingCross.enabled) {
+                renderStage7WestFillerControl(
+                    `Set selector 1 west wall X to ${fmtStage7WestFillerX(value)}. Stage 7 sliding is disabled, so nothing was written to emulator memory.`
+                );
+                return;
+            }
+
+            if (stage7SlidingCross.inFlight) {
+                renderStage7WestFillerControl(
+                    `Set selector 1 west wall X to ${fmtStage7WestFillerX(value)}. Stage 7 is already writing a cross; move the slider again after this write finishes.`
+                );
+                return;
+            }
+
+            if (typeof emu.writeMemory !== 'function') {
+                renderStage7WestFillerControl(
+                    `Set selector 1 west wall X to ${fmtStage7WestFillerX(value)}, but writeMemory is not available yet. It will apply on the next Stage 7 compile.`
+                );
+                return;
+            }
+
+            stage7SlidingCross = {
+                ...stage7SlidingCross,
+                attempted: false,
+                done: false,
+                message: `Selector 1 west wall X changed to ${hexByte(value)}; recompiling the Stage 7 cross.`,
+            };
+
+            try {
+                await applyStage7CrossInjection(`Selector 1 west wall X ${hexByte(value)}`);
+                renderStage7WestFillerControl(
+                    stage7SlidingCross.done
+                        ? `Applied selector 1 west wall X ${fmtStage7WestFillerX(value)} to custom background 0x13. Leave and re-enter a rectangular wooden room if this screen was already drawn.`
+                        : `Queued selector 1 west wall X ${fmtStage7WestFillerX(value)}; ${stage7SlidingCross.message}`
+                );
+            } catch (err) {
+                renderStage7WestFillerControl(
+                    `Failed to apply selector 1 west wall X ${fmtStage7WestFillerX(value)}: ${err.message || err}`
+                );
+            }
+        };
+
+        if (stage7WestFillerXSlider) {
+            stage7WestFillerXSlider.min = String(KL_STAGE7_WEST_FILLER_X.min);
+            stage7WestFillerXSlider.max = String(KL_STAGE7_WEST_FILLER_X.max);
+            stage7WestFillerXSlider.step = '1';
+            stage7WestFillerXSlider.value = String(stage7WoodWallTuning.westFillerX);
+            stage7WestFillerXSlider.addEventListener('input', () => {
+                const value = clampStage7WestFillerX(stage7WestFillerXSlider.value);
+                renderStage7WestFillerControl(
+                    `Preview selector 1 west wall X ${fmtStage7WestFillerX(value)}. Release the slider to write it.`,
+                    value
+                );
+            });
+            stage7WestFillerXSlider.addEventListener('change', () => {
+                applyStage7WestFillerX(stage7WestFillerXSlider.value).catch(err => {
+                    renderStage7WestFillerControl(`Failed to apply west wall X: ${err.message || err}`);
+                });
+            });
+        }
+        renderStage7WestFillerControl();
 
         const renderStage5StaticMapRow = () => {
             const start = KL_STAGE1.locationStart;
@@ -1597,7 +1983,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `Coordinate convention: ${KL_STAGE4.coordinateConvention}.`,
                 `Document: ${stats.activeDocument.title}.`,
                 `Authored rooms: ${stats.authoredRooms}; labels: ${stats.labels}; generated cache: ${stats.generatedRooms}; persistent states: ${stats.persistentRooms}.`,
-                `Procedural: ${stats.procedural.algorithm}; seed ${stats.procedural.worldSeed}; chunk ${stats.procedural.chunkSize}x${stats.procedural.chunkSize}; chunks ${stats.procedural.generatedChunks}.`,
+                `Procedural: ${stats.procedural.algorithm}; seed ${stats.procedural.worldSeed}; chunk ${stats.procedural.chunkSize}x${stats.procedural.chunkSize}; chunks ${stats.procedural.generatedChunks}; styles ${(stats.procedural.biomes || []).length}; style regions ${stats.procedural.generatedBiomeRegions || 0}.`,
                 'Probe APIs: window.KnightLoreInfinity.logicalMap.getRoomAt(12, -4), getRoomByLabel("0x88"), loadLogicalMapFromUrl("maps/knight-lore-original-map.json").',
             ].join(' ');
 
@@ -1654,7 +2040,110 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return `Reciprocal exit overlay: ${head}${tail}.`;
         };
 
+        const formatStage7Style = item => {
+            const style = item.style || {};
+            if (!style.biome) return `${item.source}; no generated style`;
+            const region = style.region
+                ? ` r(${style.region.x},${style.region.y})`
+                : '';
+            return `${style.biome}${region}`;
+        };
+
+        const formatStage7Shape = item => (
+            `sel ${item.size.selector}; ${item.size.x}/${item.size.y}/${item.size.z}`
+        );
+
+        const formatStage7CompileInfo = item => {
+            const backgrounds = item.backgrounds && item.backgrounds.length
+                ? fmtBytes(item.backgrounds, 8)
+                : '(none)';
+            const overlay = item.reciprocalExitAdjustments && item.reciprocalExitAdjustments.length
+                ? `overlay ${item.reciprocalExitAdjustments.map(adjustment => `${adjustment.type} ${adjustment.direction}`).join('; ')}`
+                : 'overlay none';
+            const experiment = item.theme === 'tree' && item.size.selector !== 0
+                ? `; custom tree wall; west wall X ${hexByte(stage7WoodWallTuning.westFillerX)}`
+                : '';
+            return `entry ${item.entrySize}; ${item.byteCount} bytes; bg ${item.backgroundCount}: ${backgrounds}; ${overlay}${experiment}`;
+        };
+
+        const renderStage7StyleTable = () => {
+            if (!stage7StyleTbody || !stage7StyleStatus) return;
+
+            const setStage7StyleMessage = (message, state = 'muted') => {
+                stage7StyleStatus.textContent = `${message} Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`;
+                stage7StyleTbody.innerHTML = `
+                    <tr class="state-${state}">
+                        <td colspan="10">${escapeHtml(message)}</td>
+                    </tr>
+                `;
+            };
+
+            if (!stage7SlidingCross.enabled) {
+                setStage7StyleMessage('Stage 7 sliding cross is disabled; add ?stage7sliding=1 to see generated cross properties.');
+                return;
+            }
+
+            if (stage7SlidingCross.mapLoadPending) {
+                setStage7StyleMessage('Waiting for optional logical map JSON load before compiling the Stage 7 cross.', 'warn');
+                return;
+            }
+
+            if (stage7SlidingCross.lastError) {
+                setStage7StyleMessage(stage7SlidingCross.lastError, 'bad');
+                return;
+            }
+
+            const compiled = stage7SlidingCross.lastCompiled;
+            if (!compiled) {
+                setStage7StyleMessage('Waiting for the first Stage 7 physical cross compilation.', 'warn');
+                return;
+            }
+
+            const adjustmentCount = compiled.roomSummaries.reduce((count, item) => (
+                count + (item.reciprocalExitAdjustments || []).length
+            ), 0);
+            const styleNames = Array.from(new Set(
+                compiled.roomSummaries
+                    .map(item => item.style && item.style.biome)
+                    .filter(Boolean)
+            ));
+            const transition = stage7SlidingCross.lastTransition
+                ? ` Last move ${stage7SlidingCross.lastTransition.direction}.`
+                : '';
+            stage7StyleStatus.textContent = [
+                `Center ${fmtLogicalCoord(stage7SlidingCross.center)}; generation ${stage7SlidingCross.generation}.`,
+                `Styles in cross: ${styleNames.length ? styleNames.join(', ') : 'authored/no generated style'}.`,
+                adjustmentCount
+                    ? `Reciprocal overlay adjustments: ${adjustmentCount}.`
+                    : 'Reciprocal overlay: no changes.',
+                transition,
+                `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
+            ].join(' ');
+
+            stage7StyleTbody.innerHTML = compiled.roomSummaries.map(item => {
+                const adjustments = item.reciprocalExitAdjustments || [];
+                const experimentalTreeRectangle = item.theme === 'tree' && item.size.selector !== 0;
+                const state = adjustments.length || experimentalTreeRectangle ? 'warn' : 'ok';
+                return `
+                    <tr class="state-${state}">
+                        <td>${escapeHtml(item.role)}</td>
+                        <td>${hexByte(item.physicalRoomId)}</td>
+                        <td>${escapeHtml(fmtLogicalCoord(item.logicalCoord))}</td>
+                        <td>${escapeHtml(item.label)}<br>${escapeHtml(item.source)}</td>
+                        <td>${escapeHtml(formatStage7Style(item))}</td>
+                        <td>${escapeHtml(formatStage7Shape(item))}</td>
+                        <td>${escapeHtml(`${item.theme}; attr ${item.colour}`)}</td>
+                        <td>${escapeHtml(formatLogicalExits({exits: item.exits}))}</td>
+                        <td>${escapeHtml(formatLogicalBlocks({blocks: item.blocks || []}))}</td>
+                        <td>${escapeHtml(formatStage7CompileInfo(item))}</td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
         const renderStage7SlidingRow = () => {
+            renderStage7StyleTable();
+
             if (!stage7SlidingCross.enabled) {
                 setRow(
                     'stage7Sliding',
@@ -1751,6 +2240,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             try {
                 const compiled = compileStage7SlidingCrossToLocationTable(stage7SlidingCross.center);
                 await writeCompiledLocationTable(compiled);
+                await writeStage7CustomBackgrounds();
                 logicalMap.markVisited(stage7SlidingCross.center.x, stage7SlidingCross.center.y);
                 stage7SlidingCross = {
                     ...stage7SlidingCross,
@@ -1759,7 +2249,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     lastError: null,
                     lastCompiled: compiled,
                     generation: stage7SlidingCross.generation + 1,
-                    message: `${reason}; erased ${hexWord(KL_STAGE1.locationStart)}..${hexWord(KL_STAGE1.locationEnd - 1)} and wrote ${compiled.bytes.length}/${compiled.capacity} bytes.`,
+                    message: `${reason}; erased ${hexWord(KL_STAGE1.locationStart)}..${hexWord(KL_STAGE1.locationEnd - 1)}, wrote ${compiled.bytes.length}/${compiled.capacity} room bytes, and installed custom tree-wall backgrounds at ${hexWord(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Addr)} and ${hexWord(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Addr)}.`,
                 };
             } catch (err) {
                 const errorText = String(err);
@@ -1809,6 +2299,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 ...stage7SlidingCross,
                 center: newCenter,
                 done: false,
+                lastCompiled: null,
                 lastTransition: {
                     frame: frameCompletedCount,
                     sample: sampleCount,

@@ -101,6 +101,33 @@ Room/location shape and background presets:
         0x11 with square rooms. There do not appear to be stock rectangular
         tree/wood wall definitions, so rectangular wooden rooms would require
         custom background definitions later.
+        Current experimental Stage 7 rectangular tree rooms install custom
+        background definitions in the unused tail of the erased location table
+        and repoint background ids 0x12 and 0x13 to them:
+           0x12: custom tree wall size 2, for selector 2 rooms.
+           0x13: custom tree wall size 3, for selector 1 rooms.
+        They also use tree arch ids 0x04..0x07 for legal narrow-side exits.
+        Their custom wall records keep only source records that already use
+        Z/base byte 0x80. Raised stone-wall layers are discarded rather than
+        moved down, because lowering them can cover otherwise valid arches.
+        The current long-wall fill strategy copies the complete original
+        square-tree wall pattern and translates only the room-size plane:
+           selector 1 / custom 0x13:
+              full west wall pattern, x moved from 0x3F to 0x5F.
+              rows use y = 0x49, 0x58, 0x68, 0x78, 0x88, 0x98, 0xA8, 0xB8.
+           selector 2 / custom 0x12:
+              full north wall pattern, y moved from 0xC0 to 0xA0.
+              rows use x = 0x48, 0x58, 0x68, 0x78, 0x88, 0x98, 0xA8, 0xB8.
+        The runtime removes the matching stone-derived ground wall records
+        before appending these translated tree records, to avoid duplicate
+        overlapping panels.
+        Earlier attempts to use only the two filler records left holes.
+        Lowering raised stone layers could cover valid arches, and hand-filled
+        new explicit records caused unstable player/emulator behaviour. These
+        attempts were reverted.
+        This is new Knight Lore-compatible data, not a pattern observed in the
+        original room dump. Outside Stage 7, 0x12/0x13 should still be treated
+        cautiously because they are the original wizard/cauldron ids.
      Fixed-size entry caveat:
         When testing by rewriting a room entry without changing its total byte
         length, preserve the number of background slots before 0xFF. Cleaned
