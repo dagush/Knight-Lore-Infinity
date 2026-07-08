@@ -1309,3 +1309,246 @@ Current project state at end of 2026 07 06
 - The next natural content work can move on to treasures, hazards, authored
   special rooms, and persistent state now that the basic room shape/style layer
   is less visually brittle.
+
+
++============================================================+
+| 2026 07 08 - Stage 8 Dispersed Quest Sector Model          |
++============================================================+
+
+2026 07 08
+
+Stage 8 changed the infinite map from a room-generation proof into the first
+layer of a new dispersed quest structure.
+
+The core idea is that each 8x8 logical sector can own a local quest:
+
+- a local cauldron anchor room;
+- a local charm anchor room;
+- one required charm id;
+- persistent JavaScript-side quest state.
+
+This is deliberately metadata-only for the first proof. No original charm,
+cauldron, wizard, inventory, or cauldron-order memory is modified yet.
+
+------------------------------------------------
+Planning Update
+
+A new plan file was added:
+
+- Docs/Plan 2026 07 08.txt
+
+The plan defines "Dispersed Quest Sectors and External Dialogue" as the next
+major layer after the Stage 7 sliding cross. It records the idea that Knight
+Lore Infinity should not only be a larger map, but a world made from local
+quest regions.
+
+The plan was also corrected after discussion:
+
+- the cauldron and charm belong to the same 8x8 sector;
+- the route between them does not have to stay inside that sector;
+- detours through neighbouring sectors are valid and desirable;
+- fairness should mean global traversable-world reachability, not isolated
+  sector-local reachability.
+
+This reduces pressure on the generator and makes neighbouring sectors feel more
+integrated.
+
+------------------------------------------------
+Generator Changes
+
+Stage 8 quest metadata was added to:
+
+- SRC/runtime/knightlore-mapgen.js
+
+The procedural map generator now exposes deterministic sector queries:
+
+- getQuestSectorAt(x, y)
+- getQuestRoomInfoAt(x, y)
+
+Each sector currently uses the existing 8x8 chunk grid and contains a quest by
+default. The metadata includes:
+
+- sector coordinate;
+- sector origin;
+- local room coordinate inside the sector;
+- style/biome information;
+- required charm id from 14 abstract charm labels;
+- cauldron anchor coordinate;
+- charm anchor coordinate;
+- difficulty value;
+- placement note.
+
+The first implementation chooses cauldron/charm anchors from already existing
+connected cells in the chunk:
+
+- cauldrons are biased toward the chunk hub;
+- charms are biased farther from the cauldron;
+- if both anchors collide, another existing cell is chosen when available.
+
+Anchor rooms are marked as existing cells, so the metadata never points at a
+missing generated room.
+
+Important correction:
+
+- the old central floor-cell block avoidance rule now applies only to the true
+  logical start room (0, 0);
+- other rooms may use those central cells, though entrance strips still need to
+  remain safe in future content-generation work.
+
+------------------------------------------------
+Runtime and State Changes
+
+The logical map wrapper in:
+
+- SRC/runtime/knightlore.js
+
+now attaches quest metadata to logical room payloads:
+
+- questRole:
+  - none;
+  - cauldron;
+  - charm;
+- questSector;
+- questCharm;
+- meta.quest.
+
+A separate persistent sector-state map was added outside the emulator. Sector
+state currently tracks:
+
+- unvisited;
+- cauldronSeen;
+- charmSeen;
+- charmCollected;
+- completed;
+- status;
+- revision.
+
+For this first proof, visiting a logical room marks only JavaScript-side state.
+The original Spectrum game memory is not touched for quest state.
+
+The public browser API now includes:
+
+- window.KnightLoreInfinity.getQuestSector(x, y)
+- window.KnightLoreInfinity.getQuestRoomInfo(x, y)
+- window.KnightLoreInfinity.logicalMap.getQuestSectorAt(x, y)
+- window.KnightLoreInfinity.logicalMap.getQuestRoomInfoAt(x, y)
+
+This satisfies the Stage 8 exit criterion that JavaScript can ask what quest
+sector contains a coordinate such as (12, -4), what charm is required, and
+where the cauldron/charm anchors are.
+
+------------------------------------------------
+Diagnostics
+
+A new diagnostics table was added immediately below the emulator display in:
+
+- SRC/static/index.html
+
+The new section is:
+
+- Stage 8 - Dispersed Quest Sector Model
+
+It displays:
+
+- current logical coordinate;
+- current sector and local coordinate;
+- current room quest role;
+- required charm;
+- cauldron anchor coordinate;
+- charm anchor coordinate;
+- persistent sector state;
+- API probe for coordinate (12, -4).
+
+The cache/diagnostic marker was updated to:
+
+- stage8-quest-sector-20260708-1
+
+The Stage 8 table is intentionally external HTML diagnostics only. It does not
+draw anything inside the Spectrum display.
+
+------------------------------------------------
+Manual Tests
+
+The first manual sector test was in sector (0, 0).
+
+Observed table state:
+
+- current room reached: (3, 0);
+- sector: (0, 0);
+- required charm: charm 11;
+- cauldron anchor: (4, 4);
+- charm anchor: (3, 0);
+- state: cauldron seen and charm seen.
+
+The player successfully travelled:
+
+- from (0, 0) to the cauldron at (4, 4);
+- then to the charm at (3, 0);
+- without room-transition instability.
+
+A second manual test checked a negative-coordinate sector.
+
+Observed table state:
+
+- current room reached: (0, -5);
+- sector: (0, -1);
+- local coordinate: (0, 3);
+- required charm: charm 12;
+- cauldron anchor: (6, -8);
+- charm anchor: (0, -5);
+- state: cauldron seen and charm seen.
+
+This confirmed that negative-coordinate floor division/modulo still behaves
+properly in the quest-sector layer.
+
+The API probe also reported an independent sector:
+
+- coordinate (12, -4);
+- sector (1, -1);
+- required charm: charm 01;
+- cauldron anchor: (15, -6);
+- charm anchor: (8, -4).
+
+This shows multiple sector states can coexist independently.
+
+------------------------------------------------
+Verification
+
+Automated/local checks included:
+
+- JavaScript syntax checks for:
+  - SRC/runtime/knightlore-mapgen.js;
+  - SRC/runtime/knightlore.js;
+- git diff whitespace checks;
+- webpack rebuild of the JSSpeccy bundle;
+- refreshed SRC/dist/index.html from SRC/static/index.html;
+- browser smoke test at:
+  - http://127.0.0.1:8000/index.html?stage7sliding=1
+
+The browser smoke test confirmed:
+
+- the Stage 8 table rendered;
+- the table showed four rows:
+  - current;
+  - cauldron;
+  - charm;
+  - API probe;
+- getQuestSector(12, -4) returned sector (1, -1);
+- the API probe reported that a quest exists;
+- no page errors were captured.
+
+The webpack build still reports only the existing bundle-size warnings.
+
+------------------------------------------------
+Current project state at end of 2026 07 08
+
+- Stage 8 is complete as a metadata proof.
+- The infinite map now has deterministic local quest-sector metadata.
+- Cauldron/charm anchors are logical metadata only.
+- Persistent quest state lives outside the emulator.
+- Manual testing confirmed two sectors, including a negative-coordinate sector.
+- No original game source, original renderer, or original quest memory has been
+  modified.
+- The next natural step is Stage 8.1: automated/global reachability checks for
+  cauldron and charm anchors, so fairness is tested by code rather than by
+  manual wandering.

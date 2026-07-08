@@ -1,0 +1,631 @@
+Plan 2026 07 08
+================
+
+Dispersed Quest Sectors and External Dialogue Plan
+--------------------------------------------------
+
+Purpose
+-------
+
+This plan captures the next design direction after the Stage 7 sliding
+five-room cross proof.
+
+The infinite map is no longer only a technical trick for making Knight Lore
+larger. It becomes a new game structure: a dispersed world made of local
+8x8 quest sectors. Each sector can contain its own local cauldron and a nearby
+matching charm, turning the original global "find all charms for one cauldron"
+structure into many smaller local quests spread across the infinite map.
+
+The plan keeps the existing hard boundary:
+
+- do not modify the original Knight Lore source code;
+- do not add a new renderer;
+- use the original Spectrum/JSSpeccy display for the game;
+- put new world logic, persistence, diagnostics, and dialogue in JavaScript;
+- interact with the original game only through emulator memory inspection,
+  static-table rewriting, working-memory rewriting, and careful runtime pokes.
+
+
+Current Foundation
+------------------
+
+Already working:
+
+- JSSpeccy loads Knight Lore by default from the local Z80 snapshot.
+- The project has a local `_test` setup for browser testing.
+- Static room/location data can be decoded and displayed.
+- Physical room 0x88 can be forced as the practical starting room.
+- The static location table can be erased and replaced with controlled room
+  payloads.
+- A five-room physical cross can be injected:
+  - center: 0x88;
+  - west: 0x87;
+  - east: 0x89;
+  - south: 0x78;
+  - north: 0x98.
+- Stage 7 can keep the player effectively centered on physical 0x88 while
+  logical coordinates move over an infinite deterministic map.
+- The generator supports:
+  - logical coordinates `(x, y)`;
+  - 8x8 chunks;
+  - deterministic chunk connectivity;
+  - reciprocal doors;
+  - missing rooms;
+  - biome/style regions;
+  - square and original-compatible rectangular rooms;
+  - experimental wooden rectangular rooms using custom background records.
+
+Important correction:
+
+- The "do not place anything in the spawn/center clearance area" rule is only
+  strictly required for the starting room, physical/logical 0x88.
+- For every other room, the stronger rule is to keep entrance strips safe so
+  that the player is not trapped behind walls or solid blocks after crossing a
+  room boundary.
+
+
+High-Level Game Idea
+--------------------
+
+Original Knight Lore:
+
+- uses a dense 16x16 possible room grid;
+- contains one cauldron;
+- has a set of possible charm/item spawn locations;
+- asks the player to bring a sequence of charms to the cauldron.
+
+Dispersed Knight Lore Infinity:
+
+- uses the infinite logical map already provided by Stage 7;
+- divides the map into deterministic local quest sectors, probably 8x8 rooms;
+- each sector may contain:
+  - one local cauldron room;
+  - one local charm room;
+  - one required charm type;
+  - local persistent quest state;
+- the player travels through the infinite map completing many local charm
+  deliveries instead of servicing only the original cauldron.
+
+This turns the infinite-map system into a gameplay layer:
+
+- explore a sector;
+- locate its cauldron;
+- learn which charm is required;
+- find that charm somewhere in the same sector;
+- bring it back;
+- move on to another sector.
+
+The cauldron and charm belong to the same sector, but the route between them
+does not have to remain inside that sector. A valid path may temporarily leave
+the sector and come back through neighbouring sectors. This is desirable: it
+reduces pressure on each 8x8 sector to be internally complete and makes nearby
+sectors feel more naturally integrated.
+
+
+Design Vocabulary
+-----------------
+
+Logical room:
+
+- A JS-side room payload at coordinate `(x, y)`.
+- It compiles into one of the five physical Knight Lore location entries.
+- It may contain topology, style, blocks, room labels, and future quest hooks.
+
+Chunk:
+
+- The existing 8x8 procedural generation unit.
+- Used for topology and connectivity.
+
+Quest sector:
+
+- A gameplay region.
+- Recommended first version: use the same 8x8 coordinate grid as chunks.
+- Later versions may group multiple chunks, but sharing the 8x8 chunk boundary
+  keeps the first proof simple.
+
+Sector coordinate:
+
+- For room `(x, y)` and sector size 8:
+  - `sectorX = floorDiv(x, 8)`;
+  - `sectorY = floorDiv(y, 8)`;
+  - `localX = mod(x, 8)`;
+  - `localY = mod(y, 8)`.
+
+Quest anchor room:
+
+- A room that the quest layer requires to exist.
+- The first two anchor types are:
+  - cauldron anchor;
+  - charm anchor.
+
+Persistent quest state:
+
+- JS-side state keyed by sector coordinate.
+- It must survive room sliding, room cache eviction, and eventually save/load.
+
+
+Stage 8 - Dispersed Quest Sector Model
+--------------------------------------
+
+Goal:
+
+- Define deterministic per-sector quest metadata without changing gameplay
+  memory yet.
+
+Tasks:
+
+- Add a quest-sector model in JavaScript, preferably separate from the low-level
+  room injection code.
+- Use deterministic functions of `(sectorX, sectorY, worldSeed)` to pick:
+  - whether the sector has a quest;
+  - required charm type;
+  - cauldron local coordinate;
+  - charm local coordinate;
+  - optional difficulty/style modifiers.
+- Force cauldron and charm anchor rooms to exist in generated topology.
+- Store persistent state outside the emulator:
+  - `unvisited`;
+  - `cauldronSeen`;
+  - `charmSeen`;
+  - `charmCollected`;
+  - `completed`.
+- Add diagnostics showing the current room's sector metadata.
+
+Recommended first proof:
+
+- Do not inject actual charms or cauldrons into game memory yet.
+- Treat cauldron/charm placement as metadata only.
+- Show them in the HTML diagnostics table so the algorithm can be inspected.
+
+Exit criteria:
+
+- JS can ask:
+  - "what quest sector contains room `(12, -4)`?"
+  - "which charm does it require?"
+  - "where is its cauldron?"
+  - "where is its charm?"
+- The answer is deterministic and stable across page reloads.
+- The required cauldron/charm rooms are guaranteed to exist.
+
+
+Stage 8.1 - Sector Reachability Guarantee
+-----------------------------------------
+
+Goal:
+
+- Ensure every generated local quest is fair: the player can reach the cauldron
+  and the charm, even if the route temporarily leaves the owning sector.
+
+Tasks:
+
+- Extend or post-process chunk generation so quest anchors are connected to the
+  world path network.
+- Ensure at least one path exists between:
+  - the wider generated map;
+  - cauldron room;
+  - charm room.
+- Prefer an in-sector path when it falls out naturally, but do not require one.
+- Allow detours through neighbouring sectors when that produces a valid route
+  with less forced carving.
+- Keep reciprocal exits by construction.
+- Keep rectangular-room legality:
+  - selector 1 only for north/south exits;
+  - selector 2 only for east/west exits;
+  - fall back to square rooms when the exit mask is not rectangular-safe.
+
+Recommended first proof:
+
+- Generate quest anchors after the base chunk core exists.
+- If an anchor lands on a missing room, force that room to exist.
+- If an anchor is isolated, connect it to the nearest suitable existing path.
+  The nearest path may be inside the same sector or across a sector boundary.
+- If the anchor lands on an unsuitable room shape, force it to a square room.
+
+Exit criteria:
+
+- A diagnostic reachability check can confirm:
+  - cauldron anchor exists;
+  - charm anchor exists;
+  - both are in the same connected component as the traversable world.
+
+
+Stage 8.2 - Cauldron And Charm Room Dressing
+--------------------------------------------
+
+Goal:
+
+- Make quest rooms visibly identifiable using original Knight Lore room data,
+  but still avoid touching the fragile charm/cauldron mechanics at first.
+
+Tasks:
+
+- Mark cauldron and charm rooms in the logical payload.
+- Give quest rooms distinct labels and diagnostic metadata.
+- Add conservative visual dressing:
+  - cauldron room: open, calm, readable, low hazard;
+  - charm room: slightly more guarded or puzzle-like;
+  - avoid blocking entrance strips.
+- Avoid the center/spawn-clearance rule except for the true starting room
+  0x88, but still keep the actual player entry side clear.
+
+Possible visual implementations:
+
+- Phase A: diagnostics only.
+- Phase B: use safe static background/object ids if confirmed harmless.
+- Phase C: inject actual original cauldron/charm objects after memory probes.
+
+Risks:
+
+- The original cauldron and wizard records may have special-case code paths.
+- Simply duplicating original cauldron data may confuse the original quest
+  logic if we do not control related state bytes.
+- Charm objects may be coupled to original inventory/order mechanics.
+
+Exit criteria:
+
+- The player can identify a sector's cauldron/charm rooms by diagnostics and,
+  later, by safe in-game dressing.
+- No room reset, freeze, or invalid retrieve_screen decode occurs.
+
+
+Stage 8.3 - External Wizard Dialogue
+------------------------------------
+
+Goal:
+
+- Add an external dialogue layer that introduces and explains the new dispersed
+  quest mechanic without changing the original renderer.
+
+Concept:
+
+- Keep or restore the wizard in the original/start room 0x88.
+- When the player is close enough to the wizard, show HTML-side dialogue near
+  or below the emulator.
+- The dialogue is not drawn inside the Spectrum display.
+- It is an emulator-side overlay/control panel, like our diagnostics, and is
+  therefore compatible with the project boundary.
+
+First dialogue role:
+
+- The wizard explains that the curse has spread across the infinite map.
+- Each region has its own cauldron.
+- The cauldron in a region requests one specific charm.
+- The matching charm is somewhere nearby, inside the same sector.
+
+Detection options:
+
+- Conservative first proof:
+  - show the dialogue when the current logical room is the starting room.
+- Better proof:
+  - detect the wizard's active object slot and player proximity in working
+    memory.
+- Later proof:
+  - add a Talk button or key binding that only appears when the player is near
+    an NPC.
+
+State:
+
+- Dialogue state lives in JS.
+- It should not pause or mutate the game unless explicitly designed to do so.
+- It can be used for tutorial, hints, quest status, and debugging.
+
+Risks:
+
+- Wizard object layout and animation slots need careful confirmation.
+- Proximity detection may be unreliable if based on object slots before we
+  identify the active record consistently.
+- A dialogue panel must not hide critical emulator/debug controls.
+
+Exit criteria:
+
+- The player can see a wizard explanation outside the emulator display.
+- The original game continues running normally.
+- No Spectrum rendering code is modified.
+
+
+Stage 8.4 - Runtime Item/Charm Probes
+-------------------------------------
+
+Goal:
+
+- Learn how much of the original charm/item system can be safely reused.
+
+Known anchors:
+
+- live item/charm slots around 0x5C48 and 0x5C68;
+- dynamic records around 0x5C88 + n * 0x20;
+- current room id at 0x5C10;
+- room working fields around 0x5BAB..0x5BAE.
+
+Tasks:
+
+- Observe a normal original charm/item pickup if possible.
+- Record which working-memory slots change.
+- Determine whether charm identity, carried state, and current room are stored
+  in simple per-object fields or coupled to deeper game-state tables.
+- Test whether a charm can be placed in the current injected room by rewriting
+  only the active object/special slots.
+- Test whether leaving the room writes object state back into original static
+  tables, and whether we need to intercept or neutralize that writeback.
+
+Strict policy:
+
+- Do not rely on charm/cauldron pokes until we have read-only evidence.
+- Do not make multiple cauldrons active in original game logic until we know
+  what the original cauldron state machine expects.
+- Prefer JS-side quest state first, original item mechanics second.
+
+Exit criteria:
+
+- We know whether original charm objects can be virtualized safely.
+- We know whether local cauldrons can be real original cauldrons, JS-only quest
+  markers, or a hybrid.
+
+
+Stage 8.5 - First Playable Dispersed Quest
+------------------------------------------
+
+Goal:
+
+- Implement one complete local quest with the minimum safe coupling to original
+  memory.
+
+Recommended version 1:
+
+- Use JS-side quest state.
+- Use diagnostics/dialogue to identify the required charm.
+- Use a visible but safe static room marker for cauldron/charm rooms if
+  available.
+- Detect "visit charm room" as collecting the charm.
+- Detect "return to cauldron room" as completing the quest.
+
+This is intentionally not the final mechanic, but it proves:
+
+- sector quest metadata;
+- anchor-room existence;
+- reachability;
+- persistent state;
+- player-facing explanation;
+- quest completion loop.
+
+Recommended version 2:
+
+- Replace the "visit room" abstraction with actual charm object pickup if
+  Stage 8.4 proves it is safe.
+
+Exit criteria:
+
+- The player can enter a sector, learn the required charm, find the local charm
+  room, return to the local cauldron room, and complete the sector quest.
+- The completed state persists when walking away and returning.
+
+
+Stage 8.6 - Repeating Sector Quests
+-----------------------------------
+
+Goal:
+
+- Make the dispersed quest mechanic work across many sectors.
+
+Tasks:
+
+- Generate quest metadata for every eligible 8x8 sector.
+- Add completed-sector persistence.
+- Add simple progress summary:
+  - current sector;
+  - current required charm;
+  - sector quest state;
+  - total completed sectors this session.
+- Decide whether every sector has a quest or only some sectors do.
+- Add optional sector types:
+  - tutorial sector;
+  - normal charm sector;
+  - empty/exploration sector;
+  - hard sector;
+  - special authored sector.
+
+Exit criteria:
+
+- The player can complete one sector, travel to another sector, and find a new
+  deterministic local quest.
+
+
+Data Model Sketch
+-----------------
+
+Recommended quest-sector object:
+
+    {
+      sectorX: 1,
+      sectorY: -2,
+      sectorSize: 8,
+      label: "sector 1,-2",
+      quest: {
+        exists: true,
+        requiredCharm: 7,
+        cauldron: { x: 12, y: -10, localX: 4, localY: 6 },
+        charm: { x: 9, y: -15, localX: 1, localY: 1 },
+        difficulty: 2,
+        style: "wooden-wing"
+      },
+      state: {
+        cauldronSeen: false,
+        charmSeen: false,
+        charmCollected: false,
+        completed: false
+      }
+    }
+
+Recommended room payload additions:
+
+    {
+      label: "generated:wooden-wing:12,-10",
+      questRole: "cauldron",
+      questSector: { x: 1, y: -2 },
+      questCharm: 7,
+      meta: {
+        procedural: { ... },
+        quest: { ... }
+      }
+    }
+
+Important separation:
+
+- The room generator answers "what room exists here?"
+- The quest-sector layer answers "what gameplay role does this room have?"
+- The runtime injector compiles only the currently needed logical rooms into
+  the five physical Knight Lore entries.
+- The persistent state layer records what the player has done.
+
+
+Deterministic Placement Rules
+-----------------------------
+
+The first version should prefer simple, inspectable rules:
+
+- Use the existing 8x8 chunk as the quest sector.
+- Pick cauldron and charm coordinates from deterministic hash streams.
+- Reject candidate anchors if:
+  - both anchors are the same room;
+  - the room would be outside the sector;
+  - the room cannot be connected to the traversable world without excessive
+    carving;
+  - the room is the global starting room 0x88 and the placement would block
+    the spawn/center area.
+- Prefer placing cauldrons near the sector hub.
+- Prefer placing charms away from the cauldron but still in the same connected
+  component of the traversable world.
+- If deterministic candidate selection fails after N attempts, fall back to:
+  - cauldron at the hub;
+  - charm at the farthest reachable cell inside the sector, measured through
+    the traversable world graph rather than only by in-sector paths.
+
+Charm identity:
+
+- First simple rule:
+  - `requiredCharm = hash(sectorX, sectorY, worldSeed) % 14`.
+- Later:
+  - weight charm identities by region style;
+  - avoid repeating the same charm too often in neighbouring sectors;
+  - reserve some charm ids for authored special sectors.
+
+
+Diagnostics To Add
+------------------
+
+The Stage 7 diagnostics should gain a Stage 8 section showing:
+
+- current logical room `(x, y)`;
+- current sector `(sectorX, sectorY)`;
+- local coordinate inside sector;
+- sector style;
+- quest exists yes/no;
+- required charm id/name;
+- cauldron coordinate;
+- charm coordinate;
+- current room quest role:
+  - none;
+  - cauldron;
+  - charm;
+  - special;
+- quest state;
+- reachability status;
+- whether anchor rooms were forced/carved.
+
+Useful debug toggles:
+
+- show only sectors with quests;
+- force every sector to have a quest;
+- force current sector's cauldron/charm near the player;
+- mark quest complete/reset quest;
+- freeze quest seed.
+
+
+Memory And Timing Policy
+------------------------
+
+Safe now:
+
+- compute quest metadata outside the emulator;
+- show diagnostics outside the emulator;
+- alter generated room labels/styles/blocks;
+- force generated anchor rooms to exist;
+- use current Stage 7 static location injection.
+
+Potentially safe after probes:
+
+- place original static cauldron/wizard/charm-like objects in injected rooms;
+- virtualize charm object slots;
+- detect pickup/drop/carry state in live working memory;
+- patch the original cauldron state machine.
+
+High risk:
+
+- duplicating original cauldron logic without understanding global state;
+- changing original charm order variables blindly;
+- allowing update_special_objs to write virtual object state into original
+  static tables unexpectedly;
+- injecting invalid block/background records;
+- changing active room data while retrieve_screen is decoding it.
+
+Timing rule:
+
+- All static location entry rewrites must happen before retrieve_screen reads
+  the room.
+- Quest metadata can be updated at frameCompleted.
+- Active working-memory item/object pokes may need a tighter hook than
+  frameCompleted if they race the original game logic.
+
+
+Open Questions
+--------------
+
+- Can multiple cauldrons be represented as original in-game objects without
+  confusing the original quest machinery?
+- Is the cauldron object purely visual until the player interacts with it, or
+  does it participate in special logic as soon as the room loads?
+- Are charms keyed by object record, graphic id, item id, or separate state?
+- Can the original inventory/charm order be overridden cleanly, or should the
+  first dispersed quest implementation remain JS-side?
+- Should every 8x8 sector contain a quest, or should quests be sparse so that
+  exploration breathes?
+- Should the start room wizard be restored only in the origin sector, or should
+  wizard/NPC rooms appear in other authored sectors later?
+
+
+Recommended Implementation Order
+--------------------------------
+
+1. Add quest-sector metadata generation.
+2. Add diagnostics only.
+3. Force cauldron/charm anchor rooms to exist.
+4. Add reachability checks and fallback carving.
+5. Add JS-side quest state.
+6. Add starting-room wizard dialogue panel.
+7. Implement first abstract quest loop:
+   - visit charm room;
+   - return to cauldron room;
+   - mark sector complete.
+8. Probe original charm/item/cauldron memory.
+9. Replace abstract markers with real original objects only where proven safe.
+
+
+Success Definition
+------------------
+
+The stage is successful when:
+
+- the infinite map remains stable under Stage 7 sliding;
+- each generated 8x8 sector can define a deterministic local quest;
+- the cauldron and charm rooms are reachable;
+- quest progress persists outside the emulator;
+- the player can understand the new mechanic through external wizard dialogue;
+- no original source code or renderer is modified.
+
+The long-term ideal is a hybrid:
+
+- the original Knight Lore engine still renders and simulates the active room;
+- JavaScript supplies the infinite world, local quests, persistence, and
+  dialogue;
+- the player experiences a new dispersed adventure built on top of the real
+  1984 game.

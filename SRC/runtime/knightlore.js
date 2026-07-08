@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage7-full-rect-walls-20260706-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage8-quest-sector-20260708-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -631,6 +631,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             blocks: normalizeBlockRuns(definition.blocks),
             objects: cloneData(definition.objects || []),
             items: cloneData(definition.items || []),
+            questRole: definition.questRole || 'none',
+            questSector: cloneData(definition.questSector || null),
+            questCharm: cloneData(definition.questCharm || null),
             originalRoomId: definition.originalRoomId !== undefined ? Number(definition.originalRoomId) : null,
             meta: cloneData(definition.meta || {}),
         };
@@ -733,6 +736,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const authored = new Map();
         const generated = new Map();
         const persistent = new Map();
+        const questPersistent = new Map();
         const labels = new Map();
         const proceduralMap = createKnightLoreProceduralMap();
         let activeDocument = {
@@ -754,6 +758,92 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return persistent.get(room.key);
         };
 
+        const createQuestState = sector => ({
+            key: sector.key,
+            sector: {
+                x: sector.sectorX,
+                y: sector.sectorY,
+                size: sector.sectorSize,
+            },
+            unvisited: true,
+            cauldronSeen: false,
+            charmSeen: false,
+            charmCollected: false,
+            completed: false,
+            status: sector.quest && sector.quest.exists ? 'unvisited' : 'no-quest',
+            revision: 0,
+        });
+
+        const ensureQuestState = sector => {
+            if (!questPersistent.has(sector.key)) {
+                questPersistent.set(sector.key, createQuestState(sector));
+            }
+            return questPersistent.get(sector.key);
+        };
+
+        const getQuestSectorAt = (x, y) => {
+            const coord = getCoord({x, y});
+            const sector = proceduralMap.getQuestSectorAt(coord.x, coord.y);
+            return {
+                ...sector,
+                state: ensureQuestState(sector),
+            };
+        };
+
+        const getQuestRoomInfoAt = (x, y) => {
+            const coord = getCoord({x, y});
+            const info = proceduralMap.getQuestRoomInfoAt(coord.x, coord.y);
+            const sector = proceduralMap.getQuestSectorAt(coord.x, coord.y);
+            return {
+                ...info,
+                state: ensureQuestState(sector),
+            };
+        };
+
+        const attachQuestMetadata = room => {
+            const info = getQuestRoomInfoAt(room.coord.x, room.coord.y);
+            room.questRole = info.role;
+            room.questSector = cloneData(info.sector);
+            room.questCharm = info.quest.requiredCharm ? cloneData(info.quest.requiredCharm) : null;
+            room.meta = {
+                ...room.meta,
+                quest: {
+                    sector: cloneData(info.sector),
+                    role: info.role,
+                    quest: cloneData(info.quest),
+                    state: cloneData(info.state),
+                },
+            };
+            return room;
+        };
+
+        const updateQuestVisitState = room => {
+            const info = getQuestRoomInfoAt(room.coord.x, room.coord.y);
+            const state = info.state;
+            const previousStatus = state.status;
+
+            state.unvisited = false;
+            if (info.role === 'cauldron') state.cauldronSeen = true;
+            if (info.role === 'charm') state.charmSeen = true;
+
+            if (state.completed) {
+                state.status = 'completed';
+            } else if (state.charmCollected) {
+                state.status = 'charmCollected';
+            } else if (state.charmSeen) {
+                state.status = 'charmSeen';
+            } else if (state.cauldronSeen) {
+                state.status = 'cauldronSeen';
+            } else if (!info.quest.exists) {
+                state.status = 'no-quest';
+            } else {
+                state.status = 'visited';
+            }
+
+            if (state.status !== previousStatus || info.role !== 'none') state.revision++;
+            return state;
+        };
+
         const getRoomAt = (x, y) => {
             const coord = getCoord({x, y});
             const key = logicalCoordKey(coord.x, coord.y);
@@ -770,7 +860,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
             const room = normalizeLogicalRoomDefinition(definition, source);
             room.state = ensurePersistentState(room);
-            return room;
+            return attachQuestMetadata(room);
         };
 
         const loadAuthoredRooms = rooms => {
@@ -836,6 +926,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const previousAuthored = new Map(authored);
             const previousGenerated = new Map(generated);
             const previousPersistent = new Map(persistent);
+            const previousQuestPersistent = new Map(questPersistent);
             const previousLabels = new Map(labels);
             const previousDocument = activeDocument;
 
@@ -851,16 +942,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     labels.clear();
                     generated.clear();
                     persistent.clear();
+                    questPersistent.clear();
                 }
                 loadAuthoredRooms(rooms);
             } catch (err) {
                 authored.clear();
                 generated.clear();
                 persistent.clear();
+                questPersistent.clear();
                 labels.clear();
                 for (const [key, value] of previousAuthored.entries()) authored.set(key, value);
                 for (const [key, value] of previousGenerated.entries()) generated.set(key, value);
                 for (const [key, value] of previousPersistent.entries()) persistent.set(key, value);
+                for (const [key, value] of previousQuestPersistent.entries()) questPersistent.set(key, value);
                 for (const [key, value] of previousLabels.entries()) labels.set(key, value);
                 activeDocument = previousDocument;
                 throw err;
@@ -882,6 +976,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         return {
             getRoomAt,
             getRoomByLabel,
+            getQuestSectorAt,
+            getQuestRoomInfoAt,
             compileRoomAt: (x, y, physicalRoomId = KL_STAGE2.centerRoom) => (
                 compileLogicalRoomToLocationEntry(getRoomAt(x, y), physicalRoomId)
             ),
@@ -890,9 +986,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             loadMapDocument,
             getPersistentState: (x, y) => ensurePersistentState(getRoomAt(x, y)),
             markVisited: (x, y) => {
-                const state = ensurePersistentState(getRoomAt(x, y));
+                const room = getRoomAt(x, y);
+                const state = ensurePersistentState(room);
                 state.visited = true;
                 state.revision++;
+                updateQuestVisitState(room);
                 return state;
             },
             stats: () => ({
@@ -900,6 +998,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 authoredRooms: authored.size,
                 generatedRooms: generated.size,
                 persistentRooms: persistent.size,
+                questPersistentSectors: questPersistent.size,
                 labels: labels.size,
                 procedural: proceduralMap.stats(),
             }),
@@ -1134,6 +1233,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 exits: cloneData(reciprocal.room.exits),
                 backgrounds: cloneData(reciprocal.room.backgrounds),
                 blocks: cloneData(reciprocal.room.blocks),
+                questRole: reciprocal.room.questRole,
+                questSector: cloneData(reciprocal.room.questSector),
+                questCharm: cloneData(reciprocal.room.questCharm),
+                questState: reciprocal.room.meta && reciprocal.room.meta.quest
+                    ? cloneData(reciprocal.room.meta.quest.state)
+                    : null,
                 stateRevision: room.state ? room.state.revision : null,
                 entrySize: compiled.entrySize,
                 byteCount: compiled.bytes.length,
@@ -1189,6 +1294,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const tbody = document.getElementById('stage1-diagnostics-body');
         const stage7StyleTbody = document.getElementById('stage7-style-body');
         const stage7StyleStatus = document.getElementById('stage7-style-status');
+        const stage8QuestTbody = document.getElementById('stage8-quest-body');
+        const stage8QuestStatus = document.getElementById('stage8-quest-status');
         const crossTbody = document.getElementById('stage2-cross-body');
         const stage2Status = document.getElementById('stage2-status');
         const logicalTbody = document.getElementById('stage4-logical-body');
@@ -2003,6 +2110,117 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const fmtLogicalCoord = coord => `(${coord.x}, ${coord.y})`;
 
+        const formatQuestCharm = charm => (
+            charm ? `${charm.label} (#${charm.id + 1})` : '-'
+        );
+
+        const formatQuestAnchor = anchor => (
+            anchor ? `${fmtLogicalCoord(anchor)} l(${anchor.localX}, ${anchor.localY})` : '-'
+        );
+
+        const formatQuestSector = room => {
+            const sector = room.questSector;
+            if (!sector) return '-';
+            const local = sector.local ? ` l(${sector.local.x}, ${sector.local.y})` : '';
+            return `s(${sector.x}, ${sector.y})${local}`;
+        };
+
+        const formatQuestState = state => {
+            if (!state) return '-';
+            return [
+                state.status,
+                `unvisited ${state.unvisited ? 'yes' : 'no'}`,
+                `cauldron ${state.cauldronSeen ? 'seen' : 'no'}`,
+                `charm ${state.charmSeen ? 'seen' : 'no'}`,
+                `rev ${state.revision}`,
+            ].join('; ');
+        };
+
+        const getStage8CurrentCoord = () => (
+            stage7SlidingCross && stage7SlidingCross.center
+                ? stage7SlidingCross.center
+                : {x: 0, y: 0}
+        );
+
+        const renderStage8QuestTable = () => {
+            if (!stage8QuestTbody || !stage8QuestStatus) return;
+
+            const currentCoord = getStage8CurrentCoord();
+            const currentRoom = logicalMap.getRoomAt(currentCoord.x, currentCoord.y);
+            const currentSector = logicalMap.getQuestSectorAt(currentCoord.x, currentCoord.y);
+            const quest = currentSector.quest || {exists: false};
+            const anchors = quest.exists
+                ? `cauldron ${formatQuestAnchor(quest.cauldron)}; charm ${formatQuestAnchor(quest.charm)}`
+                : 'no quest anchors';
+            const currentState = currentSector.state;
+            const rows = [
+                {
+                    probe: 'current',
+                    room: currentRoom,
+                    role: currentRoom.questRole,
+                    state: currentState,
+                    notes: `${currentRoom.source}; ${currentRoom.label}`,
+                },
+            ];
+
+            if (quest.exists) {
+                rows.push(
+                    {
+                        probe: 'cauldron',
+                        room: logicalMap.getRoomAt(quest.cauldron.x, quest.cauldron.y),
+                        role: 'cauldron',
+                        state: currentState,
+                        notes: `anchor placement ${quest.placement}; difficulty ${quest.difficulty}`,
+                    },
+                    {
+                        probe: 'charm',
+                        room: logicalMap.getRoomAt(quest.charm.x, quest.charm.y),
+                        role: 'charm',
+                        state: currentState,
+                        notes: 'metadata only; no item slot or cauldron memory has been touched',
+                    }
+                );
+            }
+
+            const apiProbeRoom = logicalMap.getRoomAt(12, -4);
+            const apiProbeSector = logicalMap.getQuestSectorAt(12, -4);
+            rows.push({
+                probe: 'API probe',
+                room: apiProbeRoom,
+                role: apiProbeRoom.questRole,
+                state: apiProbeSector.state,
+                notes: 'window.KnightLoreInfinity.logicalMap.getQuestSectorAt(12, -4)',
+            });
+
+            stage8QuestStatus.textContent = [
+                `Current ${fmtLogicalCoord(currentCoord)} -> sector (${currentSector.sectorX}, ${currentSector.sectorY}).`,
+                quest.exists
+                    ? `Required ${formatQuestCharm(quest.requiredCharm)}; ${anchors}.`
+                    : 'This sector has no quest.',
+                `Persistent sector state: ${formatQuestState(currentState)}.`,
+                `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
+            ].join(' ');
+
+            stage8QuestTbody.innerHTML = rows.map(item => {
+                const room = item.room;
+                const roomQuest = room.meta && room.meta.quest ? room.meta.quest.quest : quest;
+                const charm = roomQuest && roomQuest.requiredCharm ? roomQuest.requiredCharm : null;
+                const state = item.role === 'cauldron' || item.role === 'charm' ? 'warn' : 'ok';
+                return `
+                    <tr class="state-${state}">
+                        <td>${escapeHtml(item.probe)}</td>
+                        <td>${escapeHtml(fmtLogicalCoord(room.coord))}</td>
+                        <td>${escapeHtml(formatQuestSector(room))}</td>
+                        <td>${escapeHtml(item.role || 'none')}</td>
+                        <td>${escapeHtml(formatQuestCharm(charm))}</td>
+                        <td>${escapeHtml(roomQuest && roomQuest.exists ? `cauldron ${formatQuestAnchor(roomQuest.cauldron)}; charm ${formatQuestAnchor(roomQuest.charm)}` : '-')}</td>
+                        <td>${escapeHtml(formatQuestState(item.state))}</td>
+                        <td>${escapeHtml(item.notes)}</td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
         const getStage7PhysicalRole = roomId => (
             KL_STAGE7_SLIDING_CROSS.physicalCross.find(item => item.id === roomId) || null
         );
@@ -2142,6 +2360,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         };
 
         const renderStage7SlidingRow = () => {
+            renderStage8QuestTable();
             renderStage7StyleTable();
 
             if (!stage7SlidingCross.enabled) {
@@ -2861,6 +3080,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         logicalMap,
         getLogicalRoom: logicalMap.getRoomAt,
         getLogicalRoomByLabel: logicalMap.getRoomByLabel,
+        getQuestSector: logicalMap.getQuestSectorAt,
+        getQuestRoomInfo: logicalMap.getQuestRoomInfoAt,
         compileLogicalRoom: logicalMap.compileRoom,
         loadLogicalMapDocument,
         loadLogicalMapFromUrl,

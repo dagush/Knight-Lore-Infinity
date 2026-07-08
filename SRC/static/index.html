@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>JSSpeccy v3</title>
-        <script src="jsspeccy/jsspeccy.js?v=stage7-full-rect-walls-20260706-1"></script>
+        <script src="jsspeccy/jsspeccy.js?v=stage8-quest-sector-20260708-1"></script>
         <style>
             :root {
                 color-scheme: dark;
@@ -351,6 +351,51 @@
                 width: 8%;
             }
 
+            .quest-sector-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .quest-sector-table th:nth-child(1),
+            .quest-sector-table td:nth-child(1) {
+                width: 10%;
+            }
+
+            .quest-sector-table th:nth-child(2),
+            .quest-sector-table td:nth-child(2) {
+                width: 9%;
+            }
+
+            .quest-sector-table th:nth-child(3),
+            .quest-sector-table td:nth-child(3) {
+                width: 12%;
+            }
+
+            .quest-sector-table th:nth-child(4),
+            .quest-sector-table td:nth-child(4) {
+                width: 9%;
+            }
+
+            .quest-sector-table th:nth-child(5),
+            .quest-sector-table td:nth-child(5) {
+                width: 12%;
+            }
+
+            .quest-sector-table th:nth-child(6),
+            .quest-sector-table td:nth-child(6) {
+                width: 18%;
+            }
+
+            .quest-sector-table th:nth-child(7),
+            .quest-sector-table td:nth-child(7) {
+                width: 12%;
+            }
+
+            .quest-sector-table th:nth-child(8),
+            .quest-sector-table td:nth-child(8) {
+                width: 18%;
+            }
+
             .wood-reference-table {
                 table-layout: fixed;
                 font-size: 12px;
@@ -398,9 +443,30 @@
     <body onload="window.KnightLoreInfinity.start()">
         <main class="page-shell">
             <div id="jsspeccy"></div>
+            <section id="knight-lore-stage8-quest-diagnostics" class="diagnostics">
+                <h1>Stage 8 - Dispersed Quest Sector Model</h1>
+                <p id="stage8-quest-status" class="stage-status">Diagnostics build: stage8-quest-sector-20260708-1. Waiting for quest-sector metadata.</p>
+                <table class="diagnostics-table quest-sector-table">
+                    <thead>
+                        <tr>
+                            <th>Probe</th>
+                            <th>Coord</th>
+                            <th>Sector/Local</th>
+                            <th>Role</th>
+                            <th>Charm</th>
+                            <th>Anchors</th>
+                            <th>State</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage8-quest-body">
+                        <tr class="state-muted"><td colspan="8">Waiting for runtime.</td></tr>
+                    </tbody>
+                </table>
+            </section>
             <section id="knight-lore-wood-wall-reference" class="diagnostics">
                 <h1>Wooden Square Wall Reference</h1>
-                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: stage7-full-rect-walls-20260706-1.</p>
+                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: stage8-quest-sector-20260708-1.</p>
                 <div class="wood-tuning-controls">
                     <label for="stage7-west-filler-x-slider">Selector 1 west wall X</label>
                     <input id="stage7-west-filler-x-slider" type="range" min="0" max="191" step="1" value="95">
@@ -464,7 +530,7 @@
             </section>
             <section id="knight-lore-stage7-style-diagnostics" class="diagnostics">
                 <h1>Stage 7 - Current Generated Cross</h1>
-                <p id="stage7-style-status" class="stage-status">Diagnostics build: stage7-full-rect-walls-20260706-1. Waiting for the Stage 7 cross.</p>
+                <p id="stage7-style-status" class="stage-status">Diagnostics build: stage8-quest-sector-20260708-1. Waiting for the Stage 7 cross.</p>
                 <table class="diagnostics-table style-cross-table">
                     <thead>
                         <tr>
@@ -498,7 +564,7 @@
             </section>
             <section id="knight-lore-stage2-diagnostics" class="diagnostics">
                 <h1>Stage 2 - Physical 5-Room Cross</h1>
-                <p id="stage2-status" class="stage-status">Diagnostics build: stage7-full-rect-walls-20260706-1. Waiting for the first Stage 2 sample.</p>
+                <p id="stage2-status" class="stage-status">Diagnostics build: stage8-quest-sector-20260708-1. Waiting for the first Stage 2 sample.</p>
                 <table class="diagnostics-table cross-table">
                     <thead>
                         <tr>
@@ -517,7 +583,7 @@
             </section>
             <section id="knight-lore-stage4-diagnostics" class="diagnostics">
                 <h1>Stage 4.5 - Logical Map JSON Authoring</h1>
-                <p id="stage4-status" class="stage-status">Diagnostics build: stage7-full-rect-walls-20260706-1. Waiting for the logical map probe.</p>
+                <p id="stage4-status" class="stage-status">Diagnostics build: stage8-quest-sector-20260708-1. Waiting for the logical map probe.</p>
                 <table class="diagnostics-table logical-map-table">
                     <thead>
                         <tr>

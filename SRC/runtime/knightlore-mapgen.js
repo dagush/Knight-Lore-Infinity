@@ -15,6 +15,7 @@ const DEFAULT_OPTIONS = {
     styleRegionChunks: 2,
     branchCorridorAttempts: 64,
     branchCorridorMaxLength: 5,
+    questSectorQuestPercent: 100,
 };
 
 const BIOMES = [
@@ -67,6 +68,10 @@ const BIOMES = [
 
 const DEFAULT_BIOME = BIOMES[0];
 const TOTAL_BIOME_WEIGHT = BIOMES.reduce((total, biome) => total + biome.weight, 0);
+const QUEST_CHARM_TYPES = Array.from({length: 14}, (_, index) => ({
+    id: index,
+    label: `charm ${String(index + 1).padStart(2, '0')}`,
+}));
 
 const floorDiv = (value, divisor) => Math.floor(value / divisor);
 
@@ -157,6 +162,12 @@ const chooseBlockCount = (biome, hash) => {
     if (max <= min) return min;
     return min + (hash % (max - min + 1));
 };
+
+const cloneData = value => JSON.parse(JSON.stringify(value));
+
+const manhattanDistance = (a, b) => (
+    Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+);
 
 export function createKnightLoreProceduralMap(options = {}) {
     const config = {
@@ -259,6 +270,130 @@ export function createKnightLoreProceduralMap(options = {}) {
         ), 0)
     );
 
+    const collectExistingCells = cells => {
+        const result = [];
+        for (let y = 0; y < chunkSize; y++) {
+            for (let x = 0; x < chunkSize; x++) {
+                if (cells[y][x]) result.push({x, y});
+            }
+        }
+        return result;
+    };
+
+    const chooseQuestAnchorCell = (cells, chunkX, chunkY, reference, salt, preferFar) => {
+        const existing = collectExistingCells(cells);
+        if (!existing.length) return {x: reference.x, y: reference.y};
+
+        const ranked = existing
+            .map(cell => ({
+                ...cell,
+                distance: manhattanDistance(cell, reference),
+                tie: hashInts(config.worldSeed, chunkX, chunkY, cell.x, cell.y, salt),
+            }))
+            .sort((a, b) => {
+                const distanceCompare = preferFar
+                    ? b.distance - a.distance
+                    : a.distance - b.distance;
+                return distanceCompare || a.tie - b.tie;
+            });
+        const poolSize = Math.max(1, Math.ceil(ranked.length / 3));
+        const pool = ranked.slice(0, poolSize);
+        const hash = hashInts(config.worldSeed, chunkX, chunkY, salt, pool.length);
+        const chosen = pool[hash % pool.length];
+        return {x: chosen.x, y: chosen.y};
+    };
+
+    const toGlobalQuestAnchor = (chunkX, chunkY, local) => ({
+        x: chunkX * chunkSize + local.x,
+        y: chunkY * chunkSize + local.y,
+        localX: local.x,
+        localY: local.y,
+    });
+
+    const createQuestSector = (chunkX, chunkY, cells, hub, biome) => {
+        const questThreshold = Math.round(clampPercent(config.questSectorQuestPercent) * 100);
+        const questRoll = hashInts(config.worldSeed, chunkX, chunkY, 0x9e57) % 10000;
+        const hasQuest = questRoll < questThreshold;
+        const sector = {
+            key: coordKey(chunkX, chunkY),
+            sectorX: chunkX,
+            sectorY: chunkY,
+            sectorSize: chunkSize,
+            origin: {
+                x: chunkX * chunkSize,
+                y: chunkY * chunkSize,
+            },
+            style: {
+                biome: biome.id,
+                title: biome.title,
+                region: biome.region,
+            },
+            quest: {
+                exists: hasQuest,
+            },
+        };
+
+        if (!hasQuest) return sector;
+
+        const requiredCharm = chooseArrayValue(
+            QUEST_CHARM_TYPES,
+            hashInts(config.worldSeed, chunkX, chunkY, 0xc4a1)
+        );
+        const cauldronLocal = chooseQuestAnchorCell(cells, chunkX, chunkY, hub, 0xca11, false);
+        const charmReference = cauldronLocal;
+        let charmLocal = chooseQuestAnchorCell(cells, chunkX, chunkY, charmReference, 0xc4a2, true);
+
+        if (charmLocal.x === cauldronLocal.x && charmLocal.y === cauldronLocal.y) {
+            const alternatives = collectExistingCells(cells).filter(cell => (
+                cell.x !== cauldronLocal.x || cell.y !== cauldronLocal.y
+            ));
+            if (alternatives.length) {
+                const hash = hashInts(config.worldSeed, chunkX, chunkY, 0xc4a3);
+                charmLocal = alternatives[hash % alternatives.length];
+            }
+        }
+
+        mark(cells, cauldronLocal.x, cauldronLocal.y);
+        mark(cells, charmLocal.x, charmLocal.y);
+
+        sector.quest = {
+            exists: true,
+            requiredCharm: cloneData(requiredCharm),
+            cauldron: toGlobalQuestAnchor(chunkX, chunkY, cauldronLocal),
+            charm: toGlobalQuestAnchor(chunkX, chunkY, charmLocal),
+            difficulty: 1 + (hashInts(config.worldSeed, chunkX, chunkY, 0xd1ff) % 4),
+            placement: 'existing-connected-cells',
+        };
+
+        return sector;
+    };
+
+    const getQuestRoleForRoom = (questSector, x, y) => {
+        const quest = questSector && questSector.quest;
+        if (!quest || !quest.exists) return 'none';
+        if (quest.cauldron.x === x && quest.cauldron.y === y) return 'cauldron';
+        if (quest.charm.x === x && quest.charm.y === y) return 'charm';
+        return 'none';
+    };
+
+    const getRoomQuestInfo = (questSector, x, y) => {
+        const local = toChunkCoord(x, y);
+        const role = getQuestRoleForRoom(questSector, x, y);
+        return {
+            sector: {
+                key: questSector.key,
+                x: questSector.sectorX,
+                y: questSector.sectorY,
+                size: questSector.sectorSize,
+                origin: cloneData(questSector.origin),
+                local: {x: local.localX, y: local.localY},
+                style: cloneData(questSector.style),
+            },
+            role,
+            quest: cloneData(questSector.quest),
+        };
+    };
+
     const canExtendCorridor = (cells, x, y, direction) => {
         if (!isInsideChunk(x, y) || cells[y][x]) return false;
         const entryDirection = OPPOSITE_DIRECTIONS[direction];
@@ -359,6 +494,8 @@ export function createKnightLoreProceduralMap(options = {}) {
         }
         addForcedRooms(cells, chunkX, chunkY);
         addCorridorBranches(cells, chunkX, chunkY);
+        const biome = chooseBiome(chunkX, chunkY);
+        const questSector = createQuestSector(chunkX, chunkY, cells, hub, biome);
 
         return {
             chunkX,
@@ -366,6 +503,7 @@ export function createKnightLoreProceduralMap(options = {}) {
             cells,
             connectors,
             hub,
+            questSector,
         };
     };
 
@@ -396,12 +534,13 @@ export function createKnightLoreProceduralMap(options = {}) {
     const createBlockPositions = (x, y, count, salt = 0x100) => {
         const positions = [];
         const seen = new Set();
+        const protectCentralStartCells = x === 0 && y === 0;
         for (let attempt = 0; positions.length < count && attempt < count * 8 + 16; attempt++) {
             const hash = hashInts(config.worldSeed, x, y, attempt, salt);
             const px = 2 + (hash & 0x03);
             const py = 2 + ((hash >>> 3) & 0x03);
             const key = coordKey(px, py);
-            if (seen.has(key) || isCentralFloorCell(px, py)) continue;
+            if (seen.has(key) || (protectCentralStartCells && isCentralFloorCell(px, py))) continue;
             seen.add(key);
             positions.push({x: px, y: py, z: 0});
         }
@@ -421,7 +560,9 @@ export function createKnightLoreProceduralMap(options = {}) {
 
     const getRoomDefinition = (x, y) => {
         const coord = toChunkCoord(x, y);
+        const chunk = getChunk(coord.chunkX, coord.chunkY);
         const exists = roomExists(x, y);
+        const questInfo = getRoomQuestInfo(chunk.questSector, x, y);
         const biome = isForcedGlobalRoom(x, y)
             ? {
                 ...DEFAULT_BIOME,
@@ -446,6 +587,7 @@ export function createKnightLoreProceduralMap(options = {}) {
                 },
             },
         };
+        commonMeta.quest = questInfo;
 
         if (!exists) {
             return {
@@ -459,6 +601,9 @@ export function createKnightLoreProceduralMap(options = {}) {
                 blocks: [],
                 objects: [],
                 items: [],
+                questRole: questInfo.role,
+                questSector: questInfo.sector,
+                questCharm: questInfo.quest.requiredCharm || null,
                 meta: commonMeta,
             };
         }
@@ -481,12 +626,24 @@ export function createKnightLoreProceduralMap(options = {}) {
             blocks,
             objects: [],
             items: [],
+            questRole: questInfo.role,
+            questSector: questInfo.sector,
+            questCharm: questInfo.quest.requiredCharm || null,
             meta: commonMeta,
         };
     };
 
     return {
         getRoomDefinition,
+        getQuestSectorAt: (x, y) => {
+            const coord = toChunkCoord(x, y);
+            return cloneData(getChunk(coord.chunkX, coord.chunkY).questSector);
+        },
+        getQuestRoomInfoAt: (x, y) => {
+            const coord = toChunkCoord(x, y);
+            const chunk = getChunk(coord.chunkX, coord.chunkY);
+            return cloneData(getRoomQuestInfo(chunk.questSector, x, y));
+        },
         roomExists,
         getRoomExits,
         getChunk: (chunkX, chunkY) => getChunk(chunkX, chunkY),
@@ -501,6 +658,8 @@ export function createKnightLoreProceduralMap(options = {}) {
             generatedBiomeRegions: biomes.size,
             branchCorridorAttempts: config.branchCorridorAttempts,
             branchCorridorMaxLength: config.branchCorridorMaxLength,
+            questSectorQuestPercent: config.questSectorQuestPercent,
+            questCharmTypes: QUEST_CHARM_TYPES.length,
             generatedChunks: chunks.size,
         }),
     };
