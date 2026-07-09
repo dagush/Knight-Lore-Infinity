@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage8-quest-sector-20260708-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage8-reachability-20260709-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -800,8 +800,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             };
         };
 
+        const getQuestReachabilityAt = (x, y, options = {}) => {
+            const coord = getCoord({x, y});
+            return proceduralMap.getQuestReachabilityAt(coord.x, coord.y, options);
+        };
+
         const attachQuestMetadata = room => {
             const info = getQuestRoomInfoAt(room.coord.x, room.coord.y);
+            const reachability = getQuestReachabilityAt(room.coord.x, room.coord.y);
             room.questRole = info.role;
             room.questSector = cloneData(info.sector);
             room.questCharm = info.quest.requiredCharm ? cloneData(info.quest.requiredCharm) : null;
@@ -812,6 +818,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     role: info.role,
                     quest: cloneData(info.quest),
                     state: cloneData(info.state),
+                    reachability: cloneData(reachability),
+                    charmPolicy: 'Charm type is global; the local charm anchor is a suggested source, not an enforced sector-bound item.',
                 },
             };
             return room;
@@ -978,6 +986,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             getRoomByLabel,
             getQuestSectorAt,
             getQuestRoomInfoAt,
+            getQuestReachabilityAt,
             compileRoomAt: (x, y, physicalRoomId = KL_STAGE2.centerRoom) => (
                 compileLogicalRoomToLocationEntry(getRoomAt(x, y), physicalRoomId)
             ),
@@ -1238,6 +1247,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 questCharm: cloneData(reciprocal.room.questCharm),
                 questState: reciprocal.room.meta && reciprocal.room.meta.quest
                     ? cloneData(reciprocal.room.meta.quest.state)
+                    : null,
+                questReachability: reciprocal.room.meta && reciprocal.room.meta.quest
+                    ? cloneData(reciprocal.room.meta.quest.reachability)
                     : null,
                 stateRevision: room.state ? room.state.revision : null,
                 entrySize: compiled.entrySize,
@@ -2136,6 +2148,15 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             ].join('; ');
         };
 
+        const formatQuestReachability = reachability => {
+            if (!reachability || reachability.reachable === null) return '-';
+            const anchorState = `anchors ${reachability.cauldronExists ? 'C' : '-'}${reachability.charmExists ? 'H' : '-'}`;
+            const path = reachability.reachable
+                ? `path ${reachability.pathLength}`
+                : 'no path';
+            return `${reachability.reachable ? 'OK' : 'BAD'}; ${anchorState}; ${path}; searched ${reachability.searchedRooms}; margin ${reachability.marginChunks} chunk(s)`;
+        };
+
         const getStage8CurrentCoord = () => (
             stage7SlidingCross && stage7SlidingCross.center
                 ? stage7SlidingCross.center
@@ -2148,6 +2169,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const currentCoord = getStage8CurrentCoord();
             const currentRoom = logicalMap.getRoomAt(currentCoord.x, currentCoord.y);
             const currentSector = logicalMap.getQuestSectorAt(currentCoord.x, currentCoord.y);
+            const currentReachability = logicalMap.getQuestReachabilityAt(currentCoord.x, currentCoord.y);
             const quest = currentSector.quest || {exists: false};
             const anchors = quest.exists
                 ? `cauldron ${formatQuestAnchor(quest.cauldron)}; charm ${formatQuestAnchor(quest.charm)}`
@@ -2159,6 +2181,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     room: currentRoom,
                     role: currentRoom.questRole,
                     state: currentState,
+                    reachability: currentReachability,
                     notes: `${currentRoom.source}; ${currentRoom.label}`,
                 },
             ];
@@ -2170,6 +2193,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         room: logicalMap.getRoomAt(quest.cauldron.x, quest.cauldron.y),
                         role: 'cauldron',
                         state: currentState,
+                        reachability: currentReachability,
                         notes: `anchor placement ${quest.placement}; difficulty ${quest.difficulty}`,
                     },
                     {
@@ -2177,18 +2201,21 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         room: logicalMap.getRoomAt(quest.charm.x, quest.charm.y),
                         role: 'charm',
                         state: currentState,
-                        notes: 'metadata only; no item slot or cauldron memory has been touched',
+                        reachability: currentReachability,
+                        notes: 'metadata only; charm type is global, not sector-bound',
                     }
                 );
             }
 
             const apiProbeRoom = logicalMap.getRoomAt(12, -4);
             const apiProbeSector = logicalMap.getQuestSectorAt(12, -4);
+            const apiProbeReachability = logicalMap.getQuestReachabilityAt(12, -4);
             rows.push({
                 probe: 'API probe',
                 room: apiProbeRoom,
                 role: apiProbeRoom.questRole,
                 state: apiProbeSector.state,
+                reachability: apiProbeReachability,
                 notes: 'window.KnightLoreInfinity.logicalMap.getQuestSectorAt(12, -4)',
             });
 
@@ -2198,6 +2225,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     ? `Required ${formatQuestCharm(quest.requiredCharm)}; ${anchors}.`
                     : 'This sector has no quest.',
                 `Persistent sector state: ${formatQuestState(currentState)}.`,
+                `Reachability: ${formatQuestReachability(currentReachability)}.`,
                 `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
             ].join(' ');
 
@@ -2205,7 +2233,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 const room = item.room;
                 const roomQuest = room.meta && room.meta.quest ? room.meta.quest.quest : quest;
                 const charm = roomQuest && roomQuest.requiredCharm ? roomQuest.requiredCharm : null;
-                const state = item.role === 'cauldron' || item.role === 'charm' ? 'warn' : 'ok';
+                const state = item.reachability && item.reachability.reachable === false
+                    ? 'bad'
+                    : (item.role === 'cauldron' || item.role === 'charm' ? 'warn' : 'ok');
                 return `
                     <tr class="state-${state}">
                         <td>${escapeHtml(item.probe)}</td>
@@ -2215,6 +2245,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         <td>${escapeHtml(formatQuestCharm(charm))}</td>
                         <td>${escapeHtml(roomQuest && roomQuest.exists ? `cauldron ${formatQuestAnchor(roomQuest.cauldron)}; charm ${formatQuestAnchor(roomQuest.charm)}` : '-')}</td>
                         <td>${escapeHtml(formatQuestState(item.state))}</td>
+                        <td>${escapeHtml(formatQuestReachability(item.reachability))}</td>
                         <td>${escapeHtml(item.notes)}</td>
                     </tr>
                 `;
@@ -3082,6 +3113,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         getLogicalRoomByLabel: logicalMap.getRoomByLabel,
         getQuestSector: logicalMap.getQuestSectorAt,
         getQuestRoomInfo: logicalMap.getQuestRoomInfoAt,
+        getQuestReachability: logicalMap.getQuestReachabilityAt,
         compileLogicalRoom: logicalMap.compileRoom,
         loadLogicalMapDocument,
         loadLogicalMapFromUrl,

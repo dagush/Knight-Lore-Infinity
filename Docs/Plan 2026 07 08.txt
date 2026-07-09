@@ -101,6 +101,11 @@ the sector and come back through neighbouring sectors. This is desirable: it
 reduces pressure on each 8x8 sector to be internally complete and makes nearby
 sectors feel more naturally integrated.
 
+The charm type itself is global. If the player already carries the charm type
+requested by a cauldron, that charm should be usable even if it was collected
+in another sector. The local charm anchor is therefore a suggested nearby
+source, not an enforced sector-bound item.
+
 
 Design Vocabulary
 -----------------
@@ -227,6 +232,17 @@ Exit criteria:
   - cauldron anchor exists;
   - charm anchor exists;
   - both are in the same connected component as the traversable world.
+- First implementation note:
+  - use a bounded world-graph search around the sector anchors;
+  - cache the result per sector;
+  - report anchor existence, path length, visited/searched rooms, and search
+    margin in diagnostics.
+- Honesty note:
+  - this is a practical diagnostic over bounded generated regions, supported by
+    the chunk-connector invariant, not a formal mathematical proof over the
+    infinite plane;
+  - manual testing and sampled-sector scans can make reachability failures very
+    unlikely, but cannot prove them impossible.
 
 
 Stage 8.2 - Cauldron And Charm Room Dressing
@@ -378,6 +394,9 @@ Recommended version 1:
   available.
 - Detect "visit charm room" as collecting the charm.
 - Detect "return to cauldron room" as completing the quest.
+- Do not require the collected charm to come from the same sector as the
+  cauldron. Sector-local charm rooms are a fair local source, but charm
+  identity is global.
 
 This is intentionally not the final mechanic, but it proves:
 

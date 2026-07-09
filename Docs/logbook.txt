@@ -1552,3 +1552,195 @@ Current project state at end of 2026 07 08
 - The next natural step is Stage 8.1: automated/global reachability checks for
   cauldron and charm anchors, so fairness is tested by code rather than by
   manual wandering.
+
+
++============================================================+
+| 2026 07 09 - Stage 8.1 Reachability Diagnostics            |
++============================================================+
+
+2026 07 09
+
+Stage 8.1 added an explicit reachability diagnostic for the dispersed quest
+sector model.
+
+The important design clarification today was about charms:
+
+- a charm type is global;
+- the local sector charm is a nearby fair source;
+- a cauldron requesting that charm type should accept it even if the player
+  collected it in another sector;
+- the generator must therefore not enforce "same-sector charm only" as a rule.
+
+This keeps the quest model closer to the spirit of Knight Lore: the player can
+make inefficient or surprising routing choices, but the game should not forbid
+them merely because they cross sector boundaries.
+
+------------------------------------------------
+Reachability Implementation
+
+The procedural generator now exposes:
+
+- getQuestReachabilityAt(x, y)
+
+The reachability check:
+
+- finds the quest sector containing the queried coordinate;
+- confirms that the cauldron anchor room exists;
+- confirms that the charm anchor room exists;
+- runs a bounded breadth-first search over the generated room graph;
+- reports whether the cauldron and charm anchors are in the same traversable
+  component inside the bounded search area.
+
+The search uses the same room-existence graph that normal generated exits use.
+If room A exists next to room B, the generated exit overlay can expose the
+corresponding reciprocal doorway.
+
+The default search margin is:
+
+- questReachabilityMarginChunks: 2
+
+The diagnostic reports:
+
+- anchor existence;
+- reachable yes/no;
+- path length;
+- visited rooms;
+- searched rooms;
+- bounded search margin;
+- a small path sample for API inspection.
+
+------------------------------------------------
+Diagnostics and API
+
+The diagnostics page was updated from:
+
+- Stage 8 - Dispersed Quest Sector Model
+
+to:
+
+- Stage 8.1 - Sector Reachability Guarantee
+
+The table now includes a "Reach" column. A healthy sector reports values like:
+
+    OK; anchors CH; path 7; searched 39; margin 2 chunk(s)
+
+Where:
+
+- C means the cauldron anchor exists;
+- H means the charm anchor exists;
+- path is the cauldron-to-charm path length;
+- searched is the number of graph nodes expanded by the bounded BFS.
+
+The public browser API now includes:
+
+- window.KnightLoreInfinity.getQuestReachability(x, y)
+- window.KnightLoreInfinity.logicalMap.getQuestReachabilityAt(x, y)
+
+The cache/diagnostic marker was updated to:
+
+- stage8-reachability-20260709-1
+
+------------------------------------------------
+Verification
+
+Automated checks:
+
+- JavaScript syntax checks passed for:
+  - SRC/runtime/knightlore-mapgen.js;
+  - SRC/runtime/knightlore.js;
+- git diff whitespace checks passed;
+- webpack rebuild passed with only the existing bundle-size warnings;
+- browser smoke test passed at:
+  - http://127.0.0.1:8000/index.html?stage7sliding=1
+
+The browser smoke test confirmed:
+
+- the Stage 8.1 table rendered;
+- the new Reach column was present;
+- the current sector reported reachability OK;
+- getQuestReachability(12, -4) reported:
+  - cauldron exists;
+  - charm exists;
+  - reachable true;
+  - path length 11.
+
+A wider generator scan checked 81 sectors:
+
+- sector range: (-4, -4) through (4, 4);
+- failures found: 0;
+- maximum observed cauldron/charm path length: 13;
+- maximum observed visited rooms in a reachability check: 159.
+
+Manual testing also crossed several sectors without observing a reachability
+failure.
+
+------------------------------------------------
+Important Honesty Note
+
+The current result is a strong practical guarantee, not a formal mathematical
+proof over the infinite map.
+
+Why confidence is high:
+
+- every chunk carves all four edge connectors to its hub;
+- neighbouring chunks derive shared edge connector positions from the same
+  deterministic seeds;
+- quest anchors are chosen from existing generated cells and marked as existing;
+- the reachability check uses the same generated room graph as normal exits;
+- automated sector sampling and manual exploration found no failures.
+
+What is not proven:
+
+- no finite scan, whether 81 sectors or one million sectors, can prove by
+  itself that an infinite deterministic map has no possible reachability
+  failure;
+- a full proof would require mathematical reasoning about all possible chunk
+  and neighbour combinations, which is outside the goals of this project.
+
+Therefore the correct project statement is:
+
+- reachability failures are very unlikely under the current generator rules;
+- the active sector can be checked directly by diagnostics;
+- the implementation is sufficient for the project stage, but it is not a
+  theorem about the infinite plane.
+
+------------------------------------------------
+Files Updated
+
+- SRC/runtime/knightlore-mapgen.js
+  - bounded cached quest reachability search;
+  - getQuestReachabilityAt API;
+  - reachability stats.
+
+- SRC/runtime/knightlore.js
+  - logical-map wrapper for reachability;
+  - Stage 8.1 diagnostics formatting;
+  - public browser API;
+  - global-charm policy note in quest metadata.
+
+- SRC/static/index.html
+  - Stage 8.1 title;
+  - Reach column;
+  - updated cache marker.
+
+- Docs/Plan 2026 07 08.txt
+  - global-charm clarification;
+  - bounded diagnostic/non-proof caveat.
+
+- Docs/map-generation-algorithm.txt
+  - quest-sector layer documentation;
+  - reachability diagnostic documentation;
+  - empirical confidence and non-proof warning.
+
+------------------------------------------------
+Current project state at end of 2026 07 09
+
+- Stage 8.1 is complete as a practical reachability diagnostic.
+- Quest-sector anchor rooms are checked for existence and bounded
+  traversability.
+- The player is not forced to use the charm from the same sector as the
+  cauldron.
+- The system remains JS-side only: no original source, renderer, item slots, or
+  cauldron logic have been modified.
+- The next natural stage is visual/semantic dressing of cauldron and charm
+  rooms, still conservatively and without touching original item mechanics.

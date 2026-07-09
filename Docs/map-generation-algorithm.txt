@@ -55,6 +55,8 @@ Current defaults:
     styleRegionChunks: 2
     branchCorridorAttempts: 64
     branchCorridorMaxLength: 5
+    questSectorQuestPercent: 100
+    questReachabilityMarginChunks: 2
 
 The density target was chosen from the original game:
 
@@ -130,6 +132,81 @@ The branch algorithm repeatedly:
 
 This preserves more one-cell-wide corridors, which produces a map closer to
 Knight Lore's original mix of corridors, junctions, and missing cells.
+
+
+Quest Sector Layer
+------------------
+
+Stage 8 adds deterministic quest-sector metadata on top of the chunk topology.
+The first version uses the same 8x8 grid as chunk generation.
+
+Each generated sector currently has:
+
+- one cauldron anchor room;
+- one charm anchor room;
+- one required charm type from 14 abstract charm ids;
+- difficulty metadata;
+- style metadata;
+- JavaScript-side persistent quest state.
+
+The quest-sector API lives on the procedural map:
+
+    getQuestSectorAt(x, y)
+    getQuestRoomInfoAt(x, y)
+    getQuestReachabilityAt(x, y)
+
+The cauldron and charm anchors belong to the same sector, but the route between
+them is allowed to leave the sector and re-enter through neighbouring sectors.
+This keeps the sectors integrated into the wider world instead of forcing every
+8x8 sector to be internally self-contained.
+
+Charm identity is global. If a player already has the required charm type from
+another sector, that charm should be usable at the current sector's cauldron.
+The local charm anchor is a nearby fair source, not an enforced sector-bound
+item.
+
+Anchor placement:
+
+- cauldrons are biased toward the existing chunk hub;
+- charms are biased farther away from the cauldron;
+- anchors are chosen from existing generated cells when possible;
+- anchor cells are marked as existing so metadata cannot point at a missing
+  generated room.
+
+Stage 8.1 adds a cached reachability diagnostic. It runs a bounded breadth-first
+search over the same generated room graph used by normal exits and reports:
+
+- whether the cauldron anchor exists;
+- whether the charm anchor exists;
+- whether both anchors are in the same bounded traversable component;
+- path length;
+- visited/searched room counts;
+- search bounds and margin.
+
+The default margin is:
+
+    questReachabilityMarginChunks: 2
+
+The diagnostic is a practical proof around the current sector, not a full
+mathematical proof over the infinite plane. The generator's global connectivity
+assumption remains the chunk invariant: each chunk carves all four edge
+connectors to its hub, and neighbouring chunks derive shared connector
+positions from the same edge seed.
+
+Current confidence level:
+
+- the implementation checks reachability by running the same graph search over
+  generated room existence that normal exits use;
+- an 81-sector scan, covering sectors from (-4, -4) to (4, 4), found zero
+  cauldron/charm reachability failures;
+- manual play also crossed several sectors without observing a failure.
+
+This makes a reachability failure very unlikely under the current generator
+rules, but it is still not a formal proof for the infinite map. A full proof
+would need to reason mathematically about every possible chunk and neighbour
+combination, which is outside the current project goals. The runtime
+diagnostic remains useful because it checks the sector the player is actually
+in.
 
 
 Biome / Style Layer

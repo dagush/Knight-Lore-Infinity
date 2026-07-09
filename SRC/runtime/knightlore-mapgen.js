@@ -16,6 +16,7 @@ const DEFAULT_OPTIONS = {
     branchCorridorAttempts: 64,
     branchCorridorMaxLength: 5,
     questSectorQuestPercent: 100,
+    questReachabilityMarginChunks: 2,
 };
 
 const BIOMES = [
@@ -177,8 +178,13 @@ export function createKnightLoreProceduralMap(options = {}) {
     const chunkSize = config.chunkSize;
     const interiorSpan = Math.max(1, chunkSize - 2);
     const styleRegionChunks = positiveIntegerOr(config.styleRegionChunks, DEFAULT_OPTIONS.styleRegionChunks);
+    const questReachabilityMarginChunks = positiveIntegerOr(
+        config.questReachabilityMarginChunks,
+        DEFAULT_OPTIONS.questReachabilityMarginChunks
+    );
     const chunks = new Map();
     const biomes = new Map();
+    const questReachability = new Map();
 
     const chunkKey = (chunkX, chunkY) => `${chunkX},${chunkY}`;
 
@@ -392,6 +398,182 @@ export function createKnightLoreProceduralMap(options = {}) {
             role,
             quest: cloneData(questSector.quest),
         };
+    };
+
+    const makeReachabilityBounds = (from, to, marginRooms) => ({
+        minX: Math.min(from.x, to.x) - marginRooms,
+        maxX: Math.max(from.x, to.x) + marginRooms,
+        minY: Math.min(from.y, to.y) - marginRooms,
+        maxY: Math.max(from.y, to.y) + marginRooms,
+    });
+
+    const coordInBounds = (coord, bounds) => (
+        coord.x >= bounds.minX &&
+        coord.x <= bounds.maxX &&
+        coord.y >= bounds.minY &&
+        coord.y <= bounds.maxY
+    );
+
+    const rebuildPath = (parents, endKey) => {
+        const path = [];
+        let key = endKey;
+        while (key) {
+            const [x, y] = key.split(',').map(Number);
+            path.push({x, y});
+            key = parents.get(key);
+        }
+        path.reverse();
+        return path;
+    };
+
+    const findReachablePath = (from, to, marginRooms) => {
+        const bounds = makeReachabilityBounds(from, to, marginRooms);
+        const start = {x: from.x, y: from.y};
+        const goal = {x: to.x, y: to.y};
+        const startKey = coordKey(start.x, start.y);
+        const goalKey = coordKey(goal.x, goal.y);
+
+        if (!coordInBounds(start, bounds) || !coordInBounds(goal, bounds)) {
+            return {
+                reachable: false,
+                path: [],
+                pathLength: null,
+                visitedRooms: 0,
+                searchedRooms: 0,
+                bounds,
+                reason: 'anchor outside search bounds',
+            };
+        }
+
+        if (!roomExists(start.x, start.y) || !roomExists(goal.x, goal.y)) {
+            return {
+                reachable: false,
+                path: [],
+                pathLength: null,
+                visitedRooms: 0,
+                searchedRooms: 0,
+                bounds,
+                reason: 'missing anchor room',
+            };
+        }
+
+        const queue = [start];
+        const visited = new Set([startKey]);
+        const parents = new Map([[startKey, null]]);
+        let searchedRooms = 0;
+
+        for (let index = 0; index < queue.length; index++) {
+            const current = queue[index];
+            searchedRooms++;
+            const currentKey = coordKey(current.x, current.y);
+            if (currentKey === goalKey) {
+                const path = rebuildPath(parents, goalKey);
+                return {
+                    reachable: true,
+                    path,
+                    pathLength: path.length - 1,
+                    visitedRooms: visited.size,
+                    searchedRooms,
+                    bounds,
+                    reason: 'same bounded traversable component',
+                };
+            }
+
+            for (const direction of DIRECTIONS) {
+                const delta = DIRECTION_DELTAS[direction];
+                const next = {
+                    x: current.x + delta.x,
+                    y: current.y + delta.y,
+                };
+                const nextKey = coordKey(next.x, next.y);
+                if (visited.has(nextKey) || !coordInBounds(next, bounds)) continue;
+                if (!roomExists(next.x, next.y)) continue;
+                visited.add(nextKey);
+                parents.set(nextKey, currentKey);
+                queue.push(next);
+            }
+        }
+
+        return {
+            reachable: false,
+            path: [],
+            pathLength: null,
+            visitedRooms: visited.size,
+            searchedRooms,
+            bounds,
+            reason: 'no path inside bounded traversable graph',
+        };
+    };
+
+    const getQuestReachabilityForSector = (questSector, options = {}) => {
+        const marginChunks = positiveIntegerOr(options.marginChunks, questReachabilityMarginChunks);
+        const cacheKey = `${questSector.key}:${marginChunks}`;
+        if (questReachability.has(cacheKey)) return questReachability.get(cacheKey);
+
+        const base = {
+            sector: {
+                key: questSector.key,
+                x: questSector.sectorX,
+                y: questSector.sectorY,
+                size: questSector.sectorSize,
+            },
+            questExists: !!(questSector.quest && questSector.quest.exists),
+            marginChunks,
+            marginRooms: marginChunks * chunkSize,
+            network: 'bounded-world-graph',
+            worldAssumption: 'chunk edge connectors are carved to each chunk hub and shared across neighbouring chunks',
+        };
+
+        if (!base.questExists) {
+            const result = {
+                ...base,
+                cauldronExists: false,
+                charmExists: false,
+                reachable: null,
+                pathLength: null,
+                visitedRooms: 0,
+                searchedRooms: 0,
+                bounds: null,
+                reason: 'sector has no quest',
+                pathSample: [],
+            };
+            questReachability.set(cacheKey, result);
+            return result;
+        }
+
+        const cauldron = questSector.quest.cauldron;
+        const charm = questSector.quest.charm;
+        const cauldronExists = roomExists(cauldron.x, cauldron.y);
+        const charmExists = roomExists(charm.x, charm.y);
+        const pathResult = cauldronExists && charmExists
+            ? findReachablePath(cauldron, charm, base.marginRooms)
+            : {
+                reachable: false,
+                path: [],
+                pathLength: null,
+                visitedRooms: 0,
+                searchedRooms: 0,
+                bounds: null,
+                reason: 'missing anchor room',
+            };
+        const path = pathResult.path || [];
+        const result = {
+            ...base,
+            cauldronExists,
+            charmExists,
+            reachable: pathResult.reachable,
+            pathLength: pathResult.pathLength,
+            visitedRooms: pathResult.visitedRooms,
+            searchedRooms: pathResult.searchedRooms,
+            bounds: cloneData(pathResult.bounds),
+            reason: pathResult.reason,
+            pathSample: path.length <= 10
+                ? cloneData(path)
+                : cloneData([...path.slice(0, 5), {x: null, y: null}, ...path.slice(-5)]),
+        };
+
+        questReachability.set(cacheKey, result);
+        return result;
     };
 
     const canExtendCorridor = (cells, x, y, direction) => {
@@ -644,6 +826,11 @@ export function createKnightLoreProceduralMap(options = {}) {
             const chunk = getChunk(coord.chunkX, coord.chunkY);
             return cloneData(getRoomQuestInfo(chunk.questSector, x, y));
         },
+        getQuestReachabilityAt: (x, y, options = {}) => {
+            const coord = toChunkCoord(x, y);
+            const chunk = getChunk(coord.chunkX, coord.chunkY);
+            return cloneData(getQuestReachabilityForSector(chunk.questSector, options));
+        },
         roomExists,
         getRoomExits,
         getChunk: (chunkX, chunkY) => getChunk(chunkX, chunkY),
@@ -659,8 +846,10 @@ export function createKnightLoreProceduralMap(options = {}) {
             branchCorridorAttempts: config.branchCorridorAttempts,
             branchCorridorMaxLength: config.branchCorridorMaxLength,
             questSectorQuestPercent: config.questSectorQuestPercent,
+            questReachabilityMarginChunks,
             questCharmTypes: QUEST_CHARM_TYPES.length,
             generatedChunks: chunks.size,
+            reachabilityChecks: questReachability.size,
         }),
     };
 }
