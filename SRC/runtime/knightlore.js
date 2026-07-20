@@ -2,13 +2,47 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage8-reachability-20260709-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage84-c34-completed-guard-20260720-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
     const KL_STAGE7_SLIDING_CROSS_ENABLED =
         KL_URL_PARAMS.get('stage7sliding') === '1' ||
         KL_URL_PARAMS.get('stage7') === '1';
+    const KL_STAGE82C_CAULDRON_VISUAL_ENABLED =
+        KL_URL_PARAMS.get('stage8c') === '1' ||
+        KL_URL_PARAMS.get('stage82c') === '1';
+    const KL_STAGE82C_BUBBLE_PARAMS = KL_URL_PARAMS.getAll('stage8cbubbles')
+        .map(value => value.trim().toLowerCase())
+        .filter(Boolean);
+    const KL_STAGE82C_BUBBLE_PARAM = KL_STAGE82C_BUBBLE_PARAMS.length
+        ? KL_STAGE82C_BUBBLE_PARAMS[KL_STAGE82C_BUBBLE_PARAMS.length - 1]
+        : '';
+    const KL_STAGE82C_BUBBLE_REQUEST = KL_STAGE82C_BUBBLE_PARAMS.length
+        ? KL_STAGE82C_BUBBLE_PARAMS.join(' -> ')
+        : 'off';
+    const KL_STAGE82C_BUBBLE_MODE = (() => {
+        if (!KL_STAGE82C_BUBBLE_PARAM || ['0', 'false', 'off', 'disabled'].includes(KL_STAGE82C_BUBBLE_PARAM)) {
+            return 'disabled';
+        }
+        if (['1', 'true', 'on', 'global'].includes(KL_STAGE82C_BUBBLE_PARAM)) {
+            return 'global';
+        }
+        if (['cauldron', 'cauldron-only', 'gated', 'room', 'room-gated'].includes(KL_STAGE82C_BUBBLE_PARAM)) {
+            return 'cauldron';
+        }
+        return 'invalid';
+    })();
+    const KL_STAGE82C_BUBBLES_ENABLED = KL_STAGE82C_BUBBLE_MODE === 'global';
+    const KL_STAGE84_C31_ENABLED = ['1', 'true', 'on', 'yes'].includes(
+        (KL_URL_PARAMS.get('stage84c31') || KL_URL_PARAMS.get('stage8c31') || '').trim().toLowerCase()
+    );
+    const KL_STAGE84_C33_ENABLED = ['1', 'true', 'on', 'yes'].includes(
+        (KL_URL_PARAMS.get('stage84c33') || KL_URL_PARAMS.get('stage8c33') || '').trim().toLowerCase()
+    );
+    const KL_STAGE84_C34_ENABLED = ['1', 'true', 'on', 'yes'].includes(
+        (KL_URL_PARAMS.get('stage84c34') || KL_URL_PARAMS.get('stage8c34') || '').trim().toLowerCase()
+    );
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
             ? 'maps/knight-lore-3x3-static-map.json'
@@ -69,6 +103,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             ['stage5StaticMap', 'Stage 5 static map injection'],
             ['stage5Recenter', 'Stage 5 room-id force test'],
             ['stage7Sliding', 'Stage 7 sliding cross'],
+            ['stage82CBubbles', 'Stage 8.2C2 bubble probe'],
             ['transition', 'Latest room transition'],
             ['timing', 'frameCompleted timing'],
         ],
@@ -80,9 +115,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         startLocationsOriginal: [0x2f, 0x44, 0xb3, 0x8f],
         startLocationsPatched: [0x88, 0x88, 0x88, 0x88],
         cleanRoomPatches: [
-            {addr: 0x6fae, length: 17, label: 'wizard background'},
-            {addr: 0x6fbf, length: 17, label: 'cauldron background'},
-            {addr: 0xb8c8, length: 18, label: 'cauldron bubbles'},
+            {kind: 'wizard-background', addr: 0x6fae, length: 17, label: 'wizard background'},
+            {kind: 'cauldron-background', addr: 0x6fbf, length: 17, label: 'cauldron background'},
+            {kind: 'cauldron-bubbles', addr: 0xb8c8, length: 18, label: 'cauldron bubbles'},
         ],
         crossRooms: [
             {role: 'center', id: 0x88},
@@ -268,8 +303,83 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     const KL_STAGE7_CUSTOM_BACKGROUNDS = {
         baseAddr: 0x6ae0,
         offsetTableAddr: 0x6ce2,
-        treeWallSize2Id: 0x12,
-        treeWallSize3Id: 0x13,
+        treeWallSize2Id: 0x16,
+        treeWallSize3Id: 0x17,
+    };
+
+    const KL_STAGE82C_ORIGINAL_CAULDRON = {
+        offsetTableAddr: 0x6ce2 + 0x12 * 2,
+        offsetTableBytes: [0xae, 0x6f, 0xbf, 0x6f],
+        cauldronBackgroundAddr: 0x6fbf,
+        cauldronBackgroundBytes: [
+            0x8d, 0x80, 0x80, 0x80, 0x0a, 0x0a, 0x18, 0x10,
+            0x8e, 0x80, 0x88, 0x80, 0x00, 0x00, 0x00, 0x12,
+            0x00,
+        ],
+        bubbleTemplateAddr: 0xb8c8,
+        bubbleTemplateBytes: [
+            0xa0, 0x80, 0x80, 0x80, 0x05, 0x05, 0x0c, 0x10,
+            0xb4, 0x00, 0x00, 0x00, 0x00, 0xa0, 0x00, 0x00,
+            0x00, 0x00,
+        ],
+        liveBubbleSlotAddr: 0x5c68,
+        liveBubbleSlotLength: 0x18,
+    };
+    const KL_STAGE84_C30 = {
+        staticObjectTableStart: 0x6ff2,
+        staticObjectTableEnd: 0x7112,
+        staticObjectRecordSize: 0x09,
+        cauldronPhysicalRoom: 0x88,
+        carryStateStart: 0x5bb3,
+        carryStateEnd: 0x5be8,
+        inventoryStart: 0x5bd8,
+        inventoryEnd: 0x5be8,
+        inventorySlots: [
+            {label: 'inventory handoff', addr: 0x5bd8, offset: 0},
+            {label: 'carried display 0', addr: 0x5bdc, offset: 4},
+            {label: 'carried display 1', addr: 0x5be0, offset: 8},
+            {label: 'carried display 2', addr: 0x5be4, offset: 12},
+        ],
+        stateBytes: [
+            {label: 'pickup_drop_pressed', addr: 0x5bb3},
+            {label: 'objects_carried_changed', addr: 0x5bb4},
+            {label: 'user_input', addr: 0x5bb5},
+            {label: 'lives', addr: 0x5bba},
+            {label: 'objects_put_in_cauldron', addr: 0x5bbb},
+            {label: 'all_objs_in_cauldron', addr: 0x5bc3},
+            {label: 'obj_dropping_into_cauldron', addr: 0x5bc4},
+            {label: 'cant_drop', addr: 0x5bd3},
+        ],
+        objectsRequiredAddr: 0xc27d,
+        objectsRequiredLength: 14,
+        cauldronGateBlockedRoom: 0xff,
+        cauldronGatePatches: [
+            {
+                label: 'drop-slot scan limiter',
+                opcodeAddr: 0xc086,
+                immediateAddr: 0xc087,
+                originalCompare: 0x88,
+                blockedCompare: 0xff,
+            },
+            {
+                label: 'drop-into-cauldron arm',
+                opcodeAddr: 0xc0c9,
+                immediateAddr: 0xc0ca,
+                originalCompare: 0x88,
+                blockedCompare: 0xff,
+            },
+        ],
+        disposableRecordIndex: 31,
+        disposableInactiveRoom: 0xff,
+        disposablePosition: {x: 0x80, y: 0x80, z: 0x80},
+        liveSlots: [
+            {label: 'live item slot 1', addr: 0x5c48},
+            {label: 'live item/bubble slot 2', addr: 0x5c68},
+        ],
+        liveSlotSize: 0x20,
+        dynamicStart: 0x5c88,
+        dynamicSlotSize: 0x20,
+        dynamicProbeCount: 8,
     };
 
     const refreshStage7CustomBackgrounds = () => {
@@ -306,10 +416,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         ],
         testEntryBytes: [
             // Square 64x64x128 center room for manual 5-cross traversal.
-            // Four stone arches keep all cardinal exits usable; 0x12/0x13
-            // are null fillers after the room-clean patch and preserve size.
+            // Four stone arches keep all cardinal exits usable; repeated
+            // 0x12 fillers preserve size without colliding with Phase C
+            // cauldron visual probing, where 0x13 becomes active again.
             0x88, 0x13, 0x06,
-            0x00, 0x01, 0x02, 0x03, 0x12, 0x13, 0x0c, 0xff,
+            0x00, 0x01, 0x02, 0x03, 0x12, 0x12, 0x0c, 0xff,
             0x1f, 0x32, 0x29, 0x35, 0x2e, 0x16, 0x0d, 0x11, 0x0a,
         ],
     };
@@ -340,19 +451,23 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         {
             label: '0x88',
             coord: {x: 0, y: 0},
-            title: 'authored origin cross',
+            title: 'authored origin 0x88 block frame',
             size: {selector: 0},
             colour: 6,
             theme: 'stone',
             exits: {north: 'arch', east: 'arch', south: 'arch', west: 'arch'},
             blocks: [
                 {
-                    type: 0x03,
+                    type: 0x00,
                     positions: [
-                        {x: 2, y: 3, z: 0},
-                        {x: 5, y: 3, z: 0},
-                        {x: 2, y: 4, z: 0},
-                        {x: 5, y: 4, z: 0},
+                        {x: 2, y: 6, z: 0},
+                        {x: 1, y: 5, z: 0},
+                        {x: 5, y: 6, z: 0},
+                        {x: 6, y: 5, z: 0},
+                        {x: 6, y: 2, z: 0},
+                        {x: 5, y: 1, z: 0},
+                        {x: 1, y: 2, z: 0},
+                        {x: 2, y: 1, z: 0},
                     ],
                 },
             ],
@@ -366,8 +481,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         'tree arch north', 'tree arch east', 'tree arch south', 'tree arch west',
         'portcullis north', 'portcullis east', 'portcullis south', 'portcullis west',
         'wall size 1', 'wall size 2', 'wall size 3', 'tree room size 1',
-        'tree filler west', 'tree filler north', 'custom tree wall size 2', 'custom tree wall size 3',
-        'high arch east', 'high arch south', 'high arch east base', 'high arch south base',
+        'tree filler west', 'tree filler north', 'wizard', 'cauldron',
+        'high arch east', 'high arch south', 'custom tree wall size 2', 'custom tree wall size 3',
     ];
 
     const KL_BLOCK_NAMES = [
@@ -380,6 +495,27 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         'ball up/down', 'spell repels player', 'portcullis up/down', 'portcullis up/down',
         'ball up/down offset x',
     ];
+    const KL_ITEM_NAMES = {
+        0x60: 'diamond/gem',
+        0x61: 'poison',
+        0x62: 'shoe/boot',
+        0x63: 'chalice/vase',
+        0x64: 'cup',
+        0x65: 'bottle',
+        0x66: 'ball/crystal ball',
+        0x67: 'life',
+        0xa0: 'good bubble 0',
+        0xa1: 'good bubble 1',
+        0xa2: 'good bubble 2',
+        0xa3: 'good bubble 3',
+        0xa4: 'wolf-attack bubble 0',
+        0xa5: 'wolf-attack bubble 1',
+        0xa6: 'wolf-attack bubble 2',
+        0xa7: 'wolf-attack bubble 3',
+        0xae: 'cauldron item-display state',
+        0xb4: 'fire/bubble support 0',
+        0xb5: 'fire/bubble support 1',
+    };
 
     const KL_SIZE_SELECTORS = {
         0: {selector: 0, x: 64, y: 64, z: 128, wallId: 0x0c, allowedExits: ['north', 'east', 'south', 'west']},
@@ -488,6 +624,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             .join('')
     );
 
+    const getExtraBackgrounds = room => (
+        Array.isArray(room.extraBackgrounds) ? room.extraBackgrounds : []
+    );
+
     const buildStoneBackgroundsWithExits = (room, exits) => {
         const selectorInfo = KL_SIZE_SELECTORS[room.size.selector];
         if (!selectorInfo) return [];
@@ -496,6 +636,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 .filter(direction => exits && exits[direction])
                 .map(direction => KL_STONE_ARCH_IDS[direction]),
             selectorInfo.wallId,
+            ...getExtraBackgrounds(room),
         ];
     };
 
@@ -512,7 +653,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             !KL_ALL_WALL_IDS.has(value)
         ));
 
-        return [...baseBackgrounds, ...specialBackgrounds];
+        return [...baseBackgrounds, ...specialBackgrounds, ...getExtraBackgrounds(room)];
     };
 
     const buildTreeRectangularBackgroundsWithExits = (room, exits) => {
@@ -533,7 +674,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             !KL_ALL_WALL_IDS.has(value)
         ));
 
-        return [...archBackgrounds, customWallId, ...specialBackgrounds];
+        return [...archBackgrounds, customWallId, ...specialBackgrounds, ...getExtraBackgrounds(room)];
     };
 
     const buildBackgrounds = room => {
@@ -594,7 +735,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const archBackgrounds = KL_DIRECTIONS
             .filter(direction => exits[direction])
             .map(direction => chooseArchIdForRoom(room, direction));
-        return [...archBackgrounds, ...nonArchBackgrounds];
+        return [...archBackgrounds, ...nonArchBackgrounds, ...getExtraBackgrounds(room)];
     };
 
     const normalizeLogicalRoomDefinition = (definition, source) => {
@@ -628,12 +769,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             theme: definition.theme || 'stone',
             exits: normalizeExits(definition.exits),
             backgrounds: null,
+            extraBackgrounds: cloneData(definition.extraBackgrounds || []),
             blocks: normalizeBlockRuns(definition.blocks),
             objects: cloneData(definition.objects || []),
             items: cloneData(definition.items || []),
             questRole: definition.questRole || 'none',
             questSector: cloneData(definition.questSector || null),
             questCharm: cloneData(definition.questCharm || null),
+            questDressing: cloneData(definition.questDressing || null),
             originalRoomId: definition.originalRoomId !== undefined ? Number(definition.originalRoomId) : null,
             meta: cloneData(definition.meta || {}),
         };
@@ -656,6 +799,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         for (const background of room.backgrounds) {
             if (!Number.isInteger(background) || background < 0 || background > 0xff) {
                 errors.push(`Invalid background id ${background}.`);
+            }
+        }
+        for (const background of room.extraBackgrounds) {
+            if (!Number.isInteger(background) || background < 0 || background > 0xff) {
+                errors.push(`Invalid extra background id ${background}.`);
             }
         }
 
@@ -738,7 +886,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const persistent = new Map();
         const questPersistent = new Map();
         const labels = new Map();
-        const proceduralMap = createKnightLoreProceduralMap();
+        const proceduralMap = createKnightLoreProceduralMap({
+            questCauldronOriginalVisual: KL_STAGE82C_CAULDRON_VISUAL_ENABLED,
+            questCauldronBubbles: KL_STAGE82C_BUBBLE_MODE === 'global' || KL_STAGE82C_BUBBLE_MODE === 'cauldron',
+            questCauldronBubbleMode: KL_STAGE82C_BUBBLE_MODE,
+        });
         let activeDocument = {
             format: KL_MAP_FORMAT,
             title: 'Built-in Stage 4 seed',
@@ -770,6 +922,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             charmSeen: false,
             charmCollected: false,
             completed: false,
+            completedAt: null,
+            completedWith: null,
+            completionSource: null,
             status: sector.quest && sector.quest.exists ? 'unvisited' : 'no-quest',
             revision: 0,
         });
@@ -805,12 +960,31 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return proceduralMap.getQuestReachabilityAt(coord.x, coord.y, options);
         };
 
+        const refreshQuestStateStatus = (state, questExists) => {
+            if (state.completed) {
+                state.status = 'completed';
+            } else if (state.charmCollected) {
+                state.status = 'charmCollected';
+            } else if (state.charmSeen) {
+                state.status = 'charmSeen';
+            } else if (state.cauldronSeen) {
+                state.status = 'cauldronSeen';
+            } else if (!questExists) {
+                state.status = 'no-quest';
+            } else if (!state.unvisited) {
+                state.status = 'visited';
+            } else {
+                state.status = 'unvisited';
+            }
+        };
+
         const attachQuestMetadata = room => {
             const info = getQuestRoomInfoAt(room.coord.x, room.coord.y);
             const reachability = getQuestReachabilityAt(room.coord.x, room.coord.y);
             room.questRole = info.role;
             room.questSector = cloneData(info.sector);
             room.questCharm = info.quest.requiredCharm ? cloneData(info.quest.requiredCharm) : null;
+            room.questDressing = cloneData(info.dressing || room.questDressing || null);
             room.meta = {
                 ...room.meta,
                 quest: {
@@ -819,6 +993,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     quest: cloneData(info.quest),
                     state: cloneData(info.state),
                     reachability: cloneData(reachability),
+                    dressing: cloneData(room.questDressing || null),
                     charmPolicy: 'Charm type is global; the local charm anchor is a suggested source, not an enforced sector-bound item.',
                 },
             };
@@ -833,23 +1008,59 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             state.unvisited = false;
             if (info.role === 'cauldron') state.cauldronSeen = true;
             if (info.role === 'charm') state.charmSeen = true;
-
-            if (state.completed) {
-                state.status = 'completed';
-            } else if (state.charmCollected) {
-                state.status = 'charmCollected';
-            } else if (state.charmSeen) {
-                state.status = 'charmSeen';
-            } else if (state.cauldronSeen) {
-                state.status = 'cauldronSeen';
-            } else if (!info.quest.exists) {
-                state.status = 'no-quest';
-            } else {
-                state.status = 'visited';
-            }
+            refreshQuestStateStatus(state, info.quest.exists);
 
             if (state.status !== previousStatus || info.role !== 'none') state.revision++;
             return state;
+        };
+
+        const markQuestCompletedAt = (x, y, detail = {}) => {
+            const coord = getCoord({x, y});
+            const sector = getQuestSectorAt(coord.x, coord.y);
+            const quest = sector.quest || {exists: false};
+            const state = sector.state;
+            if (!quest.exists) {
+                refreshQuestStateStatus(state, false);
+                return {changed: false, state, sector};
+            }
+
+            const previous = JSON.stringify({
+                unvisited: state.unvisited,
+                cauldronSeen: state.cauldronSeen,
+                charmSeen: state.charmSeen,
+                charmCollected: state.charmCollected,
+                completed: state.completed,
+                completedAt: state.completedAt,
+                completedWith: state.completedWith,
+                completionSource: state.completionSource,
+                status: state.status,
+            });
+
+            state.unvisited = false;
+            state.cauldronSeen = true;
+            state.charmCollected = true;
+            state.completed = true;
+            state.completedAt = {
+                coord: cloneData(coord),
+                sample: Number.isInteger(detail.sample) ? detail.sample : null,
+            };
+            state.completedWith = detail.charm ? cloneData(detail.charm) : null;
+            state.completionSource = detail.source ? cloneData(detail.source) : null;
+            refreshQuestStateStatus(state, true);
+
+            const changed = previous !== JSON.stringify({
+                unvisited: state.unvisited,
+                cauldronSeen: state.cauldronSeen,
+                charmSeen: state.charmSeen,
+                charmCollected: state.charmCollected,
+                completed: state.completed,
+                completedAt: state.completedAt,
+                completedWith: state.completedWith,
+                completionSource: state.completionSource,
+                status: state.status,
+            });
+            if (changed) state.revision++;
+            return {changed, state, sector};
         };
 
         const getRoomAt = (x, y) => {
@@ -987,6 +1198,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             getQuestSectorAt,
             getQuestRoomInfoAt,
             getQuestReachabilityAt,
+            markQuestCompletedAt,
             compileRoomAt: (x, y, physicalRoomId = KL_STAGE2.centerRoom) => (
                 compileLogicalRoomToLocationEntry(getRoomAt(x, y), physicalRoomId)
             ),
@@ -1241,10 +1453,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 theme: reciprocal.room.theme,
                 exits: cloneData(reciprocal.room.exits),
                 backgrounds: cloneData(reciprocal.room.backgrounds),
+                extraBackgrounds: cloneData(reciprocal.room.extraBackgrounds),
                 blocks: cloneData(reciprocal.room.blocks),
                 questRole: reciprocal.room.questRole,
                 questSector: cloneData(reciprocal.room.questSector),
                 questCharm: cloneData(reciprocal.room.questCharm),
+                questDressing: cloneData(reciprocal.room.questDressing),
                 questState: reciprocal.room.meta && reciprocal.room.meta.quest
                     ? cloneData(reciprocal.room.meta.quest.state)
                     : null,
@@ -1290,7 +1504,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         emu = JSSpeccyImpl(document.getElementById('jsspeccy'), {
             zoom: 2,
             sandbox: false,
-            autoStart: true,
+            autoStart: false,
             openUrl: 'Knight Lore (1984)(Ultimate).z80',
         });
         const logicalMapLoadPromise = KL_STAGE45_MAP_URL
@@ -1299,15 +1513,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 return null;
             })
             : null;
-        installKnightLoreDiagnostics(emu, logicalMapLoadPromise);
+        installKnightLoreDiagnostics(emu, logicalMapLoadPromise, {
+            startAfterStartupPrime: true,
+        });
     }
 
-    function installKnightLoreDiagnostics(emu, logicalMapLoadPromise = null) {
+    function installKnightLoreDiagnostics(emu, logicalMapLoadPromise = null, options = {}) {
         const tbody = document.getElementById('stage1-diagnostics-body');
         const stage7StyleTbody = document.getElementById('stage7-style-body');
         const stage7StyleStatus = document.getElementById('stage7-style-status');
         const stage8QuestTbody = document.getElementById('stage8-quest-body');
         const stage8QuestStatus = document.getElementById('stage8-quest-status');
+        const stage84C30Tbody = document.getElementById('stage84-c30-body');
+        const stage84C30Status = document.getElementById('stage84-c30-status');
         const crossTbody = document.getElementById('stage2-cross-body');
         const stage2Status = document.getElementById('stage2-status');
         const logicalTbody = document.getElementById('stage4-logical-body');
@@ -1320,6 +1538,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         let sampleCount = 0;
         let frameCompletedCount = 0;
         let sampleInFlight = false;
+        let startupPrimePending = false;
         let previousSample = null;
         let lastTransition = null;
         let stage2StartPoke = {
@@ -1387,6 +1606,108 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 ? 'Enabled by ?stage7sliding=1; waiting to inject the first five-room physical cross.'
                 : 'Disabled; add ?stage7sliding=1 to run the four-direction sliding cross proof.',
         };
+        let stage82CBubbleProbe = {
+            mode: KL_STAGE82C_BUBBLE_MODE,
+            requested: KL_STAGE82C_BUBBLE_REQUEST,
+            desiredActive: KL_STAGE82C_BUBBLES_ENABLED,
+            templateActive: null,
+            templateZeroed: null,
+            writes: 0,
+            lastCoord: {x: 0, y: 0},
+            lastRole: 'none',
+            lastAction: 'waiting',
+            lastTemplateBytes: [],
+            lastLiveBytes: [],
+            lastError: null,
+        };
+        let stage84CauldronGate = {
+            enabled: KL_STAGE7_SLIDING_CROSS.enabled,
+            allowed: false,
+            desiredCompare: KL_STAGE84_C30.cauldronGateBlockedRoom,
+            writes: 0,
+            lastCoord: {x: 0, y: 0},
+            lastRole: 'none',
+            lastAction: 'waiting',
+            lastReadback: [],
+            lastError: null,
+        };
+        let stage84C31DisposableCharm = {
+            enabled: KL_STAGE84_C31_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+            requested: KL_STAGE84_C31_ENABLED,
+            recordIndex: KL_STAGE84_C30.disposableRecordIndex,
+            recordAddr: KL_STAGE84_C30.staticObjectTableStart +
+                KL_STAGE84_C30.disposableRecordIndex * KL_STAGE84_C30.staticObjectRecordSize,
+            target: null,
+            desiredBytes: [],
+            lastReadback: [],
+            carried: false,
+            referencedInLiveSlot: false,
+            writes: 0,
+            lastAction: 'waiting',
+            lastError: null,
+        };
+        let stage84C32CarryProbe = {
+            enabled: KL_STAGE7_SLIDING_CROSS.enabled,
+            currentlyCarrying: false,
+            current: null,
+            firstSeenCoord: null,
+            lastSeenCoord: null,
+            firstSeenSample: null,
+            lastSeenSample: null,
+            carriedCoordKeys: [],
+            transitionsWhileCarried: 0,
+            lastTransitionKey: null,
+            lastTransition: null,
+            lastAction: 'waiting for a carried item/charm pointer',
+        };
+        let stage84C33CauldronAcceptance = {
+            enabled: KL_STAGE84_C33_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+            requested: KL_STAGE84_C33_ENABLED,
+            completions: 0,
+            dropEvents: 0,
+            lastCoord: {x: 0, y: 0},
+            lastSector: null,
+            lastState: null,
+            lastRequiredSprite: null,
+            lastCarriedSprite: null,
+            lastMatch: false,
+            lastReady: false,
+            lastDropSignal: 'none',
+            lastDropSignalKind: 'none',
+            lastPlayerForm: 'unknown',
+            lastPickupDropPressed: 0,
+            lastObjDroppingIntoCauldron: 0,
+            lastObjectsPutInCauldron: null,
+            lastCantDrop: 0,
+            lastAccepted: null,
+            lastAction: KL_STAGE84_C33_ENABLED
+                ? 'waiting for carried charm and player drop at a logical cauldron'
+                : 'disabled; add ?stage84c33=1 to enable drop-gated JS-side cauldron acceptance',
+        };
+        let stage84C34RequestOrderPatch = {
+            enabled: KL_STAGE84_C34_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+            requested: KL_STAGE84_C34_ENABLED,
+            writes: 0,
+            lastCoord: {x: 0, y: 0},
+            lastRole: 'none',
+            lastSector: null,
+            targetCoord: null,
+            targetRole: 'none',
+            targetSector: null,
+            targetCompleted: false,
+            targetReason: 'none',
+            objectsPutInCauldron: 0,
+            currentIndex: null,
+            patchAddr: null,
+            previousValue: null,
+            desiredIndex: null,
+            desiredSprite: null,
+            tableBytes: [],
+            lastAction: KL_STAGE84_C34_ENABLED
+                ? 'waiting for logical cauldron request context'
+                : 'disabled; add ?stage84c34=1 to patch the original requested-object order slot',
+            lastError: null,
+        };
 
         if (logicalMapLoadPromise) {
             logicalMapLoadPromise.finally(() => {
@@ -1451,12 +1772,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 const records = [
                     ...buildStage7TranslatedNorthWallRecords().map((record, index) => ({
                         ...record,
-                        background: '0x12',
+                        background: hexByte(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Id),
                         recordNumber: index + 1,
                     })),
                     ...buildStage7TranslatedWestWallRecords(value).map((record, index) => ({
                         ...record,
-                        background: '0x13',
+                        background: hexByte(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Id),
                         recordNumber: index + 1,
                     })),
                 ];
@@ -1481,18 +1802,37 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             }
             if (stage7WestFillerXStatus) {
                 stage7WestFillerXStatus.textContent = message || [
-                    `Selector 1 custom 0x13 west wall X is ${fmtStage7WestFillerX(value)}.`,
+                    `Selector 1 custom ${hexByte(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Id)} west wall X is ${fmtStage7WestFillerX(value)}.`,
                     `Slider range is ${hexByte(KL_STAGE7_WEST_FILLER_X.min)}..${hexByte(KL_STAGE7_WEST_FILLER_X.max)}.`,
-                    `Custom 0x12 replaces stone-derived north wall records at Y ${hexByte(KL_STAGE7_NORTH_WALL_Y)}; custom 0x13 replaces stone-derived west wall records at the slider X.`,
+                    `Custom ${hexByte(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Id)} replaces stone-derived north wall records at Y ${hexByte(KL_STAGE7_NORTH_WALL_Y)}; custom ${hexByte(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Id)} replaces stone-derived west wall records at the slider X.`,
                     'Release the slider to rewrite static data; re-enter a rectangular wooden room if the current screen was already drawn.',
                 ].join(' ');
             }
         };
-        const allZero = bytes => bytes.every(value => value === 0);
+        const getNonZeroOffsets = bytes => Array.from(bytes, (value, offset) => ({offset, value}))
+            .filter(item => item.value !== 0);
+        const allZero = bytes => getNonZeroOffsets(bytes).length === 0;
+        const fmtNonZeroOffsets = offsets => {
+            if (!offsets.length) return 'all sampled bytes zero';
+            const head = offsets
+                .slice(0, 12)
+                .map(item => `+${hexByte(item.offset)}=${hexByte(item.value)}`)
+                .join(' ');
+            return offsets.length > 12
+                ? `${head} ... (${offsets.length} non-zero byte(s))`
+                : head;
+        };
         const fmtNamedId = (value, names) => {
             const name = names[value] || 'unknown';
             return `${hexByte(value)} ${name}`;
         };
+        const fmtMechanicSprite = value => {
+            if (value === undefined) return 'unread';
+            const name = KL_ITEM_NAMES[value] || 'unknown sprite/object';
+            return `${hexByte(value)} ${name}`;
+        };
+        const isStage84ItemSprite = value => value >= 0x60 && value <= 0x67;
+        const isStage84QuestCharmSprite = value => value >= 0x60 && value <= 0x66;
         const fmtPosition = value => {
             const x = value & 0x07;
             const y = (value >> 3) & 0x07;
@@ -1519,6 +1859,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const index = addr - range.start;
             if (index < 0 || index >= range.data.length) return undefined;
             return range.data[index];
+        };
+
+        const readBytesFromRange = (range, addr, length) => {
+            const index = addr - range.start;
+            if (index < 0 || index + length > range.data.length) return [];
+            return Array.from(range.data.slice(index, index + length));
         };
 
         const decodeSize = (staticRange, selector) => {
@@ -1685,7 +2031,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 await applyStage7CrossInjection(`Selector 1 west wall X ${hexByte(value)}`);
                 renderStage7WestFillerControl(
                     stage7SlidingCross.done
-                        ? `Applied selector 1 west wall X ${fmtStage7WestFillerX(value)} to custom background 0x13. Leave and re-enter a rectangular wooden room if this screen was already drawn.`
+                        ? `Applied selector 1 west wall X ${fmtStage7WestFillerX(value)} to custom background ${hexByte(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Id)}. Leave and re-enter a rectangular wooden room if this screen was already drawn.`
                         : `Queued selector 1 west wall X ${fmtStage7WestFillerX(value)}; ${stage7SlidingCross.message}`
                 );
             } catch (err) {
@@ -1896,12 +2242,34 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             stage2RoomCleanPatch.attempted = true;
             try {
                 for (const patch of KL_STAGE2.cleanRoomPatches) {
-                    await emu.writeMemory(patch.addr, new Uint8Array(patch.length));
+                    let bytes = new Uint8Array(patch.length);
+                    if (
+                        patch.kind === 'cauldron-background' &&
+                        KL_STAGE82C_CAULDRON_VISUAL_ENABLED
+                    ) {
+                        bytes = Uint8Array.from(KL_STAGE82C_ORIGINAL_CAULDRON.cauldronBackgroundBytes);
+                    } else if (
+                        patch.kind === 'cauldron-bubbles' &&
+                        KL_STAGE82C_CAULDRON_VISUAL_ENABLED &&
+                        KL_STAGE82C_BUBBLES_ENABLED
+                    ) {
+                        bytes = Uint8Array.from(KL_STAGE82C_ORIGINAL_CAULDRON.bubbleTemplateBytes);
+                    }
+                    await emu.writeMemory(patch.addr, bytes);
                 }
+                if (KL_STAGE82C_CAULDRON_VISUAL_ENABLED) {
+                    await emu.writeMemory(
+                        KL_STAGE82C_ORIGINAL_CAULDRON.offsetTableAddr,
+                        Uint8Array.from(KL_STAGE82C_ORIGINAL_CAULDRON.offsetTableBytes)
+                    );
+                }
+                const cauldronMode = KL_STAGE82C_CAULDRON_VISUAL_ENABLED
+                    ? `restored original cauldron background 0x13; bubbles ${describeStage82CBubbleMode(KL_STAGE82C_BUBBLE_MODE)}`
+                    : 'zeroed cauldron background and bubbles';
                 stage2RoomCleanPatch = {
                     attempted: true,
                     done: true,
-                    message: `Cleaned wizard, cauldron, and cauldron-bubble data for room ${hexByte(KL_STAGE2.centerRoom)}.`,
+                    message: `Cleaned wizard background and ${cauldronMode} for room ${hexByte(KL_STAGE2.centerRoom)}.`,
                 };
             } catch (err) {
                 const errorText = String(err);
@@ -2038,7 +2406,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 } else if (found && isCenter && cleanPatchOk && (
                     entry.backgrounds.includes(0x12) || entry.backgrounds.includes(0x13)
                 )) {
-                    status += ' Wizard/cauldron ids remain in the compact entry but expand to null records.';
+                    status += KL_STAGE82C_CAULDRON_VISUAL_ENABLED && entry.backgrounds.includes(0x13)
+                        ? ' Original cauldron id 0x13 is active for the Phase C visual probe.'
+                        : ' Wizard/cauldron ids remain in the compact entry but expand to null records.';
                 }
 
                 return `
@@ -2122,9 +2492,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const fmtLogicalCoord = coord => `(${coord.x}, ${coord.y})`;
 
-        const formatQuestCharm = charm => (
-            charm ? `${charm.label} (#${charm.id + 1})` : '-'
-        );
+        const formatQuestCharm = charm => {
+            if (!charm) return '-';
+            const sprite = Number.isInteger(charm.sprite)
+                ? `, ${hexByte(charm.sprite)}`
+                : '';
+            return `${charm.label} (#${charm.id + 1}${sprite})`;
+        };
 
         const formatQuestAnchor = anchor => (
             anchor ? `${fmtLogicalCoord(anchor)} l(${anchor.localX}, ${anchor.localY})` : '-'
@@ -2144,6 +2518,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `unvisited ${state.unvisited ? 'yes' : 'no'}`,
                 `cauldron ${state.cauldronSeen ? 'seen' : 'no'}`,
                 `charm ${state.charmSeen ? 'seen' : 'no'}`,
+                `collected ${state.charmCollected ? 'yes' : 'no'}`,
+                `completed ${state.completed ? 'yes' : 'no'}`,
                 `rev ${state.revision}`,
             ].join('; ');
         };
@@ -2157,11 +2533,435 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return `${reachability.reachable ? 'OK' : 'BAD'}; ${anchorState}; ${path}; searched ${reachability.searchedRooms}; margin ${reachability.marginChunks} chunk(s)`;
         };
 
+        const formatQuestStaticDressing = staticDressing => {
+            if (!staticDressing) return null;
+            const parts = [];
+            if (staticDressing.forceSquare) parts.push('forced square');
+            if (Number.isInteger(staticDressing.colour)) parts.push(`colour ${staticDressing.colour}`);
+            if (staticDressing.extraBackgrounds && staticDressing.extraBackgrounds.length) {
+                parts.push(`extra bg ${staticDressing.extraBackgrounds.map(value => fmtNamedId(value, KL_BACKGROUND_NAMES)).join(', ')}`);
+            }
+            if (staticDressing.originalCauldronVisual) {
+                parts.push(`original cauldron visual; bubbles ${describeStage82CBubbleMode(staticDressing.originalCauldronBubbleMode || 'disabled')}`);
+            }
+            if (staticDressing.blockRuns && staticDressing.blockRuns.length) {
+                const blocks = staticDressing.blockRuns.map(run => (
+                    `${fmtNamedId(run.type, KL_BLOCK_NAMES)} x${run.positions ? run.positions.length : 0}`
+                )).join(', ');
+                parts.push(`blocks ${blocks}`);
+            }
+            return parts.join('; ');
+        };
+
+        const formatQuestDressing = dressing => {
+            if (!dressing) return 'ordinary; visual unchanged';
+            const staticDressing = formatQuestStaticDressing(dressing.staticDressing);
+            return [
+                dressing.phase,
+                dressing.profile,
+                `hazard ${dressing.hazardLevel}`,
+                dressing.visual,
+                dressing.gameplayBytes,
+                staticDressing,
+            ].filter(Boolean).join('; ');
+        };
+
         const getStage8CurrentCoord = () => (
             stage7SlidingCross && stage7SlidingCross.center
                 ? stage7SlidingCross.center
                 : {x: 0, y: 0}
         );
+
+        const describeStage82CBubbleMode = mode => {
+            if (mode === 'global') return 'global high-risk';
+            if (mode === 'cauldron') return 'cauldron-gated probe';
+            if (mode === 'invalid') return 'invalid';
+            return 'disabled';
+        };
+
+        const getStage82CBubbleContext = () => {
+            const coord = getStage8CurrentCoord();
+            const room = logicalMap.getRoomAt(coord.x, coord.y);
+            const role = room.questRole || 'none';
+            const desiredActive = !!(
+                KL_STAGE82C_CAULDRON_VISUAL_ENABLED &&
+                (
+                    KL_STAGE82C_BUBBLE_MODE === 'global' ||
+                    (KL_STAGE82C_BUBBLE_MODE === 'cauldron' && role === 'cauldron')
+                )
+            );
+            return {coord, room, role, desiredActive};
+        };
+
+        const getStage82CBubbleTemplateBytes = sample => {
+            const range = sample.cleanRoomPatches.find(patch => patch.kind === 'cauldron-bubbles');
+            return range ? range.bytes : [];
+        };
+
+        const getStage84CauldronGateContext = () => {
+            const coord = getStage8CurrentCoord();
+            const room = logicalMap.getRoomAt(coord.x, coord.y);
+            const role = room.questRole || 'none';
+            const allowed = role === 'cauldron';
+            return {
+                coord,
+                room,
+                role,
+                allowed,
+                desiredCompare: allowed
+                    ? KL_STAGE84_C30.cauldronPhysicalRoom
+                    : KL_STAGE84_C30.cauldronGateBlockedRoom,
+            };
+        };
+
+        const updateStage84CauldronGate = async () => {
+            const context = getStage84CauldronGateContext();
+            const enabled = !!(stage7SlidingCross.enabled && typeof emu.writeMemory === 'function');
+            const readback = [];
+
+            stage84CauldronGate = {
+                ...stage84CauldronGate,
+                enabled,
+                allowed: context.allowed,
+                desiredCompare: context.desiredCompare,
+                lastCoord: cloneData(context.coord),
+                lastRole: context.role,
+                lastError: null,
+            };
+
+            if (!enabled) {
+                stage84CauldronGate = {
+                    ...stage84CauldronGate,
+                    lastAction: stage7SlidingCross.enabled
+                        ? 'writeMemory unavailable'
+                        : 'disabled because Stage 7 sliding is off',
+                    lastReadback: [],
+                };
+                return;
+            }
+
+            try {
+                let writes = 0;
+                for (const patch of KL_STAGE84_C30.cauldronGatePatches) {
+                    const result = await emu.readMemory(patch.opcodeAddr, 2);
+                    const bytes = Array.from(result.data);
+                    const opcode = bytes[0];
+                    const currentCompare = bytes[1];
+                    const item = {
+                        ...patch,
+                        opcode,
+                        currentCompare,
+                        desiredCompare: context.desiredCompare,
+                        patched: currentCompare === context.desiredCompare,
+                    };
+
+                    if (opcode !== 0xfe) {
+                        readback.push({
+                            ...item,
+                            error: `expected CP opcode 0xFE, got ${hexByte(opcode)}`,
+                        });
+                        continue;
+                    }
+
+                    if (currentCompare !== context.desiredCompare) {
+                        await emu.writeMemory(
+                            patch.immediateAddr,
+                            Uint8Array.from([context.desiredCompare])
+                        );
+                        writes++;
+                        item.currentCompare = context.desiredCompare;
+                        item.patched = true;
+                    }
+
+                    readback.push(item);
+                }
+
+                stage84CauldronGate = {
+                    ...stage84CauldronGate,
+                    writes: stage84CauldronGate.writes + writes,
+                    lastReadback: readback,
+                    lastAction: writes
+                        ? `${writes} compare byte(s) updated`
+                        : 'no write needed',
+                    lastError: readback.some(item => item.error)
+                        ? readback.filter(item => item.error).map(item => item.error).join('; ')
+                        : null,
+                };
+            } catch (err) {
+                stage84CauldronGate = {
+                    ...stage84CauldronGate,
+                    lastReadback: readback,
+                    lastAction: 'write failed',
+                    lastError: `Failed cauldron acceptance gate write: ${err}`,
+                };
+            }
+        };
+
+        const getStage84C31ObjectIndex = charm => {
+            if (charm && Number.isInteger(charm.sprite) && isStage84QuestCharmSprite(charm.sprite)) {
+                return charm.sprite - 0x60;
+            }
+            const id = charm && Number.isInteger(charm.id) ? charm.id : 0;
+            return id % 7;
+        };
+
+        const getStage84C31Sprite = charm => {
+            if (charm && Number.isInteger(charm.sprite) && isStage84QuestCharmSprite(charm.sprite)) {
+                return charm.sprite;
+            }
+            return 0x60 + getStage84C31ObjectIndex(charm);
+        };
+
+        const formatStage84ObjectIndex = index => (
+            Number.isInteger(index) && index >= 0 && index <= 6
+                ? `${index} -> ${fmtMechanicSprite(0x60 + index)}`
+                : index === null || index === undefined
+                    ? '-'
+                    : `${index} (not a quest charm index)`
+        );
+
+        const makeStage84C31InactiveRecord = () => {
+            const pos = KL_STAGE84_C30.disposablePosition;
+            return [
+                0x00,
+                pos.x, pos.y, pos.z,
+                KL_STAGE84_C30.disposableInactiveRoom,
+                pos.x, pos.y, pos.z,
+                KL_STAGE84_C30.disposableInactiveRoom,
+            ];
+        };
+
+        const findStage84C31Target = compiled => {
+            if (!compiled || !compiled.roomSummaries) return null;
+            const candidates = compiled.roomSummaries.filter(item => item.questRole === 'charm');
+            if (!candidates.length) return null;
+            const target = candidates.find(item => item.role === 'center') || candidates[0];
+            return {
+                ...target,
+                sprite: getStage84C31Sprite(target.questCharm),
+                objectIndex: getStage84C31ObjectIndex(target.questCharm),
+            };
+        };
+
+        const makeStage84C31ActiveRecord = target => {
+            const pos = KL_STAGE84_C30.disposablePosition;
+            return [
+                target.sprite,
+                pos.x, pos.y, pos.z,
+                target.physicalRoomId,
+                pos.x, pos.y, pos.z,
+                target.physicalRoomId,
+            ];
+        };
+
+        const scanStage84C31References = workRange => {
+            const recordAddr = stage84C31DisposableCharm.recordAddr;
+            const liveRefs = [];
+            for (const slot of KL_STAGE84_C30.liveSlots) {
+                const bytes = readBytesFromRange(workRange, slot.addr, KL_STAGE84_C30.liveSlotSize);
+                const ptr = (bytes[16] || 0) | ((bytes[17] || 0) << 8);
+                if (ptr === recordAddr) liveRefs.push(slot.label);
+            }
+
+            const inventoryBytes = readBytesFromRange(
+                workRange,
+                KL_STAGE84_C30.inventoryStart,
+                KL_STAGE84_C30.inventoryEnd - KL_STAGE84_C30.inventoryStart
+            );
+            const carriedRefs = [];
+            for (const slot of KL_STAGE84_C30.inventorySlots) {
+                const offset = slot.offset;
+                const ptr = (inventoryBytes[offset + 2] || 0) | ((inventoryBytes[offset + 3] || 0) << 8);
+                if (ptr === recordAddr) carriedRefs.push(slot.label);
+            }
+
+            return {liveRefs, carriedRefs};
+        };
+
+        const updateStage84C31ObservedState = workRange => {
+            if (!stage84C31DisposableCharm.enabled || !workRange) return;
+            const refs = scanStage84C31References(workRange);
+            stage84C31DisposableCharm = {
+                ...stage84C31DisposableCharm,
+                carried: refs.carriedRefs.length > 0,
+                referencedInLiveSlot: refs.liveRefs.length > 0,
+                lastAction: refs.carriedRefs.length
+                    ? `record referenced by ${refs.carriedRefs.join(', ')}`
+                    : stage84C31DisposableCharm.lastAction,
+            };
+        };
+
+        const applyStage84C31DisposableCharm = async compiled => {
+            if (!stage84C31DisposableCharm.requested) {
+                stage84C31DisposableCharm = {
+                    ...stage84C31DisposableCharm,
+                    enabled: false,
+                    target: null,
+                    desiredBytes: [],
+                    lastAction: 'disabled; add ?stage84c31=1 to seed one disposable charm object',
+                };
+                return;
+            }
+
+            if (!KL_STAGE7_SLIDING_CROSS.enabled || typeof emu.writeMemory !== 'function') {
+                stage84C31DisposableCharm = {
+                    ...stage84C31DisposableCharm,
+                    enabled: false,
+                    target: null,
+                    desiredBytes: [],
+                    lastAction: KL_STAGE7_SLIDING_CROSS.enabled
+                        ? 'writeMemory unavailable'
+                        : 'disabled because Stage 7 sliding is off',
+                };
+                return;
+            }
+
+            if (stage84C31DisposableCharm.carried) {
+                stage84C31DisposableCharm = {
+                    ...stage84C31DisposableCharm,
+                    enabled: true,
+                    lastAction: 'skipped static-record write while disposable object is carried',
+                    lastError: null,
+                };
+                return;
+            }
+
+            const target = findStage84C31Target(compiled);
+            const desiredBytes = target
+                ? makeStage84C31ActiveRecord(target)
+                : makeStage84C31InactiveRecord();
+
+            try {
+                const result = await emu.readMemory(
+                    stage84C31DisposableCharm.recordAddr,
+                    KL_STAGE84_C30.staticObjectRecordSize
+                );
+                const currentBytes = Array.from(result.data);
+                if (!sameBytes(currentBytes, desiredBytes)) {
+                    await emu.writeMemory(
+                        stage84C31DisposableCharm.recordAddr,
+                        Uint8Array.from(desiredBytes)
+                    );
+                }
+
+                stage84C31DisposableCharm = {
+                    ...stage84C31DisposableCharm,
+                    enabled: true,
+                    target,
+                    desiredBytes,
+                    lastReadback: desiredBytes,
+                    writes: stage84C31DisposableCharm.writes + (sameBytes(currentBytes, desiredBytes) ? 0 : 1),
+                    lastAction: target
+                        ? `seeded ${fmtMechanicSprite(target.sprite)} in ${target.role} ${hexByte(target.physicalRoomId)} ${fmtLogicalCoord(target.logicalCoord)}`
+                        : 'disabled disposable record; no charm room in current five-room cross',
+                    lastError: null,
+                };
+            } catch (err) {
+                stage84C31DisposableCharm = {
+                    ...stage84C31DisposableCharm,
+                    enabled: true,
+                    lastError: `Failed disposable charm record write: ${err}`,
+                    lastAction: 'write failed',
+                };
+            }
+        };
+
+        const updateStage82CBubbleProbe = async (workRange, sample) => {
+            const context = getStage82CBubbleContext();
+            const templateBytes = getStage82CBubbleTemplateBytes(sample);
+            const liveBytes = readBytesFromRange(
+                workRange,
+                KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr,
+                KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotLength
+            );
+            const original = KL_STAGE82C_ORIGINAL_CAULDRON.bubbleTemplateBytes;
+            const zeroBytes = new Array(original.length).fill(0);
+            const desiredBytes = context.desiredActive ? original : zeroBytes;
+            const templateActive = sameBytes(templateBytes, original);
+            const templateZeroed = allZero(templateBytes);
+            const canWrite = (
+                KL_STAGE82C_CAULDRON_VISUAL_ENABLED &&
+                KL_STAGE82C_BUBBLE_MODE !== 'invalid' &&
+                typeof emu.writeMemory === 'function'
+            );
+
+            stage82CBubbleProbe = {
+                ...stage82CBubbleProbe,
+                desiredActive: context.desiredActive,
+                templateActive,
+                templateZeroed,
+                lastCoord: cloneData(context.coord),
+                lastRole: context.role,
+                lastTemplateBytes: templateBytes,
+                lastLiveBytes: liveBytes,
+                lastError: null,
+            };
+
+            if (!canWrite || sameBytes(templateBytes, desiredBytes)) {
+                stage82CBubbleProbe = {
+                    ...stage82CBubbleProbe,
+                    lastAction: canWrite
+                        ? 'no write needed'
+                        : KL_STAGE82C_BUBBLE_MODE === 'invalid'
+                        ? `invalid mode "${stage82CBubbleProbe.requested}"`
+                        : 'write unavailable or visual proof disabled',
+                };
+                return;
+            }
+
+            try {
+                await emu.writeMemory(
+                    KL_STAGE82C_ORIGINAL_CAULDRON.bubbleTemplateAddr,
+                    Uint8Array.from(desiredBytes)
+                );
+                stage82CBubbleProbe = {
+                    ...stage82CBubbleProbe,
+                    writes: stage82CBubbleProbe.writes + 1,
+                    templateActive: context.desiredActive,
+                    templateZeroed: !context.desiredActive,
+                    lastTemplateBytes: desiredBytes,
+                    lastAction: context.desiredActive
+                        ? `restored template for ${fmtLogicalCoord(context.coord)}`
+                        : `zeroed template for ${fmtLogicalCoord(context.coord)}`,
+                    lastError: null,
+                };
+            } catch (err) {
+                stage82CBubbleProbe = {
+                    ...stage82CBubbleProbe,
+                    lastError: `Failed bubble-template gate write: ${err}`,
+                    lastAction: 'write failed',
+                };
+            }
+        };
+
+        const renderStage82CBubbleProbeRow = () => {
+            const mode = describeStage82CBubbleMode(stage82CBubbleProbe.mode);
+            const templateState = stage82CBubbleProbe.templateActive
+                ? 'template restored'
+                : stage82CBubbleProbe.templateZeroed
+                ? 'template zeroed'
+                : 'template mixed/unknown';
+            const desired = stage82CBubbleProbe.desiredActive ? 'desired active' : 'desired off';
+            const live = stage82CBubbleProbe.lastLiveBytes.length
+                ? fmtBytes(stage82CBubbleProbe.lastLiveBytes, 10)
+                : '(unread)';
+            const state = stage82CBubbleProbe.mode === 'invalid'
+                ? 'bad'
+                : stage82CBubbleProbe.desiredActive
+                ? 'warn'
+                : 'ok';
+            const warning = stage82CBubbleProbe.mode === 'global'
+                ? ' Global mode is intentionally high risk and was already observed to produce bubbles in every room.'
+                : stage82CBubbleProbe.mode === 'cauldron'
+                ? ' Gated mode is a timing probe; if bubbles leak after exit, the live slots probably need separate handling.'
+                : '';
+            setRow(
+                'stage82CBubbles',
+                `${mode}; ${desired}; ${templateState}`,
+                `Current ${fmtLogicalCoord(stage82CBubbleProbe.lastCoord)} role ${stage82CBubbleProbe.lastRole}; requested "${stage82CBubbleProbe.requested}"; writes ${stage82CBubbleProbe.writes}; last action ${stage82CBubbleProbe.lastAction}; live ${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr)}: ${live}.${stage82CBubbleProbe.lastError ? ` ${stage82CBubbleProbe.lastError}` : ''}${warning}`,
+                state
+            );
+        };
 
         const renderStage8QuestTable = () => {
             if (!stage8QuestTbody || !stage8QuestStatus) return;
@@ -2182,26 +2982,31 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     role: currentRoom.questRole,
                     state: currentState,
                     reachability: currentReachability,
+                    dressing: currentRoom.questDressing,
                     notes: `${currentRoom.source}; ${currentRoom.label}`,
                 },
             ];
 
             if (quest.exists) {
+                const cauldronRoom = logicalMap.getRoomAt(quest.cauldron.x, quest.cauldron.y);
+                const charmRoom = logicalMap.getRoomAt(quest.charm.x, quest.charm.y);
                 rows.push(
                     {
                         probe: 'cauldron',
-                        room: logicalMap.getRoomAt(quest.cauldron.x, quest.cauldron.y),
+                        room: cauldronRoom,
                         role: 'cauldron',
                         state: currentState,
                         reachability: currentReachability,
+                        dressing: cauldronRoom.questDressing,
                         notes: `anchor placement ${quest.placement}; difficulty ${quest.difficulty}`,
                     },
                     {
                         probe: 'charm',
-                        room: logicalMap.getRoomAt(quest.charm.x, quest.charm.y),
+                        room: charmRoom,
                         role: 'charm',
                         state: currentState,
                         reachability: currentReachability,
+                        dressing: charmRoom.questDressing,
                         notes: 'metadata only; charm type is global, not sector-bound',
                     }
                 );
@@ -2216,6 +3021,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 role: apiProbeRoom.questRole,
                 state: apiProbeSector.state,
                 reachability: apiProbeReachability,
+                dressing: apiProbeRoom.questDressing,
                 notes: 'window.KnightLoreInfinity.logicalMap.getQuestSectorAt(12, -4)',
             });
 
@@ -2226,6 +3032,18 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     : 'This sector has no quest.',
                 `Persistent sector state: ${formatQuestState(currentState)}.`,
                 `Reachability: ${formatQuestReachability(currentReachability)}.`,
+                KL_STAGE82C_CAULDRON_VISUAL_ENABLED
+                    ? `Phase C visual proof is enabled: original cauldron background 0x13 is restored; bubbles ${describeStage82CBubbleMode(KL_STAGE82C_BUBBLE_MODE)}.`
+                    : 'Phase B uses safe static room bytes only; no original object/item/cauldron memory is touched.',
+                KL_STAGE84_C31_ENABLED
+                    ? `C3.1 disposable charm probe requested: static object record ${KL_STAGE84_C30.disposableRecordIndex} may be reseeded; inventory, charm-order, and completion bytes are still not directly written.`
+                    : 'C3.1 disposable charm probe is off.',
+                KL_STAGE84_C33_ENABLED
+                    ? 'C3.3 drop-gated JS-side cauldron acceptance is on: matching carried charm sprites can complete the persistent sector state after a player drop action.'
+                    : 'C3.3 JS-side cauldron acceptance is off.',
+                KL_STAGE84_C34_ENABLED
+                    ? 'C3.4 request-order patch is on: the active original objects_required slot may be patched for the current or adjacent logical cauldron.'
+                    : 'C3.4 request-order patch is off.',
                 `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
             ].join(' ');
 
@@ -2246,10 +3064,1118 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         <td>${escapeHtml(roomQuest && roomQuest.exists ? `cauldron ${formatQuestAnchor(roomQuest.cauldron)}; charm ${formatQuestAnchor(roomQuest.charm)}` : '-')}</td>
                         <td>${escapeHtml(formatQuestState(item.state))}</td>
                         <td>${escapeHtml(formatQuestReachability(item.reachability))}</td>
+                        <td>${escapeHtml(formatQuestDressing(item.dressing || room.questDressing))}</td>
                         <td>${escapeHtml(item.notes)}</td>
                     </tr>
                 `;
             }).join('');
+        };
+
+        const getStage84StaticRecordIndexForPtr = ptr => {
+            if (
+                ptr < KL_STAGE84_C30.staticObjectTableStart ||
+                ptr >= KL_STAGE84_C30.staticObjectTableEnd
+            ) return null;
+            const offset = ptr - KL_STAGE84_C30.staticObjectTableStart;
+            if (offset % KL_STAGE84_C30.staticObjectRecordSize !== 0) return null;
+            return offset / KL_STAGE84_C30.staticObjectRecordSize;
+        };
+
+        const formatStage84Pointer = ptr => {
+            if (!ptr) return `${hexWord(ptr)} null`;
+            const recordIndex = getStage84StaticRecordIndexForPtr(ptr);
+            return recordIndex === null
+                ? `${hexWord(ptr)} outside static object table`
+                : `${hexWord(ptr)} -> static object ${recordIndex}`;
+        };
+
+        const decodeStage84CarryState = workRange => {
+            const values = KL_STAGE84_C30.stateBytes.map(item => ({
+                ...item,
+                value: readByte(workRange, item.addr),
+            }));
+            const bytes = readBytesFromRange(
+                workRange,
+                KL_STAGE84_C30.carryStateStart,
+                KL_STAGE84_C30.carryStateEnd - KL_STAGE84_C30.carryStateStart
+            );
+            return {
+                values,
+                bytes,
+                decode: values.map(item => (
+                    `${item.label}=${item.value === undefined ? 'unread' : hexByte(item.value)}`
+                )).join('; '),
+                changed: values.some(item => item.value !== undefined && item.value !== 0),
+            };
+        };
+
+        const getStage84CarryStateValue = (carryState, label) => {
+            const item = carryState && carryState.values
+                ? carryState.values.find(value => value.label === label)
+                : null;
+            return item && item.value !== undefined ? item.value : 0;
+        };
+
+        const decodeStage84PlayerForm = workRange => {
+            const bodySprite = readByte(workRange, 0x5c08);
+            const bodyOrientationSprite = readByte(workRange, 0x5c41);
+            const bodyMirrorSprite = readByte(workRange, 0x5c45);
+            const human = (
+                (bodySprite >= 0x10 && bodySprite <= 0x1d) ||
+                bodyOrientationSprite === 0x18 ||
+                bodyOrientationSprite === 0x19 ||
+                bodyMirrorSprite === 0x18 ||
+                bodyMirrorSprite === 0x19
+            );
+            const wolf = (
+                (bodySprite >= 0x30 && bodySprite <= 0x3f) ||
+                bodyOrientationSprite === 0x1d ||
+                bodyOrientationSprite === 0x1e ||
+                bodyMirrorSprite === 0x1d ||
+                bodyMirrorSprite === 0x1e
+            );
+            const transforming = bodySprite >= 0x5c && bodySprite <= 0x5f;
+            const kind = human
+                ? 'human'
+                : wolf
+                    ? 'wolf'
+                    : transforming
+                        ? 'transforming'
+                        : 'unknown';
+            return {
+                kind,
+                acceptDrop: kind === 'human' || kind === 'unknown',
+                bodySprite,
+                bodyOrientationSprite,
+                bodyMirrorSprite,
+                text: `${kind}; body ${hexByte(bodySprite || 0)}; 0x5C41 ${hexByte(bodyOrientationSprite || 0)}; 0x5C45 ${hexByte(bodyMirrorSprite || 0)}`,
+            };
+        };
+
+        const decodeStage84InventorySlot = (bytes, slot) => {
+            const offset = slot.offset;
+            const graphic = bytes[offset] || 0;
+            const flags = bytes[offset + 1] || 0;
+            const ptr = (bytes[offset + 2] || 0) | ((bytes[offset + 3] || 0) << 8);
+            const staticRecordIndex = getStage84StaticRecordIndexForPtr(ptr);
+            const itemLike = isStage84ItemSprite(graphic);
+            const empty = graphic === 0 && flags === 0 && ptr === 0;
+            return {
+                ...slot,
+                graphic,
+                flags,
+                ptr,
+                staticRecordIndex,
+                itemLike,
+                empty,
+                decode: `${slot.label} ${hexWord(slot.addr)}: ${graphic ? fmtMechanicSprite(graphic) : 'empty'}; flags ${hexByte(flags)}; ptr ${formatStage84Pointer(ptr)}`,
+            };
+        };
+
+        const decodeStage84InventoryState = workRange => {
+            const bytes = readBytesFromRange(
+                workRange,
+                KL_STAGE84_C30.inventoryStart,
+                KL_STAGE84_C30.inventoryEnd - KL_STAGE84_C30.inventoryStart
+            );
+            const slots = KL_STAGE84_C30.inventorySlots.map(slot => decodeStage84InventorySlot(bytes, slot));
+            return {
+                bytes,
+                slots,
+                decode: slots.map(slot => slot.decode).join('; '),
+                changed: !allZero(bytes),
+            };
+        };
+
+        const getStage84PrimaryCarriedSlot = inventoryState => {
+            if (!inventoryState || !inventoryState.slots) return null;
+            const active = inventoryState.slots.filter(slot => (
+                !slot.empty &&
+                (slot.itemLike || slot.ptr !== 0)
+            ));
+            if (!active.length) return null;
+            return (
+                active.find(slot => slot.label.startsWith('carried display') && slot.ptr) ||
+                active.find(slot => slot.label.startsWith('carried display')) ||
+                active.find(slot => slot.ptr) ||
+                active[0]
+            );
+        };
+
+        const getStage84C32CarriedSource = slot => {
+            const fromDisposable = !!(slot && slot.ptr === stage84C31DisposableCharm.recordAddr);
+            const target = fromDisposable ? stage84C31DisposableCharm.target : null;
+            const sourceCoord = target && target.logicalCoord ? cloneData(target.logicalCoord) : null;
+            const sourceSector = sourceCoord
+                ? logicalMap.getQuestSectorAt(sourceCoord.x, sourceCoord.y)
+                : null;
+            const questCharm = target && target.questCharm
+                ? cloneData(target.questCharm)
+                : sourceSector && sourceSector.quest && sourceSector.quest.requiredCharm
+                    ? cloneData(sourceSector.quest.requiredCharm)
+                    : null;
+
+            return {
+                fromDisposable,
+                target: target ? cloneData(target) : null,
+                sourceCoord,
+                sourceSector: sourceSector
+                    ? {
+                        x: sourceSector.sectorX,
+                        y: sourceSector.sectorY,
+                        key: sourceSector.key,
+                    }
+                    : null,
+                questCharm,
+                sourceLabel: fromDisposable
+                    ? `C3.1 disposable record ${stage84C31DisposableCharm.recordIndex}`
+                    : slot && slot.staticRecordIndex !== null
+                        ? `original static object ${slot.staticRecordIndex}`
+                        : 'no static-table source pointer',
+            };
+        };
+
+        const updateStage84C32CarryProbe = (inventoryState, sample, currentCoord, currentRoom, currentSector) => {
+            const slot = getStage84PrimaryCarriedSlot(inventoryState);
+            if (!stage84C32CarryProbe.enabled) {
+                stage84C32CarryProbe = {
+                    ...stage84C32CarryProbe,
+                    current: null,
+                    currentlyCarrying: false,
+                    lastAction: 'disabled because Stage 7 sliding is off',
+                };
+                return;
+            }
+
+            if (!slot) {
+                const wasCarrying = stage84C32CarryProbe.currentlyCarrying;
+                stage84C32CarryProbe = {
+                    ...stage84C32CarryProbe,
+                    current: null,
+                    currentlyCarrying: false,
+                    lastSeenCoord: cloneData(currentCoord),
+                    lastSeenSample: sampleCount,
+                    lastAction: wasCarrying
+                        ? `carried object no longer observed at ${fmtLogicalCoord(currentCoord)}`
+                        : 'no carried object observed',
+                };
+                return;
+            }
+
+            const source = getStage84C32CarriedSource(slot);
+            const coordKey = logicalCoordKey(currentCoord.x, currentCoord.y);
+            const signature = `${slot.graphic}:${slot.flags}:${slot.ptr}`;
+            const previousSignature = stage84C32CarryProbe.current
+                ? stage84C32CarryProbe.current.signature
+                : null;
+            const continuingCarry = stage84C32CarryProbe.currentlyCarrying &&
+                previousSignature === signature;
+            const baseCoordKeys = continuingCarry ? stage84C32CarryProbe.carriedCoordKeys : [];
+            const carriedCoordKeys = baseCoordKeys.includes(coordKey)
+                ? baseCoordKeys
+                : [...baseCoordKeys, coordKey];
+            const transition = sample && sample.stage7Action && sample.stage7Action.recentered
+                ? sample.stage7Action
+                : null;
+            const transitionKey = transition
+                ? `${transition.frame}:${transition.sample}:${transition.direction}:${logicalCoordKey(transition.newCenter.x, transition.newCenter.y)}`
+                : null;
+            const newTransition = transitionKey && transitionKey !== stage84C32CarryProbe.lastTransitionKey;
+            const currentQuest = currentSector && currentSector.quest ? currentSector.quest : {exists: false};
+            const exactMatch = !!(
+                source.questCharm &&
+                currentQuest.requiredCharm &&
+                source.questCharm.id === currentQuest.requiredCharm.id
+            );
+            const spriteMatch = !!(
+                currentQuest.requiredCharm &&
+                getStage84C31Sprite(currentQuest.requiredCharm) === slot.graphic
+            );
+
+            stage84C32CarryProbe = {
+                ...stage84C32CarryProbe,
+                currentlyCarrying: true,
+                current: {
+                    slot: {...slot},
+                    signature,
+                    source,
+                    currentCoord: cloneData(currentCoord),
+                    currentRole: currentRoom.questRole || 'none',
+                    currentQuest: cloneData(currentQuest),
+                    exactMatch,
+                    spriteMatch,
+                    objectClass: isStage84QuestCharmSprite(slot.graphic) ? slot.graphic - 0x60 : null,
+                },
+                firstSeenCoord: continuingCarry
+                    ? stage84C32CarryProbe.firstSeenCoord
+                    : cloneData(currentCoord),
+                lastSeenCoord: cloneData(currentCoord),
+                firstSeenSample: continuingCarry
+                    ? stage84C32CarryProbe.firstSeenSample
+                    : sampleCount,
+                lastSeenSample: sampleCount,
+                carriedCoordKeys,
+                transitionsWhileCarried: (continuingCarry ? stage84C32CarryProbe.transitionsWhileCarried : 0) + (newTransition ? 1 : 0),
+                lastTransitionKey: transitionKey || (continuingCarry ? stage84C32CarryProbe.lastTransitionKey : null),
+                lastTransition: transition
+                    ? cloneData(transition)
+                    : continuingCarry
+                        ? stage84C32CarryProbe.lastTransition
+                        : null,
+                lastAction: `${fmtMechanicSprite(slot.graphic)} carried via ${formatStage84Pointer(slot.ptr)}`,
+            };
+        };
+
+        const formatStage84C32Identity = current => {
+            if (!current) return 'no carried item/charm observed';
+            const slot = current.slot;
+            return [
+                `${slot.label}`,
+                fmtMechanicSprite(slot.graphic),
+                `object class ${current.objectClass === null ? 'unknown' : current.objectClass}`,
+                `flags ${hexByte(slot.flags)}`,
+                `ptr ${formatStage84Pointer(slot.ptr)}`,
+                current.source.sourceLabel,
+                `source charm ${formatQuestCharm(current.source.questCharm)}`,
+            ].join('; ');
+        };
+
+        const formatStage84C32SourceRoom = current => {
+            if (!current) return '-';
+            const source = current.source;
+            if (!source.target) return source.sourceLabel;
+            return [
+                source.target.label,
+                fmtLogicalCoord(source.target.logicalCoord),
+                `physical ${hexByte(source.target.physicalRoomId)}`,
+                `seed role ${source.target.role}`,
+            ].join('; ');
+        };
+
+        const formatStage84C32Stability = () => {
+            const first = stage84C32CarryProbe.firstSeenCoord
+                ? fmtLogicalCoord(stage84C32CarryProbe.firstSeenCoord)
+                : '-';
+            const last = stage84C32CarryProbe.lastSeenCoord
+                ? fmtLogicalCoord(stage84C32CarryProbe.lastSeenCoord)
+                : '-';
+            const trail = stage84C32CarryProbe.carriedCoordKeys.length
+                ? stage84C32CarryProbe.carriedCoordKeys.slice(-8).join(' -> ')
+                : 'none';
+            const transition = stage84C32CarryProbe.lastTransition
+                ? `${stage84C32CarryProbe.lastTransition.direction} to ${fmtLogicalCoord(stage84C32CarryProbe.lastTransition.newCenter)}`
+                : 'none observed';
+            return `first ${first} at sample ${stage84C32CarryProbe.firstSeenSample || '-'}; last ${last} at sample ${stage84C32CarryProbe.lastSeenSample || '-'}; rooms ${stage84C32CarryProbe.carriedCoordKeys.length}; transitions ${stage84C32CarryProbe.transitionsWhileCarried}; last transition ${transition}; trail ${trail}`;
+        };
+
+        const formatStage84C32SectorMatch = current => {
+            if (!current) return 'no carried item/charm observed';
+            const required = current.currentQuest && current.currentQuest.requiredCharm
+                ? current.currentQuest.requiredCharm
+                : null;
+            return [
+                `current role ${current.currentRole}`,
+                `current sector requires ${formatQuestCharm(required)}`,
+                `carried exact source ${formatQuestCharm(current.source.questCharm)}`,
+                `exact JS match ${current.exactMatch ? 'yes' : 'no'}`,
+                `sprite-class match ${current.spriteMatch ? 'yes' : 'no'}`,
+            ].join('; ');
+        };
+
+        const describeStage84C33AcceptedSource = current => {
+            if (!current) return null;
+            const source = current.source || {};
+            return {
+                slot: current.slot
+                    ? {
+                        label: current.slot.label,
+                        sprite: current.slot.graphic,
+                        ptr: current.slot.ptr,
+                        staticRecordIndex: current.slot.staticRecordIndex,
+                    }
+                    : null,
+                sourceLabel: source.sourceLabel || null,
+                sourceCoord: source.sourceCoord ? cloneData(source.sourceCoord) : null,
+                sourceSector: source.sourceSector ? cloneData(source.sourceSector) : null,
+                sourceCharm: source.questCharm ? cloneData(source.questCharm) : null,
+            };
+        };
+
+        const updateStage84C33CauldronAcceptance = (currentCoord, currentRoom, currentSector, carryState, workRange) => {
+            const quest = currentSector && currentSector.quest ? currentSector.quest : {exists: false};
+            const state = currentSector ? currentSector.state : null;
+            const carried = stage84C32CarryProbe.current;
+            const carriedSprite = carried && carried.slot ? carried.slot.graphic : null;
+            const requiredSprite = quest.requiredCharm ? getStage84C31Sprite(quest.requiredCharm) : null;
+            const atCauldron = currentRoom && currentRoom.questRole === 'cauldron';
+            const carriedCharm = isStage84QuestCharmSprite(carriedSprite);
+            const playerForm = decodeStage84PlayerForm(workRange);
+            const pickupDropPressed = getStage84CarryStateValue(carryState, 'pickup_drop_pressed');
+            const objDroppingIntoCauldron = getStage84CarryStateValue(carryState, 'obj_dropping_into_cauldron');
+            const objectsPutInCauldron = getStage84CarryStateValue(carryState, 'objects_put_in_cauldron');
+            const cantDrop = getStage84CarryStateValue(carryState, 'cant_drop');
+            const pickupDropEdge = pickupDropPressed !== 0 && stage84C33CauldronAcceptance.lastPickupDropPressed === 0;
+            const objDroppingEdge = objDroppingIntoCauldron !== 0 &&
+                stage84C33CauldronAcceptance.lastObjDroppingIntoCauldron === 0;
+            const objectsPutChanged = (
+                stage84C33CauldronAcceptance.lastObjectsPutInCauldron !== null &&
+                objectsPutInCauldron !== stage84C33CauldronAcceptance.lastObjectsPutInCauldron
+            );
+            const dropSignal = objDroppingEdge
+                ? 'obj_dropping_into_cauldron edge'
+                : objectsPutChanged
+                    ? 'objects_put_in_cauldron changed'
+                    : pickupDropEdge
+                        ? 'pickup/drop edge'
+                        : 'none';
+            const dropSignalKind = objDroppingEdge || objectsPutChanged
+                ? 'strong'
+                : pickupDropEdge
+                    ? 'input'
+                    : 'none';
+            const spriteMatch = !!(
+                carried &&
+                carriedCharm &&
+                requiredSprite !== null &&
+                carriedSprite === requiredSprite
+            );
+            const ready = !!(
+                stage84C33CauldronAcceptance.requested &&
+                KL_STAGE7_SLIDING_CROSS.enabled &&
+                quest.exists &&
+                atCauldron &&
+                state &&
+                !state.completed &&
+                carried &&
+                carriedCharm &&
+                spriteMatch
+            );
+            const dropAllowed = dropSignalKind === 'strong' || (
+                dropSignalKind === 'input' &&
+                cantDrop === 0
+            );
+            const readyDropEvent = ready && playerForm.acceptDrop && dropAllowed;
+            let nextState = state;
+            let accepted = false;
+            let action = stage84C33CauldronAcceptance.lastAction;
+            let lastAccepted = stage84C33CauldronAcceptance.lastAccepted;
+
+            if (!stage84C33CauldronAcceptance.requested) {
+                action = 'disabled; add ?stage84c33=1 to enable drop-gated JS-side cauldron acceptance';
+            } else if (!KL_STAGE7_SLIDING_CROSS.enabled) {
+                action = 'disabled because Stage 7 sliding is off';
+            } else if (!quest.exists) {
+                action = 'current sector has no quest';
+            } else if (!atCauldron) {
+                action = `waiting for logical cauldron; current role ${currentRoom.questRole || 'none'}`;
+            } else if (state && state.completed) {
+                action = lastAccepted
+                    ? `sector (${currentSector.sectorX}, ${currentSector.sectorY}) already completed; last accepted after ${lastAccepted.dropSignal}`
+                    : `sector (${currentSector.sectorX}, ${currentSector.sectorY}) already completed`;
+            } else if (!carried) {
+                action = 'at logical cauldron, but no carried item/charm observed';
+            } else if (!carriedCharm) {
+                action = `at logical cauldron, but carried sprite ${fmtMechanicSprite(carriedSprite)} is not a quest charm`;
+            } else if (!spriteMatch) {
+                action = `at logical cauldron, but carried ${fmtMechanicSprite(carriedSprite)} does not match required ${fmtMechanicSprite(requiredSprite)}`;
+            } else if (!playerForm.acceptDrop) {
+                action = `ready, but player form is ${playerForm.kind}; drop in human form`;
+            } else if (!dropAllowed) {
+                action = dropSignalKind === 'input' && cantDrop !== 0
+                    ? `ready, but original cant_drop is ${hexByte(cantDrop)}`
+                    : 'ready; press pickup/drop in human form at the cauldron';
+            } else {
+                const result = logicalMap.markQuestCompletedAt(currentCoord.x, currentCoord.y, {
+                    sample: sampleCount,
+                    charm: quest.requiredCharm,
+                    source: describeStage84C33AcceptedSource(carried),
+                    dropSignal,
+                    playerForm,
+                });
+                nextState = result.state;
+                accepted = result.changed;
+                if (accepted) {
+                    lastAccepted = {
+                        coord: cloneData(currentCoord),
+                        sector: {
+                            x: currentSector.sectorX,
+                            y: currentSector.sectorY,
+                            key: currentSector.key,
+                        },
+                        sample: sampleCount,
+                        sprite: carriedSprite,
+                        requiredCharm: quest.requiredCharm ? cloneData(quest.requiredCharm) : null,
+                        source: describeStage84C33AcceptedSource(carried),
+                        dropSignal,
+                        playerForm,
+                    };
+                }
+                action = result.changed
+                    ? `completed sector (${currentSector.sectorX}, ${currentSector.sectorY}) with ${fmtMechanicSprite(carriedSprite)} after ${dropSignal}`
+                    : `matching charm observed; sector (${currentSector.sectorX}, ${currentSector.sectorY}) was already complete`;
+            }
+
+            stage84C33CauldronAcceptance = {
+                ...stage84C33CauldronAcceptance,
+                enabled: KL_STAGE84_C33_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+                lastCoord: cloneData(currentCoord),
+                lastSector: currentSector
+                    ? {
+                        x: currentSector.sectorX,
+                        y: currentSector.sectorY,
+                        key: currentSector.key,
+                    }
+                    : null,
+                lastState: nextState ? cloneData(nextState) : null,
+                lastRequiredSprite: requiredSprite,
+                lastCarriedSprite: carriedSprite,
+                lastMatch: spriteMatch,
+                lastReady: ready,
+                lastDropSignal: dropSignal,
+                lastDropSignalKind: dropSignalKind,
+                lastPlayerForm: playerForm.text,
+                lastPickupDropPressed: pickupDropPressed,
+                lastObjDroppingIntoCauldron: objDroppingIntoCauldron,
+                lastObjectsPutInCauldron: objectsPutInCauldron,
+                lastCantDrop: cantDrop,
+                dropEvents: stage84C33CauldronAcceptance.dropEvents + (readyDropEvent ? 1 : 0),
+                completions: stage84C33CauldronAcceptance.completions + (accepted ? 1 : 0),
+                lastAccepted,
+                lastAction: action,
+            };
+        };
+
+        const formatStage84C33Acceptance = () => {
+            const state = stage84C33CauldronAcceptance.lastState;
+            return [
+                `requested ${stage84C33CauldronAcceptance.requested ? 'yes' : 'no'}`,
+                `enabled ${stage84C33CauldronAcceptance.enabled ? 'yes' : 'no'}`,
+                `required ${stage84C33CauldronAcceptance.lastRequiredSprite === null ? '-' : fmtMechanicSprite(stage84C33CauldronAcceptance.lastRequiredSprite)}`,
+                `carried ${stage84C33CauldronAcceptance.lastCarriedSprite === null ? '-' : fmtMechanicSprite(stage84C33CauldronAcceptance.lastCarriedSprite)}`,
+                `sprite match ${stage84C33CauldronAcceptance.lastMatch ? 'yes' : 'no'}`,
+                `ready ${stage84C33CauldronAcceptance.lastReady ? 'yes' : 'no'}`,
+                `drop signal ${stage84C33CauldronAcceptance.lastDropSignal}`,
+                `player ${stage84C33CauldronAcceptance.lastPlayerForm}`,
+                `cant_drop ${hexByte(stage84C33CauldronAcceptance.lastCantDrop || 0)}`,
+                `state ${state ? formatQuestState(state) : '-'}`,
+                `ready drop events ${stage84C33CauldronAcceptance.dropEvents}`,
+                `completions ${stage84C33CauldronAcceptance.completions}`,
+                `last accepted ${stage84C33CauldronAcceptance.lastAccepted ? stage84C33CauldronAcceptance.lastAccepted.dropSignal : 'none'}`,
+                `last action ${stage84C33CauldronAcceptance.lastAction}`,
+            ].join('; ');
+        };
+
+        const formatStage84C33Room = () => {
+            const sector = stage84C33CauldronAcceptance.lastSector;
+            const coord = stage84C33CauldronAcceptance.lastCoord;
+            const accepted = stage84C33CauldronAcceptance.lastAccepted;
+            return [
+                `logical ${fmtLogicalCoord(coord)}`,
+                sector ? `sector (${sector.x}, ${sector.y})` : 'sector -',
+                accepted ? `last accepted ${fmtLogicalCoord(accepted.coord)} at sample ${accepted.sample}` : 'no accepted charm yet',
+            ].join('; ');
+        };
+
+        const updateStage84C32C33FromSnapshot = (workRange, sample) => {
+            const currentCoord = getStage8CurrentCoord();
+            const currentRoom = logicalMap.getRoomAt(currentCoord.x, currentCoord.y);
+            const currentSector = logicalMap.getQuestSectorAt(currentCoord.x, currentCoord.y);
+            const inventoryState = decodeStage84InventoryState(workRange);
+            const carryState = decodeStage84CarryState(workRange);
+            updateStage84C32CarryProbe(inventoryState, sample, currentCoord, currentRoom, currentSector);
+            updateStage84C33CauldronAcceptance(currentCoord, currentRoom, currentSector, carryState, workRange);
+        };
+
+        const getStage84C34RequestPatchTarget = (currentCoord, currentRoom, currentSector) => {
+            const currentQuest = currentSector && currentSector.quest
+                ? currentSector.quest
+                : {exists: false};
+            if (currentRoom.questRole === 'cauldron' && currentQuest.exists) {
+                return {
+                    coord: currentCoord,
+                    room: currentRoom,
+                    sector: currentSector,
+                    quest: currentQuest,
+                    role: 'cauldron',
+                    reason: 'current logical cauldron',
+                    direction: null,
+                };
+            }
+
+            for (const direction of KL_DIRECTIONS) {
+                const delta = KL_DIRECTION_DELTAS[direction];
+                const opposite = KL_OPPOSITE_DIRECTIONS[direction];
+                const coord = {
+                    x: currentCoord.x + delta.x,
+                    y: currentCoord.y + delta.y,
+                };
+                const room = logicalMap.getRoomAt(coord.x, coord.y);
+                const sector = logicalMap.getQuestSectorAt(coord.x, coord.y);
+                const quest = sector && sector.quest ? sector.quest : {exists: false};
+                const reachableFromCurrent = !!(
+                    currentRoom.exits &&
+                    currentRoom.exits[direction] &&
+                    room.exits &&
+                    room.exits[opposite]
+                );
+                if (room.questRole === 'cauldron' && quest.exists && reachableFromCurrent) {
+                    return {
+                        coord,
+                        room,
+                        sector,
+                        quest,
+                        role: 'adjacent-cauldron',
+                        reason: `pre-armed adjacent ${direction} cauldron`,
+                        direction,
+                    };
+                }
+            }
+
+            return null;
+        };
+
+        const updateStage84C34RequestOrderPatch = async workRange => {
+            const currentCoord = getStage8CurrentCoord();
+            const currentRoom = logicalMap.getRoomAt(currentCoord.x, currentCoord.y);
+            const currentSector = logicalMap.getQuestSectorAt(currentCoord.x, currentCoord.y);
+            const target = getStage84C34RequestPatchTarget(currentCoord, currentRoom, currentSector);
+            const quest = target && target.quest ? target.quest : {exists: false};
+            const targetState = target && target.sector ? target.sector.state : null;
+            const role = currentRoom.questRole || 'none';
+            const objectsPutInCauldron = getStage84CarryStateValue(
+                decodeStage84CarryState(workRange),
+                'objects_put_in_cauldron'
+            );
+            let tableBytes = stage84C34RequestOrderPatch.tableBytes;
+            let lastAction = stage84C34RequestOrderPatch.lastAction;
+            let lastError = null;
+            let patchAddr = null;
+            let previousValue = null;
+            let desiredIndex = quest.requiredCharm ? getStage84C31ObjectIndex(quest.requiredCharm) : null;
+            let desiredSprite = quest.requiredCharm ? getStage84C31Sprite(quest.requiredCharm) : null;
+            let writes = 0;
+
+            const setState = extra => {
+                stage84C34RequestOrderPatch = {
+                    ...stage84C34RequestOrderPatch,
+                    enabled: KL_STAGE84_C34_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+                    lastCoord: cloneData(currentCoord),
+                    lastRole: role,
+                    lastSector: currentSector
+                        ? {
+                            x: currentSector.sectorX,
+                            y: currentSector.sectorY,
+                            key: currentSector.key,
+                        }
+                        : null,
+                    targetCoord: target ? cloneData(target.coord) : null,
+                    targetRole: target ? target.role : 'none',
+                    targetSector: target && target.sector
+                        ? {
+                            x: target.sector.sectorX,
+                            y: target.sector.sectorY,
+                            key: target.sector.key,
+                        }
+                        : null,
+                    targetCompleted: !!(targetState && targetState.completed),
+                    targetReason: target ? target.reason : 'none',
+                    objectsPutInCauldron,
+                    currentIndex: objectsPutInCauldron >= 0 && objectsPutInCauldron < KL_STAGE84_C30.objectsRequiredLength
+                        ? objectsPutInCauldron
+                        : null,
+                    patchAddr,
+                    previousValue,
+                    desiredIndex,
+                    desiredSprite,
+                    tableBytes,
+                    writes: stage84C34RequestOrderPatch.writes + writes,
+                    lastAction,
+                    lastError,
+                    ...extra,
+                };
+            };
+
+            if (!stage84C34RequestOrderPatch.requested) {
+                lastAction = 'disabled; add ?stage84c34=1 to patch the original requested-object order slot';
+                setState({enabled: false});
+                return;
+            }
+
+            if (!KL_STAGE7_SLIDING_CROSS.enabled || typeof emu.readMemory !== 'function') {
+                lastAction = KL_STAGE7_SLIDING_CROSS.enabled
+                    ? 'readMemory unavailable'
+                    : 'disabled because Stage 7 sliding is off';
+                setState({enabled: false});
+                return;
+            }
+
+            try {
+                const result = await emu.readMemory(
+                    KL_STAGE84_C30.objectsRequiredAddr,
+                    KL_STAGE84_C30.objectsRequiredLength
+                );
+                tableBytes = Array.from(result.data);
+            } catch (err) {
+                lastError = `Failed to read objects_required table: ${err}`;
+                lastAction = 'read failed';
+                setState({enabled: true});
+                return;
+            }
+
+            if (typeof emu.writeMemory !== 'function') {
+                lastAction = 'writeMemory unavailable';
+                setState({enabled: false});
+                return;
+            }
+
+            if (!target || !quest.exists) {
+                lastAction = `waiting for current/adjacent logical cauldron; current role ${role}`;
+                setState({enabled: true});
+                return;
+            }
+
+            if (objectsPutInCauldron < 0 || objectsPutInCauldron >= KL_STAGE84_C30.objectsRequiredLength) {
+                lastError = `objects_put_in_cauldron ${hexByte(objectsPutInCauldron)} is outside the 14-entry request table`;
+                lastAction = 'refused to patch out-of-range request slot';
+                setState({enabled: true});
+                return;
+            }
+
+            patchAddr = KL_STAGE84_C30.objectsRequiredAddr + objectsPutInCauldron;
+            previousValue = tableBytes[objectsPutInCauldron];
+
+            if (targetState && targetState.completed) {
+                lastAction = `${target.reason}: target sector already completed; request slot left unchanged`;
+                setState({enabled: true});
+                return;
+            }
+
+            if (!Number.isInteger(desiredIndex) || desiredIndex < 0 || desiredIndex > 6) {
+                lastError = `Desired request index ${desiredIndex} is not in 0..6`;
+                lastAction = 'refused invalid desired request index';
+                setState({enabled: true});
+                return;
+            }
+
+            if (previousValue !== desiredIndex) {
+                try {
+                    await emu.writeMemory(patchAddr, Uint8Array.from([desiredIndex]));
+                    tableBytes = tableBytes.slice();
+                    tableBytes[objectsPutInCauldron] = desiredIndex;
+                    writes = 1;
+                    lastAction = `${target.reason}: patched request slot ${objectsPutInCauldron} from ${formatStage84ObjectIndex(previousValue)} to ${formatStage84ObjectIndex(desiredIndex)}`;
+                } catch (err) {
+                    lastError = `Failed to patch objects_required slot: ${err}`;
+                    lastAction = 'write failed';
+                }
+            } else {
+                lastAction = `${target.reason}: request slot ${objectsPutInCauldron} already matches ${formatStage84ObjectIndex(desiredIndex)}`;
+            }
+
+            setState({enabled: true});
+        };
+
+        const formatStage84C34RequestPatch = () => {
+            const patch = stage84C34RequestOrderPatch;
+            return [
+                `requested ${patch.requested ? 'yes' : 'no'}`,
+                `enabled ${patch.enabled ? 'yes' : 'no'}`,
+                `objects_put ${hexByte(patch.objectsPutInCauldron || 0)}`,
+                `slot ${patch.currentIndex === null ? '-' : patch.currentIndex}`,
+                `desired ${formatStage84ObjectIndex(patch.desiredIndex)}`,
+                `previous ${formatStage84ObjectIndex(patch.previousValue)}`,
+                `display sprite ${patch.desiredSprite === null ? '-' : fmtMechanicSprite(patch.desiredSprite)}`,
+                `target completed ${patch.targetCompleted ? 'yes' : 'no'}`,
+                `writes ${patch.writes}`,
+                `last action ${patch.lastAction}`,
+            ].join('; ');
+        };
+
+        const formatStage84C34Room = () => {
+            const patch = stage84C34RequestOrderPatch;
+            const sector = patch.targetSector;
+            return [
+                `current ${fmtLogicalCoord(patch.lastCoord)} role ${patch.lastRole}`,
+                patch.targetCoord ? `target ${fmtLogicalCoord(patch.targetCoord)} ${patch.targetReason}` : 'target -',
+                sector ? `sector (${sector.x}, ${sector.y})` : 'sector -',
+                patch.patchAddr === null ? 'patch addr -' : `patch addr ${hexWord(patch.patchAddr)}`,
+            ].join('; ');
+        };
+
+        const formatStage84RecordRefs = records => {
+            if (!records.length) return 'none';
+            const labels = records.slice(0, 10).map(record => (
+                `${record.index}:${hexByte(record.sprite || 0)}@${hexByte(record.currentRoom || 0)}`
+            ));
+            return records.length > 10
+                ? `${labels.join(' ')} ... (${records.length} record(s))`
+                : labels.join(' ');
+        };
+
+        const formatStage84CauldronGateReadback = () => {
+            if (!stage84CauldronGate.lastReadback.length) return 'unread';
+            return stage84CauldronGate.lastReadback.map(item => (
+                `${item.label} ${hexWord(item.opcodeAddr)}=${hexByte(item.opcode || 0)}/${hexByte(item.currentCompare || 0)} -> desired ${hexByte(item.desiredCompare)}${item.error ? ` (${item.error})` : ''}`
+            )).join('; ');
+        };
+
+        const formatStage84C31Target = target => {
+            if (!target) return 'none';
+            return `${target.role} ${hexByte(target.physicalRoomId)} ${fmtLogicalCoord(target.logicalCoord)} ${target.label}; ${formatQuestCharm(target.questCharm)} -> ${fmtMechanicSprite(target.sprite)}`;
+        };
+
+        const decodeStage84Slot = (bytes, baseAddr) => {
+            const sprite = bytes[0] || 0;
+            const extraByte = bytes[8];
+            const ptr = (bytes[16] || 0) | ((bytes[17] || 0) << 8);
+            const nonZeroOffsets = getNonZeroOffsets(bytes);
+            const empty = nonZeroOffsets.length === 0;
+            const itemLike = sprite >= 0x60 && sprite <= 0x67;
+            const cauldronDisplayLike = (sprite >= 0xa0 && sprite <= 0xa7) || sprite === 0xae;
+            const kind = empty
+                ? 'empty'
+                : itemLike
+                    ? 'item/charm'
+                    : cauldronDisplayLike
+                        ? 'cauldron bubble/display'
+                        : 'unknown';
+            const extraDecode = itemLike
+                ? `room +8 ${extraByte === undefined ? 'unread' : hexByte(extraByte)}`
+                : cauldronDisplayLike
+                    ? `state/sprite +8 ${extraByte === undefined ? 'unread' : `${hexByte(extraByte)} ${fmtMechanicSprite(extraByte)}`}`
+                    : `raw/state +8 ${extraByte === undefined ? 'unread' : hexByte(extraByte)}`;
+            return {
+                sprite,
+                room: itemLike ? extraByte : undefined,
+                extraByte,
+                ptr,
+                staticRecordIndex: getStage84StaticRecordIndexForPtr(ptr),
+                kind,
+                zero: empty,
+                nonZeroOffsets,
+                decode: [
+                    `${kind}; ${fmtMechanicSprite(sprite)}`,
+                    `XYZ ${fmtXYZ(bytes[1] || 0, bytes[2] || 0, bytes[3] || 0)}`,
+                    `size ${fmtByte(bytes[4] || 0)}/${fmtByte(bytes[5] || 0)}/${fmtByte(bytes[6] || 0)}`,
+                    `flags ${hexByte(bytes[7] || 0)}`,
+                    extraDecode,
+                    `ptr +16/+17 ${formatStage84Pointer(ptr)}`,
+                    fmtNonZeroOffsets(nonZeroOffsets),
+                ].join('; '),
+                bytes: fmtBytes(bytes, 16),
+                address: `${hexWord(baseAddr)}..${hexWord(baseAddr + bytes.length - 1)}`,
+            };
+        };
+
+        const decodeStage84DynamicRecord = (workRange, addr) => {
+            const bytes = readBytesFromRange(workRange, addr, 8);
+            return {
+                sprite: bytes[0],
+                decode: [
+                    fmtMechanicSprite(bytes[0]),
+                    `XYZ ${fmtXYZ(bytes[1] || 0, bytes[2] || 0, bytes[3] || 0)}`,
+                    `size ${fmtByte(bytes[4] || 0)}/${fmtByte(bytes[5] || 0)}/${fmtByte(bytes[6] || 0)}`,
+                    `flags ${hexByte(bytes[7] || 0)}`,
+                ].join('; '),
+                bytes: fmtBytes(bytes, 8),
+                address: `${hexWord(addr)}..${hexWord(addr + 7)}`,
+                zero: allZero(bytes),
+            };
+        };
+
+        const decodeStage84StaticObjectRecord = (itemObjectRange, index) => {
+            const addr = KL_STAGE84_C30.staticObjectTableStart +
+                index * KL_STAGE84_C30.staticObjectRecordSize;
+            const bytes = readBytesFromRange(itemObjectRange, addr, KL_STAGE84_C30.staticObjectRecordSize);
+            return {
+                index,
+                addr,
+                bytes,
+                sprite: bytes[0],
+                startRoom: bytes[4],
+                currentRoom: bytes[8],
+                decode: [
+                    `record ${index}`,
+                    `graphic ${bytes[0] === undefined ? 'unread' : hexByte(bytes[0])}`,
+                    `start XYZ ${fmtByte(bytes[1] || 0)}/${fmtByte(bytes[2] || 0)}/${fmtByte(bytes[3] || 0)}`,
+                    `start room ${bytes[4] === undefined ? 'unread' : hexByte(bytes[4])}`,
+                    `current XYZ ${fmtByte(bytes[5] || 0)}/${fmtByte(bytes[6] || 0)}/${fmtByte(bytes[7] || 0)}`,
+                    `current room ${bytes[8] === undefined ? 'unread' : hexByte(bytes[8])}`,
+                ].join('; '),
+                address: `${hexWord(addr)}..${hexWord(addr + KL_STAGE84_C30.staticObjectRecordSize - 1)}`,
+                zero: allZero(bytes),
+            };
+        };
+
+        const renderStage84C30MechanicTable = (workRange, itemObjectRange, sample) => {
+            if (!stage84C30Tbody || !stage84C30Status || !itemObjectRange) return;
+
+            const currentCoord = getStage8CurrentCoord();
+            const currentRoom = logicalMap.getRoomAt(currentCoord.x, currentCoord.y);
+            const currentSector = logicalMap.getQuestSectorAt(currentCoord.x, currentCoord.y);
+            const quest = currentSector.quest || {exists: false};
+            const staticRecordCount = Math.floor(
+                (KL_STAGE84_C30.staticObjectTableEnd - KL_STAGE84_C30.staticObjectTableStart) /
+                KL_STAGE84_C30.staticObjectRecordSize
+            );
+            const staticRecords = Array.from({length: staticRecordCount}, (_, index) => (
+                decodeStage84StaticObjectRecord(itemObjectRange, index)
+            ));
+            const nonZeroStaticRecordCount = staticRecords.filter(record => !record.zero).length;
+            const currentRoomMatches = staticRecords.filter(record => (
+                !record.zero && record.currentRoom === sample.room0
+            ));
+            const startRoomMatches = staticRecords.filter(record => (
+                !record.zero && record.startRoom === sample.room0
+            ));
+            const carryState = decodeStage84CarryState(workRange);
+            const inventoryState = decodeStage84InventoryState(workRange);
+            const originalCauldronCheck = sample.room0 === KL_STAGE84_C30.cauldronPhysicalRoom;
+            const logicalCauldron = currentRoom.questRole === 'cauldron';
+            const rows = [];
+            const addRow = row => rows.push(row);
+
+            addRow({
+                state: 'ok',
+                probe: 'context',
+                address: '-',
+                decode: `current ${fmtLogicalCoord(currentCoord)}; role ${currentRoom.questRole || 'none'}; physical ${hexByte(sample.room0)}`,
+                room: quest.exists
+                    ? `sector (${currentSector.sectorX}, ${currentSector.sectorY}); required ${formatQuestCharm(quest.requiredCharm)}`
+                    : `sector (${currentSector.sectorX}, ${currentSector.sectorY}); no quest`,
+                bytes: '-',
+                notes: [
+                    stage84C31DisposableCharm.requested
+                        ? 'C3.1 may rewrite exactly one disposable static object-table record; C3.2 observes carried state.'
+                        : 'C3.1 disposable charm probe is off.',
+                    stage84C33CauldronAcceptance.requested
+                        ? 'C3.3 may mark JS quest-sector state complete when a matching carried charm is dropped at a logical cauldron.'
+                        : 'C3.3 JS-side cauldron acceptance is off.',
+                    stage84C34RequestOrderPatch.requested
+                        ? 'C3.4 may patch the original current request-order slot to match the JS sector charm.'
+                        : 'C3.4 original request-order patch is off.',
+                    'Original inventory, charm-order, and global completion bytes are not directly written.',
+                ].join(' '),
+            });
+
+            addRow({
+                state: originalCauldronCheck && !logicalCauldron ? 'warn' : originalCauldronCheck ? 'ok' : 'muted',
+                probe: 'C3.0b cauldron room check',
+                address: 'code compares physical room with 0x88',
+                decode: `original drop check ${originalCauldronCheck ? 'TRUE' : 'false'}; physical ${hexByte(sample.room0)}; logical role ${currentRoom.questRole || 'none'}`,
+                room: `logical ${fmtLogicalCoord(currentCoord)}; quest cauldron ${logicalCauldron ? 'yes' : 'no'}`,
+                bytes: '-',
+                notes: originalCauldronCheck && !logicalCauldron
+                    ? 'Important: under Stage 7 recentering, original cauldron-drop code would treat this physical center as room 0x88 even when the logical room is not a quest cauldron. C3.0c gates that before C3.1 drop probes.'
+                    : 'Original cauldron-drop code is hard-coded to physical room 0x88; this row compares that with the logical quest role.',
+            });
+
+            addRow({
+                state: stage84CauldronGate.lastError
+                    ? 'bad'
+                    : stage84CauldronGate.allowed
+                        ? 'ok'
+                        : 'warn',
+                probe: 'C3.0c cauldron acceptance gate',
+                address: KL_STAGE84_C30.cauldronGatePatches
+                    .map(patch => hexWord(patch.immediateAddr))
+                    .join(' '),
+                decode: `gate ${stage84CauldronGate.enabled ? 'enabled' : 'disabled'}; logical role ${stage84CauldronGate.lastRole}; allow original cauldron drop ${stage84CauldronGate.allowed ? 'yes' : 'no'}; compare byte ${hexByte(stage84CauldronGate.desiredCompare)}; ${formatStage84CauldronGateReadback()}`,
+                room: `logical ${fmtLogicalCoord(stage84CauldronGate.lastCoord)}; physical ${hexByte(sample.room0)}`,
+                bytes: '-',
+                notes: stage84CauldronGate.lastError
+                    ? stage84CauldronGate.lastError
+                    : `Runtime gate for the two pickup/drop CP 0x88 checks. Outside logical cauldron rooms, compare immediates are changed to ${hexByte(KL_STAGE84_C30.cauldronGateBlockedRoom)}; inside logical cauldron rooms they are restored to ${hexByte(KL_STAGE84_C30.cauldronPhysicalRoom)}. Writes so far: ${stage84CauldronGate.writes}; last action: ${stage84CauldronGate.lastAction}.`,
+            });
+
+            const c31Record = staticRecords[KL_STAGE84_C30.disposableRecordIndex] || null;
+            addRow({
+                state: stage84C31DisposableCharm.lastError
+                    ? 'bad'
+                    : stage84C31DisposableCharm.enabled
+                        ? stage84C31DisposableCharm.target ? 'warn' : 'muted'
+                        : 'muted',
+                probe: 'C3.1 disposable charm record',
+                address: `${hexWord(stage84C31DisposableCharm.recordAddr)}..${hexWord(stage84C31DisposableCharm.recordAddr + KL_STAGE84_C30.staticObjectRecordSize - 1)}`,
+                decode: `requested ${stage84C31DisposableCharm.requested ? 'yes' : 'no'}; enabled ${stage84C31DisposableCharm.enabled ? 'yes' : 'no'}; last seeded target ${formatStage84C31Target(stage84C31DisposableCharm.target)}; carried ${stage84C31DisposableCharm.carried ? 'yes' : 'no'}; live ref ${stage84C31DisposableCharm.referencedInLiveSlot ? 'yes' : 'no'}`,
+                room: c31Record
+                    ? `record current ${hexByte(c31Record.currentRoom || 0)}; start ${hexByte(c31Record.startRoom || 0)}`
+                    : 'record unread',
+                bytes: c31Record ? fmtBytes(c31Record.bytes, 9) : fmtBytes(stage84C31DisposableCharm.lastReadback, 9),
+                notes: stage84C31DisposableCharm.lastError
+                    ? stage84C31DisposableCharm.lastError
+                    : `Opt-in with ?stage84c31=1. Uses static object record ${stage84C31DisposableCharm.recordIndex}; writes ${stage84C31DisposableCharm.writes}; last action: ${stage84C31DisposableCharm.lastAction}. The target is the last seeded source, not necessarily the current room. If you pick it up, pick it back up again before leaving after a non-cauldron drop during this disposable probe.`,
+            });
+
+            addRow({
+                state: stage84C32CarryProbe.currentlyCarrying ? 'ok' : 'muted',
+                probe: 'C3.2 carried identity',
+                address: `${hexWord(KL_STAGE84_C30.inventoryStart)}..${hexWord(KL_STAGE84_C30.inventoryEnd - 1)}`,
+                decode: formatStage84C32Identity(stage84C32CarryProbe.current),
+                room: formatStage84C32SourceRoom(stage84C32CarryProbe.current),
+                bytes: fmtBytes(inventoryState.bytes, 16),
+                notes: 'Read-only carried-object identity probe. For the disposable charm, the important result is ptr 0x7109 -> static object 31 plus the sprite held in the carried display slot.',
+            });
+
+            addRow({
+                state: stage84C32CarryProbe.currentlyCarrying
+                    ? stage84C32CarryProbe.transitionsWhileCarried > 0 ? 'ok' : 'warn'
+                    : 'muted',
+                probe: 'C3.2 carry stability',
+                address: 'logical recenter history',
+                decode: formatStage84C32Stability(),
+                room: `current ${fmtLogicalCoord(currentCoord)}; physical ${hexByte(sample.room0)}`,
+                bytes: '-',
+                notes: 'If transitions increase while the carried pointer stays stable, original carry state is surviving Stage 7 physical-room recentering.',
+            });
+
+            addRow({
+                state: stage84C32CarryProbe.current
+                    ? stage84C32CarryProbe.current.spriteMatch ? 'ok' : 'warn'
+                    : 'muted',
+                probe: 'C3.2 current-sector match',
+                address: 'JS quest metadata vs carried item',
+                decode: formatStage84C32SectorMatch(stage84C32CarryProbe.current),
+                room: `logical ${fmtLogicalCoord(currentCoord)}; sector (${currentSector.sectorX}, ${currentSector.sectorY})`,
+                bytes: '-',
+                notes: 'This compares JS metadata only. The original cauldron requested-object display remains independent unless the C3.4 request-order patch is enabled.',
+            });
+
+            addRow({
+                state: stage84C33CauldronAcceptance.requested
+                    ? stage84C33CauldronAcceptance.lastState && stage84C33CauldronAcceptance.lastState.completed
+                        ? 'ok'
+                        : logicalCauldron
+                            ? 'warn'
+                            : 'muted'
+                    : 'muted',
+                probe: 'C3.3 cauldron acceptance',
+                address: 'JS quest sector state',
+                decode: formatStage84C33Acceptance(),
+                room: formatStage84C33Room(),
+                bytes: '-',
+                notes: 'Opt-in with ?stage84c33=1. Accepts a player drop action at a logical cauldron when the carried quest charm sprite 0x60..0x66 matches the JS request. This proof marks JS persistent sector state only; it does not consume the object or write original order/completion bytes. The original cauldron display is independent unless C3.4 is enabled.',
+            });
+
+            addRow({
+                state: stage84C34RequestOrderPatch.lastError
+                    ? 'bad'
+                    : stage84C34RequestOrderPatch.requested
+                        ? logicalCauldron ? 'warn' : 'muted'
+                        : 'muted',
+                probe: 'C3.4 request-order patch',
+                address: `${hexWord(KL_STAGE84_C30.objectsRequiredAddr)}..${hexWord(KL_STAGE84_C30.objectsRequiredAddr + KL_STAGE84_C30.objectsRequiredLength - 1)}`,
+                decode: formatStage84C34RequestPatch(),
+                room: formatStage84C34Room(),
+                bytes: fmtBytes(stage84C34RequestOrderPatch.tableBytes, KL_STAGE84_C30.objectsRequiredLength),
+                notes: stage84C34RequestOrderPatch.lastError
+                    ? stage84C34RequestOrderPatch.lastError
+                    : 'Opt-in with ?stage84c34=1. Patches only objects_required[objects_put_in_cauldron] for the current or directly adjacent logical cauldron, so the original cauldron reveal/acceptance path asks for the JS sector charm. This may let the original objects_put_in_cauldron counter increment on a correct drop; watch the C3.0b carry/control bytes row.',
+            });
+
+            addRow({
+                state: carryState.changed ? 'warn' : 'muted',
+                probe: 'C3.0b carry/control bytes',
+                address: `${hexWord(KL_STAGE84_C30.carryStateStart)}..${hexWord(KL_STAGE84_C30.carryStateEnd - 1)}`,
+                decode: carryState.decode,
+                room: `current physical ${hexByte(sample.room0)}`,
+                bytes: fmtBytes(carryState.bytes, 24),
+                notes: 'Read-only state bytes: pickup/drop latch, carried-change flag, user input, lives, objects_put_in_cauldron, all_objs_in_cauldron, obj_dropping_into_cauldron, and cant_drop.',
+            });
+
+            addRow({
+                state: inventoryState.changed ? 'warn' : 'muted',
+                probe: 'C3.0b inventory/carried queue',
+                address: `${hexWord(KL_STAGE84_C30.inventoryStart)}..${hexWord(KL_STAGE84_C30.inventoryEnd - 1)}`,
+                decode: inventoryState.decode,
+                room: `current physical ${hexByte(sample.room0)}`,
+                bytes: fmtBytes(inventoryState.bytes, 16),
+                notes: 'Inventory handoff plus the three 4-byte carried-object display entries. Pointers should point into 0x6FF2..0x7111 when carrying a real special object.',
+            });
+
+            addRow({
+                state: currentRoomMatches.length ? 'warn' : 'muted',
+                probe: 'C3.0b static records for current room',
+                address: `${hexWord(KL_STAGE84_C30.staticObjectTableStart)}..${hexWord(KL_STAGE84_C30.staticObjectTableEnd - 1)}`,
+                decode: `current-room matches ${currentRoomMatches.length}: ${formatStage84RecordRefs(currentRoomMatches)}; start-room matches ${startRoomMatches.length}: ${formatStage84RecordRefs(startRoomMatches)}`,
+                room: `physical ${hexByte(sample.room0)}; logical ${fmtLogicalCoord(currentCoord)}`,
+                bytes: '-',
+                notes: 'find_special_objs_here copies static records whose current room equals the physical room into 0x5C48/0x5C68. This row tells us whether an original item can appear in the active center.',
+            });
+
+            for (const slot of KL_STAGE84_C30.liveSlots) {
+                const bytes = readBytesFromRange(workRange, slot.addr, KL_STAGE84_C30.liveSlotSize);
+                const decoded = decodeStage84Slot(bytes, slot.addr);
+                const interesting = !decoded.zero || decoded.room === sample.room0;
+                const roomText = decoded.zero
+                    ? `empty slot; current physical ${hexByte(sample.room0)}`
+                    : decoded.kind === 'item/charm'
+                        ? `item room ${hexByte(decoded.room)}; current physical ${hexByte(sample.room0)}${decoded.room === sample.room0 ? '; matches current' : ''}`
+                        : decoded.kind === 'cauldron bubble/display'
+                            ? `bubble/display state +8 ${hexByte(decoded.extraByte)} (${fmtMechanicSprite(decoded.extraByte)}); current physical ${hexByte(sample.room0)}`
+                            : `raw/state +8 ${decoded.extraByte === undefined ? 'unread' : hexByte(decoded.extraByte)}; current physical ${hexByte(sample.room0)}`;
+                addRow({
+                    state: interesting ? 'warn' : 'muted',
+                    probe: slot.label,
+                    address: decoded.address,
+                    decode: decoded.decode,
+                    room: roomText,
+                    bytes: decoded.bytes,
+                    notes: slot.addr === KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr
+                        ? 'Shared with cauldron bubbles/item-display candidates; +8 is not assumed to be a room unless a real item/charm sprite is observed. The decode lists non-zero offsets and the +16/+17 static-table pointer.'
+                        : 'Candidate original item/charm live slot; watch this during pickup/carry/drop probes. The decode lists non-zero offsets and the +16/+17 static-table pointer.',
+                });
+            }
+
+            for (let index = 0; index < KL_STAGE84_C30.dynamicProbeCount; index++) {
+                const addr = KL_STAGE84_C30.dynamicStart + index * KL_STAGE84_C30.dynamicSlotSize;
+                const decoded = decodeStage84DynamicRecord(workRange, addr);
+                addRow({
+                    state: decoded.zero ? 'muted' : 'ok',
+                    probe: `dynamic ${index}`,
+                    address: decoded.address,
+                    decode: decoded.decode,
+                    room: `current ${fmtLogicalCoord(currentCoord)} / physical ${hexByte(sample.room0)}`,
+                    bytes: decoded.bytes,
+                    notes: 'First 8 bytes of a 0x20 expanded room/object record from RetrieveScreen working memory.',
+                });
+            }
+
+            for (const decoded of staticRecords) {
+                const currentMatch = decoded.currentRoom === sample.room0 || decoded.startRoom === sample.room0;
+                const itemCode = decoded.sprite >= 0x60 && decoded.sprite <= 0x67;
+                addRow({
+                    state: currentMatch ? 'warn' : itemCode ? 'ok' : decoded.zero ? 'muted' : 'ok',
+                    probe: `static object ${decoded.index}`,
+                    address: decoded.address,
+                    decode: decoded.decode,
+                    room: `start ${decoded.startRoom === undefined ? '-' : hexByte(decoded.startRoom)}; current ${decoded.currentRoom === undefined ? '-' : hexByte(decoded.currentRoom)}${currentMatch ? '; current physical-room match' : ''}`,
+                    bytes: fmtBytes(decoded.bytes, 9),
+                    notes: 'Original 9-byte static object table record at 0x6FF2+n*9. Watch for changes after leaving rooms with moved/dropped items.',
+                });
+            }
+
+            stage84C30Status.textContent = [
+                `C3.0/C3.1/C3.2/C3.3/C3.4 mechanic anatomy at ${fmtLogicalCoord(currentCoord)} (${currentRoom.questRole || 'none'}).`,
+                quest.exists ? `Required ${formatQuestCharm(quest.requiredCharm)}.` : 'No quest in current sector.',
+                `Sampling carry state ${hexWord(KL_STAGE84_C30.carryStateStart)}..${hexWord(KL_STAGE84_C30.carryStateEnd - 1)}, ${KL_STAGE84_C30.liveSlots.length} live slots, ${KL_STAGE84_C30.dynamicProbeCount} dynamic records, and ${staticRecordCount} raw static object records (${nonZeroStaticRecordCount} currently non-zero).`,
+                `C3.1 disposable record ${stage84C31DisposableCharm.recordIndex} is ${stage84C31DisposableCharm.requested ? 'requested' : 'off'}; last action: ${stage84C31DisposableCharm.lastAction}.`,
+                `C3.2 carried state: ${stage84C32CarryProbe.lastAction}.`,
+                `C3.3 JS acceptance: ${stage84C33CauldronAcceptance.lastAction}.`,
+                `C3.4 request patch: ${stage84C34RequestOrderPatch.lastAction}.`,
+                `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
+            ].join(' ');
+
+            stage84C30Tbody.innerHTML = rows.map(row => `
+                <tr class="state-${row.state}">
+                    <td>${escapeHtml(row.probe)}</td>
+                    <td>${escapeHtml(row.address)}</td>
+                    <td>${escapeHtml(row.decode)}</td>
+                    <td>${escapeHtml(row.room)}</td>
+                    <td>${escapeHtml(row.bytes)}</td>
+                    <td>${escapeHtml(row.notes)}</td>
+                </tr>
+            `).join('');
         };
 
         const getStage7PhysicalRole = roomId => (
@@ -2491,6 +4417,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 const compiled = compileStage7SlidingCrossToLocationTable(stage7SlidingCross.center);
                 await writeCompiledLocationTable(compiled);
                 await writeStage7CustomBackgrounds();
+                await applyStage84C31DisposableCharm(compiled);
                 logicalMap.markVisited(stage7SlidingCross.center.x, stage7SlidingCross.center.y);
                 stage7SlidingCross = {
                     ...stage7SlidingCross,
@@ -2833,18 +4760,23 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
             try {
                 await applyStage2StartRoomPoke();
-                await applyStage2RoomCleanPatch();
-                await applyStage5StaticMapInjection();
-                // Dormant by default. Open index.html?stage3test=1 to run
-                // this fixed-size one-room injection before the next
-                // retrieve_screen rebuild.
-                await applyStage3OneRoomInjectionTest();
-                await applyStage7CrossInjection('Initial Stage 7 physical cross injection');
+                if (stage7SlidingCross.enabled) {
+                    await applyStage7CrossInjection('Initial Stage 7 physical cross injection');
+                    await applyStage2RoomCleanPatch();
+                } else {
+                    await applyStage2RoomCleanPatch();
+                    await applyStage5StaticMapInjection();
+                    // Dormant by default. Open index.html?stage3test=1 to run
+                    // this fixed-size one-room injection before the next
+                    // retrieve_screen rebuild.
+                    await applyStage3OneRoomInjectionTest();
+                }
 
                 const readDiagnosticSnapshot = async () => {
-                    const [workRange, staticRange, startLocationsRange, ...cleanRoomRanges] = await Promise.all([
+                    const [workRange, staticRange, itemObjectRange, startLocationsRange, ...cleanRoomRanges] = await Promise.all([
                         readRange(KL_STAGE1.workStart, KL_STAGE1.workEnd),
                         readRange(KL_STAGE1.staticStart, KL_STAGE1.staticEnd),
+                        readRange(KL_STAGE84_C30.staticObjectTableStart, KL_STAGE84_C30.staticObjectTableEnd),
                         readRange(
                             KL_STAGE2.startLocationsAddr,
                             KL_STAGE2.startLocationsAddr + KL_STAGE2.startLocationsPatched.length
@@ -2857,6 +4789,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     return {
                         workRange,
                         staticRange,
+                        itemObjectRange,
                         sample: {
                             source,
                             room0: readByte(workRange, 0x5c10),
@@ -2886,7 +4819,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     };
                 };
 
-                let {workRange, staticRange, sample} = await readDiagnosticSnapshot();
+                let {workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot();
                 let stage7Action = null;
 
                 if (stage7SlidingCross.enabled) {
@@ -2905,10 +4838,15 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     updateTransition(sample);
                     stage7Action = await handleStage7SlidingTransition(sample, workRange);
                     if (stage7Action && stage7Action.recentered) {
-                        ({workRange, staticRange, sample} = await readDiagnosticSnapshot());
+                        ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
                         sample.stage7Action = stage7Action;
                     }
                 }
+                await updateStage82CBubbleProbe(workRange, sample);
+                await updateStage84CauldronGate();
+                updateStage84C31ObservedState(workRange);
+                updateStage84C32C33FromSnapshot(workRange, sample);
+                await updateStage84C34RequestOrderPatch(workRange);
 
                 const entry = decodeLocationEntry(staticRange, sample.room0);
                 if (stage5RoomIdRecenterTest.enabled && !KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {
@@ -3067,8 +5005,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 renderStage5StaticMapRow();
                 renderStage5RecenterRow();
                 renderStage7SlidingRow();
+                renderStage82CBubbleProbeRow();
                 renderStage2Cross(staticRange, sample);
                 renderStage4LogicalMap();
+                renderStage84C30MechanicTable(workRange, itemObjectRange, sample);
                 previousSample = sample;
             } catch (err) {
                 setRow('sampler', 'Error', String(err), 'bad');
@@ -3096,9 +5036,55 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         renderStage7SlidingRow();
         renderStage4LogicalMap();
         loadStage5StaticMapDocument();
-        sample('initial');
+        const runStartupPrime = async () => {
+            startupPrimePending = true;
+            try {
+                if (logicalMapLoadPromise) {
+                    await logicalMapLoadPromise.catch(() => null);
+                }
+                await sample('startup-prime');
+            } finally {
+                startupPrimePending = false;
+            }
+
+            if (options.startAfterStartupPrime && typeof emu.start === 'function') {
+                if (!stage7SlidingCross.enabled || stage7SlidingCross.done) {
+                    emu.start();
+                } else {
+                    setRow(
+                        'sampler',
+                        'Startup prime held',
+                        `Execution is still paused because the Stage 7 physical cross was not injected. ${stage7SlidingCross.lastError || stage7SlidingCross.message}`,
+                        stage7SlidingCross.lastError ? 'bad' : 'warn'
+                    );
+                }
+            }
+        };
+
+        if (typeof emu.onReady === 'function') {
+            setRow(
+                'sampler',
+                'Startup prime pending',
+                'The emulator is loaded paused; the runtime will inject the initial physical cross before starting execution.',
+                'warn'
+            );
+            emu.onReady(() => {
+                runStartupPrime().catch(err => {
+                    setRow('sampler', 'Startup prime error', String(err), 'bad');
+                    startupPrimePending = false;
+                    if (options.startAfterStartupPrime && typeof emu.start === 'function') {
+                        emu.start();
+                    }
+                });
+            });
+        } else {
+            runStartupPrime().catch(err => {
+                setRow('sampler', 'Startup prime error', String(err), 'bad');
+            });
+        }
+
         window.setInterval(() => {
-            if (frameCompletedCount === 0) {
+            if (frameCompletedCount === 0 && !startupPrimePending) {
                 sample('interval');
             }
         }, 250);

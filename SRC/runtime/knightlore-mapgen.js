@@ -17,6 +17,9 @@ const DEFAULT_OPTIONS = {
     branchCorridorMaxLength: 5,
     questSectorQuestPercent: 100,
     questReachabilityMarginChunks: 2,
+    questCauldronOriginalVisual: false,
+    questCauldronBubbles: false,
+    questCauldronBubbleMode: 'disabled',
 };
 
 const BIOMES = [
@@ -69,10 +72,64 @@ const BIOMES = [
 
 const DEFAULT_BIOME = BIOMES[0];
 const TOTAL_BIOME_WEIGHT = BIOMES.reduce((total, biome) => total + biome.weight, 0);
-const QUEST_CHARM_TYPES = Array.from({length: 14}, (_, index) => ({
-    id: index,
-    label: `charm ${String(index + 1).padStart(2, '0')}`,
-}));
+const QUEST_CHARM_TYPES = [
+    {id: 0, sprite: 0x60, label: 'diamond/gem'},
+    {id: 1, sprite: 0x61, label: 'poison'},
+    {id: 2, sprite: 0x62, label: 'shoe/boot'},
+    {id: 3, sprite: 0x63, label: 'chalice/vase'},
+    {id: 4, sprite: 0x64, label: 'cup'},
+    {id: 5, sprite: 0x65, label: 'bottle'},
+    {id: 6, sprite: 0x66, label: 'ball/crystal ball'},
+];
+const QUEST_DRESSING_PHASE = '8.2B-static-safe-dressing';
+const QUEST_DRESSING_PATTERNS = {
+    cauldron: {
+        labelPrefix: 'quest-cauldron',
+        profile: 'open calm readable room',
+        hazardLevel: 'low',
+        colour: 1,
+        forceSquare: true,
+        blockRuns: [
+            {
+                type: 0x00,
+                positions: [
+                    {x: 2, y: 2, z: 0},
+                    {x: 5, y: 2, z: 0},
+                    {x: 2, y: 5, z: 0},
+                    {x: 5, y: 5, z: 0},
+                ],
+            },
+        ],
+        intendedUse: 'local cauldron marker',
+        notes: [
+            'static room marker only',
+            'avoid fragile original cauldron mechanics in Phase B',
+        ],
+    },
+    charm: {
+        labelPrefix: 'quest-charm',
+        profile: 'slightly guarded or puzzle-like room',
+        hazardLevel: 'moderate',
+        colour: 5,
+        forceSquare: true,
+        blockRuns: [
+            {
+                type: 0x05,
+                positions: [
+                    {x: 2, y: 2, z: 0},
+                    {x: 5, y: 2, z: 0},
+                    {x: 2, y: 5, z: 0},
+                    {x: 5, y: 5, z: 0},
+                ],
+            },
+        ],
+        intendedUse: 'local fair source for the required global charm type',
+        notes: [
+            'static room marker only',
+            'the charm type is global and is not sector-bound',
+        ],
+    },
+};
 
 const floorDiv = (value, divisor) => Math.floor(value / divisor);
 
@@ -382,9 +439,82 @@ export function createKnightLoreProceduralMap(options = {}) {
         return 'none';
     };
 
+    const getQuestDressingForRole = (quest, role) => {
+        if (!quest || !quest.exists || role === 'none') return null;
+        const pattern = QUEST_DRESSING_PATTERNS[role];
+        if (!pattern) return null;
+        const originalCauldronVisual = !!(config.questCauldronOriginalVisual && role === 'cauldron');
+        const cauldronBubbleMode = config.questCauldronBubbleMode ||
+            (config.questCauldronBubbles ? 'global' : 'disabled');
+        const originalCauldronBubbles = !!(
+            originalCauldronVisual &&
+            ['global', 'cauldron'].includes(cauldronBubbleMode)
+        );
+        const bubbleDescription = originalCauldronBubbles
+            ? cauldronBubbleMode === 'cauldron'
+                ? 'room-gated probe'
+                : 'globally restored'
+            : 'disabled';
+
+        const common = {
+            phase: originalCauldronVisual ? '8.2C-cauldron-visual-probe' : QUEST_DRESSING_PHASE,
+            role,
+            requiredCharm: quest.requiredCharm ? cloneData(quest.requiredCharm) : null,
+            visual: originalCauldronVisual
+                ? 'original cauldron background visual plus safe static room header'
+                : 'safe static colour and block-run marker',
+            gameplayBytes: originalCauldronVisual
+                ? `location header and original cauldron background id only; bubbles ${bubbleDescription}`
+                : 'location header and foreground block bytes only',
+            enginePolicy: originalCauldronVisual
+                ? 'restores original cauldron visual background only; no original item, wizard, inventory, charm-order, or quest-completion memory touched'
+                : 'no original object, item, cauldron, wizard, inventory, or quest-order memory touched',
+            clearancePolicy: originalCauldronVisual
+                ? 'original cauldron visual occupies the center; only generated quest cauldron anchor rooms receive it, never the logical start room (0,0)'
+                : 'marker blocks keep the central entry lanes clear; center/spawn clearance is only mandatory for logical start (0,0)',
+        };
+
+        return {
+            ...common,
+            labelPrefix: pattern.labelPrefix,
+            profile: pattern.profile,
+            hazardLevel: pattern.hazardLevel,
+            intendedUse: pattern.intendedUse,
+            notes: cloneData(pattern.notes),
+            staticDressing: {
+                forceSquare: pattern.forceSquare,
+                selector: pattern.forceSquare ? 0 : null,
+                colour: pattern.colour,
+                blockRuns: (
+                    originalCauldronVisual
+                        ? []
+                        : cloneData(pattern.blockRuns)
+                ),
+                extraBackgrounds: (
+                    originalCauldronVisual
+                        ? [0x13]
+                        : []
+                ),
+                originalCauldronVisual,
+                originalCauldronBubbles,
+                originalCauldronBubbleMode: cauldronBubbleMode,
+                bubblePolicy: originalCauldronBubbles
+                    ? cauldronBubbleMode === 'cauldron'
+                        ? 'bubble template restored only while the logical center is this cauldron room'
+                        : 'bubble template restored globally by explicit experimental flag'
+                    : 'disabled until a separate live-slot probe proves it is safe',
+                backgroundPolicy: 'use normal generated wall/arch backgrounds for the final room shape',
+                clearance: originalCauldronVisual
+                    ? 'cauldron occupies the center by design; exits and wall backgrounds remain generated'
+                    : 'blocks are outside x=3..4 and y=3..4 central entry lanes',
+            },
+        };
+    };
+
     const getRoomQuestInfo = (questSector, x, y) => {
         const local = toChunkCoord(x, y);
         const role = getQuestRoleForRoom(questSector, x, y);
+        const dressing = getQuestDressingForRole(questSector.quest, role);
         return {
             sector: {
                 key: questSector.key,
@@ -397,6 +527,7 @@ export function createKnightLoreProceduralMap(options = {}) {
             },
             role,
             quest: cloneData(questSector.quest),
+            dressing,
         };
     };
 
@@ -740,6 +871,11 @@ export function createKnightLoreProceduralMap(options = {}) {
         return positions.length ? [{type, positions}] : [];
     };
 
+    const createQuestDressingBlockRuns = questDressing => {
+        const staticDressing = questDressing && questDressing.staticDressing;
+        return staticDressing ? cloneData(staticDressing.blockRuns || []) : null;
+    };
+
     const getRoomDefinition = (x, y) => {
         const coord = toChunkCoord(x, y);
         const chunk = getChunk(coord.chunkX, coord.chunkY);
@@ -769,7 +905,10 @@ export function createKnightLoreProceduralMap(options = {}) {
                 },
             },
         };
-        commonMeta.quest = questInfo;
+        commonMeta.quest = {
+            ...questInfo,
+            dressing: questInfo.dressing ? cloneData(questInfo.dressing) : null,
+        };
 
         if (!exists) {
             return {
@@ -786,31 +925,47 @@ export function createKnightLoreProceduralMap(options = {}) {
                 questRole: questInfo.role,
                 questSector: questInfo.sector,
                 questCharm: questInfo.quest.requiredCharm || null,
+                questDressing: questInfo.dressing,
                 meta: commonMeta,
             };
         }
 
         const hash = hashInts(config.worldSeed, x, y, 0x4b4c);
         const exits = getRoomExits(x, y);
-        const selector = chooseRoomSizeSelector(exits, x, y, config);
+        const questDressing = questInfo.dressing;
+        const staticDressing = questDressing && questDressing.staticDressing;
+        const generatedSelector = chooseRoomSizeSelector(exits, x, y, config);
+        const selector = staticDressing && staticDressing.forceSquare ? 0 : generatedSelector;
         const theme = biome.theme;
-        const colour = chooseArrayValue(biome.colours, hash >>> 1);
-        const blocks = createBlockRuns(x, y, selector, biome, hash);
+        const colour = staticDressing && Number.isInteger(staticDressing.colour)
+            ? staticDressing.colour
+            : chooseArrayValue(biome.colours, hash >>> 1);
+        const questBlocks = createQuestDressingBlockRuns(questDressing);
+        const blocks = questBlocks || createBlockRuns(x, y, selector, biome, hash);
+        const extraBackgrounds = staticDressing ? cloneData(staticDressing.extraBackgrounds || []) : [];
+        const label = questDressing
+            ? `${questDressing.labelPrefix}:${coordKey(x, y)}:${biome.id}`
+            : `generated:${biome.id}:${coordKey(x, y)}`;
+        const title = questDressing
+            ? `${questDressing.role === 'cauldron' ? 'Quest cauldron' : 'Quest charm'} ${coordKey(x, y)}`
+            : `${biome.title} ${coordKey(x, y)}`;
 
         return {
             coord: {x, y},
-            label: `generated:${biome.id}:${coordKey(x, y)}`,
-            title: `${biome.title} ${coordKey(x, y)}`,
+            label,
+            title,
             size: {selector},
             colour,
             theme,
             exits: cloneExits(exits),
+            extraBackgrounds,
             blocks,
             objects: [],
             items: [],
             questRole: questInfo.role,
             questSector: questInfo.sector,
             questCharm: questInfo.quest.requiredCharm || null,
+            questDressing,
             meta: commonMeta,
         };
     };

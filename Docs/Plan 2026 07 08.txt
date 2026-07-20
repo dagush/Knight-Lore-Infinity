@@ -72,7 +72,9 @@ Original Knight Lore:
 - uses a dense 16x16 possible room grid;
 - contains one cauldron;
 - has a set of possible charm/item spawn locations;
-- asks the player to bring a sequence of charms to the cauldron.
+- asks the player to bring 14 objects to the cauldron, using seven actual
+  charm types requested twice. The nearby 0x67 object code is extra life, not
+  a quest charm.
 
 Dispersed Knight Lore Infinity:
 
@@ -267,8 +269,63 @@ Tasks:
 Possible visual implementations:
 
 - Phase A: diagnostics only.
-- Phase B: use safe static background/object ids if confirmed harmless.
+  - Add `questDressing` metadata to generated room payloads.
+  - Label anchor rooms distinctly, for example `quest-cauldron:...` and
+    `quest-charm:...`.
+  - Show the intended dressing profile in the HTML diagnostics table.
+  - Do not alter room bytes, object records, item slots, cauldron state,
+    wizard state, inventory state, or charm-order memory.
+- Phase B: use safe static room-entry dressing if confirmed harmless.
+  - Force generated cauldron/charm anchor rooms to square selector 0 for the
+    first visual proof, even if the base topology could have produced a
+    rectangular room.
+  - Use only the compact location-entry fields already proven by Stage 7:
+    header colour/attribute and foreground block runs.
+  - Cauldron marker: low-hazard colour plus ordinary block type `0x00` in a
+    clear, symmetric four-corner pattern.
+  - Charm marker: stronger colour plus spike block type `0x05` in the same
+    entry-lane-safe pattern.
+  - Keep x=3..4 and y=3..4 central entry lanes clear so any actual player
+    entry side remains usable.
+  - Still do not use original cauldron/wizard background ids, original item
+    slots, original object table records, inventory bytes, or charm-order
+    memory.
 - Phase C: inject actual original cauldron/charm objects after memory probes.
+  Split this into smaller probes rather than treating Phase C as one jump:
+  - C1: original cauldron visual background only.
+    - Restore the original 0x13 cauldron background expansion after confirming
+      the bytes by read-only snapshot probes.
+    - Append background id 0x13 only to generated quest cauldron anchor rooms.
+    - Force those rooms to selector 0 and a calm colour for the first proof.
+    - Suppress the Phase B four-corner marker in cauldron rooms when the
+      original visual is active.
+    - Keep original item slots, charm-order bytes, inventory bytes, wizard
+      state, and cauldron-completion state untouched.
+  - C2: bubble template probe.
+    - Keep bubbles disabled by default.
+    - Preserve `?stage8cbubbles=1` / `?stage8cbubbles=global` as a high-risk
+      control that restores the template globally. Manual testing already
+      showed this creates bubbles in every room.
+    - Add `?stage8cbubbles=cauldron` as a timing probe: restore the template
+      only while the current logical center room is a quest cauldron, and zero
+      it elsewhere.
+    - If repeated `stage8cbubbles` parameters appear in a URL, use the last
+      value and report the full request chain in diagnostics.
+    - Do not clear live slots yet. If bubbles leak after room exit, add a
+      separate live-slot probe for the working area around 0x5C68.
+    - Treat all bubble modes as high risk because bubbles are tied to
+      wolf-form attack logic.
+  - C3: actual charm/item/cauldron mechanic probe.
+    - Do this only after the visual and bubble probes show which bytes are
+      purely visual and which are stateful.
+    - Split C3 into staged probes:
+      - C3.0 read-only original mechanic anatomy;
+      - C3.1 single charm-room item injection;
+      - C3.2 carried/inventory state probe;
+      - C3.3 cauldron acceptance probe;
+      - C3.4 original cauldron request display/order patch;
+      - C3.5 animation/display timing probe, including the fast bubble cycle
+        and fast requested-charm flashing.
 
 Risks:
 
@@ -282,6 +339,35 @@ Exit criteria:
 - The player can identify a sector's cauldron/charm rooms by diagnostics and,
   later, by safe in-game dressing.
 - No room reset, freeze, or invalid retrieve_screen decode occurs.
+
+Status on 2026 07 13:
+
+- Phase A is complete.
+- Phase B is complete as a practical play-test proof.
+- Manual testing covered several sectors with cauldron -> charm -> cauldron
+  loops and no reset, freeze, invalid decode, or entry-side trapping.
+- Phase C has started only as C1, an opt-in cauldron visual probe:
+  - `?stage8c=1` or `?stage82c=1` restores original background id 0x13 and
+    appends it to generated quest cauldron anchor rooms;
+  - the cauldron body and stew are restored, but bubbles are still disabled;
+  - `?stage8cbubbles=1` restores the bubble template for a separate high-risk
+    global control probe;
+  - `?stage8cbubbles=cauldron` runs the new C2 cauldron-gated timing probe;
+  - collectable charm objects, item slots, inventory, charm-order bytes, wizard
+    state, and original cauldron-completion state remain untouched.
+- C2 status, 2026 07 17:
+  - `?stage8cbubbles=cauldron` passed as a room-gated bubble-template probe;
+  - bubbles appeared only in the logical quest cauldron room;
+  - ordinary rooms stayed bubble-free;
+  - bubbles retained the original wolf-killing behaviour and were harmless in
+    human form;
+  - bubble animation and requested-charm flashing are too fast, but that is
+    not currently a gameplay blocker;
+  - bubble deaths respawn the player in the room opposite the entry side, which
+    should become a separate death/respawn-state probe.
+- Full original cauldron/charm gameplay injection is still unstarted, but C3
+  is now ready to begin as read-only mechanics anatomy rather than direct
+  gameplay injection.
 
 
 Stage 8.3 - External Wizard Dialogue
@@ -339,12 +425,19 @@ Exit criteria:
 - No Spectrum rendering code is modified.
 
 
-Stage 8.4 - Runtime Item/Charm Probes
--------------------------------------
+Stage 8.4 - C3 Original Charm/Item/Cauldron Mechanic Probes
+-----------------------------------------------------------
 
 Goal:
 
-- Learn how much of the original charm/item system can be safely reused.
+- Learn how much of the original charm/item/cauldron system can be safely
+  reused for dispersed sector quests.
+- Preserve the working C1/C2 behaviour:
+  - original cauldron visual background is room-local;
+  - cauldron bubbles are room-local under `?stage8cbubbles=cauldron`;
+  - ordinary rooms remain bubble-free.
+- Avoid turning on original global quest completion logic until its state
+  bytes are understood.
 
 Known anchors:
 
@@ -352,17 +445,331 @@ Known anchors:
 - dynamic records around 0x5C88 + n * 0x20;
 - current room id at 0x5C10;
 - room working fields around 0x5BAB..0x5BAE.
+- original static item/object table around 0x6FF2;
+- cauldron background id 0x13 and cauldron visual records 0x8D/0x8E;
+- cauldron bubble template at 0xB8C8..0xB8D9;
+- live bubble/item-display area around 0x5C68;
+- charm codes 0x60..0x66;
+- object code 0x67 is extra life/consumable, not a quest charm.
+
+C3.0 - Read-Only Original Mechanic Anatomy
+------------------------------------------
+
+Goal:
+
+- Watch the original item, inventory, cauldron, and display state without
+  changing gameplay bytes.
 
 Tasks:
 
 - Observe a normal original charm/item pickup if possible.
 - Record which working-memory slots change.
+- Sample live slots around:
+  - 0x5C48 first item/charm slot;
+  - 0x5C68 second item/charm/bubble/display slot;
+  - 0x5C88 + n * 0x20 dynamic object records.
+- Sample static object records around 0x6FF2 before and after:
+  - entering a room with an item;
+  - picking up an item;
+  - carrying an item;
+  - leaving a room after moving/dropping an item.
 - Determine whether charm identity, carried state, and current room are stored
   in simple per-object fields or coupled to deeper game-state tables.
-- Test whether a charm can be placed in the current injected room by rewriting
-  only the active object/special slots.
+- Identify candidate bytes for:
+  - currently carried item/charm;
+  - requested cauldron charm;
+  - item pickup/drop state;
+  - item writeback to the static table;
+  - cauldron item-display state.
+- Add diagnostics for:
+  - raw item slot bytes;
+  - decoded candidate item id;
+  - current logical room role;
+  - current quest required charm;
+  - static item-table readback for nearby records.
+
+Animation/display timing side quest:
+
+- Record the counters or state bytes that drive:
+  - bubble animation speed;
+  - requested-charm flashing speed.
+- Do not slow the whole emulator as a first fix.
+- Prefer identifying original animation/display counters first; only then
+  decide whether to patch them, mirror them externally, or leave them alone.
+
+Exit criteria:
+
+- We know which bytes change during item pickup/carry/drop.
+- We have candidate addresses for the requested-charm display and cauldron
+  item-display state.
+- We know whether `frameCompleted` is late enough to miss critical item-state
+  transitions.
+- No item/charm/cauldron gameplay bytes have been deliberately modified yet.
+
+C3.1 - Single Charm-Room Item Injection
+---------------------------------------
+
+Goal:
+
+- Place one original item/charm in one generated logical charm room without
+  corrupting the sliding map.
+
+Tasks:
+
+- Keep this probe opt-in, currently `?stage84c31=1` or `?stage8c31=1`.
+- Test whether a charm can be placed in an injected logical charm room by
+  rewriting one controlled original static object-table record before
+  `find_special_objs_here` / room loading builds the live item slots.
+- Use static object record 31 at 0x7109..0x7111 as a disposable probe record.
+- Use one original item/charm id from the pickup-safe 0x60..0x66 range,
+  derived from the sector's required charm id.
+- Arm the record when a logical charm anchor is present in the current
+  five-room physical cross, preferably the center room if it is the charm
+  room.
+- Set the record inactive with current/start room 0xFF when no logical charm
+  anchor is present in the current physical cross.
+- Do not directly write inventory bytes, charm-order bytes, completion bytes,
+  or JS quest-completion state during this probe.
+- Skip static-record reseeding while the carried/inventory queue points back
+  to the disposable record, so a carried probe item is not clobbered by
+  recentering.
+- Keep JS persistent quest state as the source of truth until original carry
+  state is understood.
 - Test whether leaving the room writes object state back into original static
   tables, and whether we need to intercept or neutralize that writeback.
+- For this disposable proof, warn the tester to pick the item back up before
+  leaving if it is dropped in a non-cauldron room.
+
+Exit criteria:
+
+- The item appears only in logical charm rooms armed by the current five-room
+  cross.
+- The item does not appear in unrelated ordinary or cauldron rooms after
+  sliding/recentering.
+- Leaving/re-entering the room is stable.
+- Live-slot pointers confirm whether the object points back to 0x7109.
+- Static-table writeback is understood or safely neutralized enough to move to
+  C3.2.
+
+C3.2 - Carried/Inventory State Probe
+------------------------------------
+
+Goal:
+
+- Determine whether original carried-item state can be reused or whether the
+  dispersed quest needs a JS-side shadow inventory.
+
+Tasks:
+
+- Observe what changes when the player picks up the injected item.
+- Observe what changes when the player carries it across at least one room
+  transition.
+- Decode the original carried queue at 0x5BD8..0x5BE7 as four 4-byte slots:
+  - displayed sprite;
+  - flags/state byte;
+  - little-endian pointer back to the static object table.
+- Track whether a C3.1 disposable charm keeps pointer 0x7109 -> static object
+  31 after:
+  - pickup;
+  - one or more Stage 7 recenter transitions;
+  - arriving at a logical cauldron room.
+- Report whether record 31 being zeroed after pickup is harmless because the
+  carried display slot still preserves the sprite and static-table pointer.
+- Compare original memory state with JS quest metadata:
+  - required charm type;
+  - local charm anchor;
+  - collected charm type;
+  - sector completion state.
+- Separate two identity levels:
+  - exact JS source charm, known when the pointer is the C3.1 disposable
+    record and the last seeded logical charm target is still known;
+  - original sprite class 0x60..0x66, which is the actual seven-type charm
+    identity used by Knight Lore. The 14 original deliveries are two requests
+    for each of these seven types, not 14 distinct charm identities.
+- Decide whether a charm collected in one sector can be accepted by another
+  sector's cauldron using original state, JS state, or a hybrid.
+- Do not patch cauldron requested-object display or acceptance in this substage.
+
+Exit criteria:
+
+- We know whether original carry/inventory state is stable across the sliding
+  physical-room remap.
+- We know whether carried charm identity is explicit enough to support the
+  global charm-type policy.
+- We know C3.3 can trust carried sprite 0x60..0x66 as the charm type, while
+  still using JS metadata for sector ownership, completion state, and source
+  bookkeeping.
+
+C3.3 - Cauldron Acceptance Probe
+--------------------------------
+
+Goal:
+
+- Test one controlled charm delivery to one generated quest cauldron.
+
+Tasks:
+
+- Use a single sector, ideally sector (0,0), for the first proof.
+- Require one known charm type.
+- Let the player carry or JS-mark that charm as collected.
+- Accept only carried sprites 0x60..0x66 as charm types; reject 0x67 because
+  it is extra life/consumable.
+- Treat the original 14-object objective as two requests for each of the seven
+  charm types, not as 14 separate charm identities.
+- Enter the sector cauldron room with:
+  - original cauldron visual enabled;
+  - room-gated bubbles enabled only if desired;
+  - diagnostics watching cauldron/request/inventory bytes.
+- Probe whether the original cauldron logic can accept the charm without
+  corrupting global order/state.
+- If original acceptance is too global or fragile, fall back to JS-side
+  completion detection while leaving the cauldron visual original.
+- First implementation:
+  - C3.3 is opt-in with `?stage84c33=1` or `?stage8c33=1`.
+  - The runtime accepts a carried charm when the player is in a logical
+    cauldron room and the carried sprite is the required 0x60..0x66 charm
+    type, but only after a player drop action is detected.
+  - A matching carried charm at the cauldron is a `ready` state, not automatic
+    completion.
+  - Drop detection uses original cauldron/drop state when available
+    (`obj_dropping_into_cauldron` or `objects_put_in_cauldron`) and otherwise
+    falls back to a rising edge on `pickup_drop_pressed` while `cant_drop` is
+    zero.
+  - Diagnostics count only ready-state drop edges, so earlier pickup/drop
+    edges do not look like cauldron deliveries.
+  - Acceptance marks only the external persistent quest-sector state as
+    `completed`.
+  - With C3.3 alone, the original carried object is not consumed by the JS
+    completion marker. If C3.4 is also enabled and original acceptance succeeds,
+    the original engine may consume it.
+  - Original inventory bytes, charm-order bytes, original completion counters,
+    and global quest-order state remain untouched.
+  - The original cauldron requested-object display is still independent and
+    may disagree with the JS sector request until a later display/order patch.
+
+Exit criteria:
+
+- One sector quest can transition from `charmCollected` to `completed` by
+  returning to the cauldron.
+- We know whether this transition was driven by original mechanics, JS-side
+  quest state, or a hybrid.
+- No multiple-cauldron global-state corruption is observed.
+
+C3.4 - Original Cauldron Request Display/Order Patch
+----------------------------------------------------
+
+Goal:
+
+- Make the original cauldron's visible requested object and original acceptance
+  comparison agree with the current JS sector request.
+
+Tasks:
+
+- Keep this probe opt-in, currently `?stage84c34=1` or `?stage8c34=1`.
+- Use the disassembly-proven original request path:
+  - `objects_put_in_cauldron` at `0x5BBB` is the current request index;
+  - `objects_required` at `0xC27D..0xC28A` is the 14-byte request-order table;
+  - `ret_next_obj_required` returns `objects_required[objects_put_in_cauldron]`.
+- Patch only the active byte when:
+  - the current logical room is a quest cauldron; or
+  - the current five-room cross contains a directly reachable adjacent quest
+    cauldron, so the request can be pre-armed before the original room-load
+    code initializes the visible cauldron display.
+- Active byte:
+  - address `0xC27D + objects_put_in_cauldron`;
+  - value `requiredCharm.id` / sprite index `0..6`.
+- If the target JS quest sector is already completed, leave the original
+  request slot unchanged so one local cauldron cannot repeatedly advance the
+  original global counter during this probe.
+- Report:
+  - original counter value;
+  - active request slot address;
+  - previous and desired request index;
+  - full 14-byte request table readback;
+  - write count and last action.
+- Be honest that this is no longer a pure display patch: because the original
+  acceptance routine uses the same `ret_next_obj_required` path, a correct drop
+  may increment original `objects_put_in_cauldron` and trigger original colour
+  cycling.
+- Do not yet virtualize or reset the original `objects_put_in_cauldron` counter
+  unless testing shows global drift or final-animation risk.
+
+Exit criteria:
+
+- The cauldron reveal/display asks for the same charm type as the JS sector.
+- Dropping the matching charm can be observed with both:
+  - JS sector completion;
+  - original request-order state readback.
+- We know whether original colour/bubble/acceptance feedback is useful enough
+  to keep, or whether the original counter must be isolated in a later probe.
+
+Status on 2026 07 20:
+
+- C3.4 passed the first controlled sector (0,0) proof.
+- The required JS charm was mapped to original index 3 / sprite 0x63
+  chalice/vase.
+- The request-order patch was visible before entry:
+  - adjacent room (4,3) pre-armed the north cauldron at (4,4);
+  - objects_put_in_cauldron was 0x00;
+  - request slot 0 at 0xC27D already matched index 3.
+- In the cauldron room, the original visible request and acceptance comparison
+  matched the JS sector request.
+- A human-form drop of the carried chalice/vase produced the original successful
+  cauldron colour shift.
+- The original state advanced:
+  - objects_put_in_cauldron changed from 0x00 to 0x01;
+  - the carried queue became empty;
+  - disposable static object record 31 was consumed/zeroed in the expected
+    disposable-probe way.
+- The JS sector state became completed.
+- Build `stage84-c34-completed-guard-20260720-1` added and validated a
+  completed-sector guard:
+  - once the target JS sector is complete, C3.4 leaves the active original
+    request slot unchanged;
+  - this prevents one completed local cauldron from repeatedly advancing the
+    original 14-object counter.
+
+Remaining C3.4 design decision:
+
+- C3.4 now proves that the original cauldron mechanic can be used in a hybrid
+  quest model.
+- It does not yet define the long-run global-counter policy across many
+  dispersed sectors.
+- Before wide playable testing, decide whether objects_put_in_cauldron should:
+  - remain a global progress counter;
+  - be virtualized per sector;
+  - be reset/isolated after each sector completion; or
+  - be bypassed for progression while retaining selected original feedback.
+
+C3.5 - Animation And Respawn Follow-Ups
+---------------------------------------
+
+Goal:
+
+- Track the two non-blocking issues revealed by C1/C2 before they become
+  confusing during playable quest tests.
+
+Tasks:
+
+- Investigate fast bubble animation and fast requested-charm flashing:
+  - identify candidate counters/state bytes;
+  - avoid emulator-wide slowdown unless the whole game speed is wrong;
+  - consider an external HTML-side requested-charm display if the original
+    flash is not readable enough.
+- Investigate bubble-death respawn displacement:
+  - record entry side, current logical room, physical room id, and player
+    coordinates before death;
+  - record post-death current room, logical center, physical room id, and
+    player coordinates;
+  - identify whether the original engine keeps an entry-side/transition flag
+    that needs patching after bubble death.
+
+Exit criteria:
+
+- The animation/display issue is either fixed, externally supplemented, or
+  explicitly deferred.
+- The bubble-death respawn displacement has a known cause or a safe mitigation
+  plan.
 
 Strict policy:
 
@@ -370,12 +777,16 @@ Strict policy:
 - Do not make multiple cauldrons active in original game logic until we know
   what the original cauldron state machine expects.
 - Prefer JS-side quest state first, original item mechanics second.
+- Do not patch original charm order, inventory, or completion bytes blindly.
+- Do not let virtual item writeback pollute the original static item table.
 
 Exit criteria:
 
 - We know whether original charm objects can be virtualized safely.
 - We know whether local cauldrons can be real original cauldrons, JS-only quest
   markers, or a hybrid.
+- We know whether the first playable dispersed quest should use original item
+  pickup, JS-side collection, or a staged hybrid.
 
 
 Stage 8.5 - First Playable Dispersed Quest
@@ -461,7 +872,7 @@ Recommended quest-sector object:
       label: "sector 1,-2",
       quest: {
         exists: true,
-        requiredCharm: 7,
+        requiredCharm: 3,
         cauldron: { x: 12, y: -10, localX: 4, localY: 6 },
         charm: { x: 9, y: -15, localX: 1, localY: 1 },
         difficulty: 2,
@@ -482,6 +893,30 @@ Recommended room payload additions:
       questRole: "cauldron",
       questSector: { x: 1, y: -2 },
       questCharm: 7,
+      questDressing: {
+        phase: "8.2B-static-safe-dressing",
+        role: "cauldron",
+        profile: "open calm readable room",
+        hazardLevel: "low",
+        visual: "safe static colour and block-run marker",
+        gameplayBytes: "location header and foreground block bytes only",
+        staticDressing: {
+          forceSquare: true,
+          selector: 0,
+          colour: 1,
+          blockRuns: [
+            {
+              type: 0x00,
+              positions: [
+                { x: 2, y: 2, z: 0 },
+                { x: 5, y: 2, z: 0 },
+                { x: 2, y: 5, z: 0 },
+                { x: 5, y: 5, z: 0 }
+              ]
+            }
+          ]
+        }
+      },
       meta: {
         procedural: { ... },
         quest: { ... }
@@ -522,11 +957,15 @@ The first version should prefer simple, inspectable rules:
 Charm identity:
 
 - First simple rule:
-  - `requiredCharm = hash(sectorX, sectorY, worldSeed) % 14`.
+  - `requiredCharm = hash(sectorX, sectorY, worldSeed) % 7`.
+  - Values 0..6 map to original charm sprites 0x60..0x66.
+  - 0x67 is extra life/consumable and must not be generated as a required
+    quest charm.
 - Later:
-  - weight charm identities by region style;
+  - weight charm types by region style;
   - avoid repeating the same charm too often in neighbouring sectors;
-  - reserve some charm ids for authored special sectors.
+  - reserve some charm-type patterns or request order rules for authored
+    special sectors.
 
 
 Diagnostics To Add

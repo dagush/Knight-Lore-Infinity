@@ -72,20 +72,19 @@ class Emulator extends EventEmitter {
                     this.loadRoms().then(() => {
                         this.setMachine(opts.machine || 128);
                         this.setTapeTraps(this.tapeTrapsEnabled);
-                        if (opts.openUrl) {
-                            this.openUrlList(opts.openUrl).catch(err => {
+                        const openPromise = opts.openUrl
+                            ? this.openUrlList(opts.openUrl).catch(err => {
                                 alert(err);
-                            }).then(() => {
-                                if (opts.autoStart) this.start();
-                            });
-                        } else if (opts.autoStart) {
-                            this.start();
-                        }
+                            })
+                            : Promise.resolve();
 
-                        this.isReady = true;
-                        for (let i=0; i < this.onReadyHandlers.length; i++) {
-                            this.onReadyHandlers[i]();
-                        }
+                        openPromise.then(() => {
+                            this.isReady = true;
+                            for (let i=0; i < this.onReadyHandlers.length; i++) {
+                                this.onReadyHandlers[i]();
+                            }
+                            if (opts.autoStart) this.start();
+                        });
                     });
                     break;
                 case 'frameCompleted':
@@ -810,6 +809,8 @@ window.JSSpeccy = (container, opts) => {
     */
 
     return {
+        start: () => {emu.start();},
+        pause: () => {emu.pause();},
         setZoom: (zoom) => {ui.setZoom(zoom);},
         toggleFullscreen: () => {ui.toggleFullscreen();},
         enterFullscreen: () => {ui.enterFullscreen();},

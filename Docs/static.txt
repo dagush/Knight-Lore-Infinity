@@ -243,6 +243,10 @@ Static objects table
 - byte 6: current y.
 - byte 7: current z.
 - byte 8: current screen.
+- C3.0 note, 2026 07 18: the span 0x6FF2..0x7111 contains exactly
+  32 raw 9-byte records in the Knight Lore .z80 snapshot, and all 32 are
+  non-zero there. This is a raw memory-table count, not necessarily the same
+  as a gameplay count of ordinary visible collectable objects.
 
 Sprite data
 -----------

@@ -1372,7 +1372,9 @@ default. The metadata includes:
 - sector origin;
 - local room coordinate inside the sector;
 - style/biome information;
-- required charm id from 14 abstract charm labels;
+- required charm type. This was originally written as 14 abstract labels, but
+  later C3.2 evidence corrected the model: Knight Lore has seven quest charm
+  types, requested twice;
 - cauldron anchor coordinate;
 - charm anchor coordinate;
 - difficulty value;
@@ -1744,3 +1746,772 @@ Current project state at end of 2026 07 09
   cauldron logic have been modified.
 - The next natural stage is visual/semantic dressing of cauldron and charm
   rooms, still conservatively and without touching original item mechanics.
+
+
++============================================================+
+| 2026 07 13 - Stage 8.2 Quest Room Dressing                 |
++============================================================+
+
+2026 07 13
+
+Stage 8.2 made cauldron and charm anchor rooms identifiable without touching
+the original Knight Lore quest machinery.
+
+The stage was split into two deliberately conservative phases:
+
+- Phase A: diagnostics-only semantic dressing;
+- Phase B: safe static room-entry dressing.
+
+------------------------------------------------
+Phase A - Diagnostics-Only Dressing
+
+Phase A added quest-room intent to the logical payload:
+
+- questDressing metadata;
+- distinct generated labels:
+  - quest-cauldron:x,y:biome-id;
+  - quest-charm:x,y:biome-id;
+- diagnostic table formatting for the intended role/profile.
+
+The diagnostics table was updated to show the dressing intent for:
+
+- current room;
+- current sector cauldron anchor;
+- current sector charm anchor;
+- fixed API probe.
+
+No original room bytes, object records, item slots, cauldron state, wizard
+state, inventory state, or charm-order memory were changed in Phase A.
+
+------------------------------------------------
+Phase B - Safe Static Room-Entry Dressing
+
+Phase B made the quest anchor rooms visibly different inside the original
+Spectrum/JSSpeccy display while still avoiding the fragile original quest
+logic.
+
+The rule is intentionally boring and engine-friendly:
+
+- generated cauldron/charm anchor rooms are forced to square selector 0;
+- only compact location-entry fields are changed:
+  - header colour/attribute;
+  - foreground block runs;
+- normal generated wall/arch backgrounds are still used for exits;
+- no original cauldron/wizard ids are used as quest objects;
+- no original collectable item slots, object-table quest records, inventory
+  bytes, cauldron state, wizard state, or charm-order bytes are touched.
+
+The first Phase B marker patterns are:
+
+- cauldron room:
+  - colour 1;
+  - ordinary block type 0x00;
+  - positions:
+    - (2, 2, 0);
+    - (5, 2, 0);
+    - (2, 5, 0);
+    - (5, 5, 0);
+- charm room:
+  - colour 5;
+  - spike block type 0x05;
+  - the same four positions.
+
+Those positions deliberately leave the central entry lanes clear:
+
+- x = 3..4;
+- y = 3..4.
+
+This is stricter than the general non-start-room clearance rule, but only for
+the marker pattern. It gives the player room to enter from any cardinal side
+without being immediately blocked by the visual marker.
+
+------------------------------------------------
+Diagnostics
+
+The Stage 8 diagnostics table was retitled to:
+
+- Stage 8.2B - Safe Static Quest Room Dressing
+
+The table now reports:
+
+- quest role;
+- required charm;
+- anchor coordinates;
+- reachability status;
+- dressing phase;
+- forced square status;
+- marker colour;
+- marker block type and count.
+
+A healthy cauldron row reports a dressing summary like:
+
+    8.2B-static-safe-dressing; open calm readable room; hazard low;
+    safe static colour and block-run marker;
+    location header and foreground block bytes only;
+    forced square; colour 1; blocks 0x00 block x4
+
+A healthy charm row reports:
+
+    8.2B-static-safe-dressing; slightly guarded or puzzle-like room;
+    hazard moderate; safe static colour and block-run marker;
+    location header and foreground block bytes only;
+    forced square; colour 5; blocks 0x05 spike block x4
+
+The cache/diagnostic marker is:
+
+- stage8-quest-dressing-20260711-2
+
+------------------------------------------------
+Verification
+
+Automated checks:
+
+- JavaScript syntax checks passed for:
+  - SRC/runtime/knightlore-mapgen.js;
+  - SRC/runtime/knightlore.js;
+- git diff whitespace checks passed;
+- webpack rebuild passed with only the existing bundle-size warnings;
+- direct generator probing confirmed:
+  - cauldron selector 0, colour 1, block type 0x00 x4;
+  - charm selector 0, colour 5, block type 0x05 x4;
+- browser smoke test confirmed:
+  - the Stage 8.2B diagnostics table rendered;
+  - the Dressing column was present;
+  - no page errors were captured.
+
+Manual testing:
+
+- several sectors were traversed by hand;
+- complete cauldron -> charm -> cauldron loops worked;
+- dressed anchor rooms looked consistent on revisit;
+- no reset, freeze, invalid room decode, or entry-side trapping was observed.
+
+One recorded example:
+
+    Current (6, -8) -> sector (0, -1).
+    Required charm 12 (#12).
+    Cauldron (6, -8) l(6, 0).
+    Charm (0, -5) l(0, 3).
+    Reachability: OK; anchors CH; path 9; searched 42; margin 2 chunk(s).
+
+This is enough to mark Phase B complete as a practical play-test proof. It is
+not an exhaustive proof over the infinite map, but the dressing rule is
+coordinate-independent and uses the same compiler path for every sector.
+
+------------------------------------------------
+Files Updated
+
+- SRC/runtime/knightlore-mapgen.js
+  - questDressing metadata;
+  - Phase B static marker definitions;
+  - square/colour/block override for quest anchors.
+
+- SRC/runtime/knightlore.js
+  - questDressing propagation;
+  - Stage 8.2B diagnostics formatting;
+  - dressing summary in room summaries.
+
+- SRC/static/index.html
+  - Stage 8.2B title;
+  - Dressing column;
+  - updated cache marker.
+
+- Docs/Plan 2026 07 08.txt
+  - Phase A and Phase B details;
+  - recommended questDressing payload shape.
+
+- Docs/map-generation-algorithm.txt
+  - Phase 8.2A/B algorithm notes;
+  - marker patterns and safety boundary.
+
+- Docs/info.txt
+  - low-level static-room marker rule and memory-safety reminder.
+
+------------------------------------------------
+Current project state at end of 2026 07 13
+
+- Stage 8.2 Phase A is complete.
+- Stage 8.2 Phase B is complete.
+- Quest cauldron/charm rooms are now identifiable by diagnostics and by safe
+  in-game static room-entry dressing.
+- The original renderer, game source, item slots, object records, cauldron
+  state, wizard state, inventory state, and charm-order memory remain untouched.
+- The next risky boundary is Phase C: probing whether actual original
+  cauldron/charm objects can be represented safely, or whether the first
+  playable quest loop should remain JS-side.
+
+
++============================================================+
+| 2026 07 13 - Stage 8.2C Cauldron Visual Probe              |
++============================================================+
+
+2026 07 13
+
+Stage 8.2C has started, but only as a deliberately narrow original-cauldron
+visual probe. It is not yet full original charm/cauldron gameplay injection.
+
+The goal of this step was to answer the safest first Phase C question:
+
+- can generated quest cauldron rooms display the original cauldron body and
+  stew without touching original item slots, inventory, charm-order memory,
+  wizard state, or cauldron-completion state?
+
+------------------------------------------------
+Memory Probe Results
+
+Read-only snapshot probes recovered the original relevant bytes:
+
+- background offset table at 0x6D06:
+  - 0x12 -> 0x6FAE;
+  - 0x13 -> 0x6FBF;
+- wizard background 0x12 at 0x6FAE..0x6FBE:
+
+    0x9E 0x98 0x68 0x80 0x05 0x05 0x18 0x10
+    0x90 0xA0 0x60 0x80 0x05 0x05 0x00 0x12 0x00
+
+- cauldron background 0x13 at 0x6FBF..0x6FCF:
+
+    0x8D 0x80 0x80 0x80 0x0A 0x0A 0x18 0x10
+    0x8E 0x80 0x88 0x80 0x00 0x00 0x00 0x12 0x00
+
+- cauldron bubble template at 0xB8C8..0xB8D9:
+
+    0xA0 0x80 0x80 0x80 0x05 0x05 0x0C 0x10
+    0xB4 0x00 0x00 0x00 0x00 0xA0 0x00 0x00 0x00 0x00
+
+The cauldron visual is therefore background id 0x13, formed by:
+
+- 0x8D: cauldron body;
+- 0x8E: cauldron contents / stew.
+
+The bubbles are separate and remain risky because they may be connected to
+wolf-form attack behaviour and live slots around 0x5C68.
+
+------------------------------------------------
+Runtime Changes
+
+Phase C is opt-in:
+
+- ?stage8c=1
+- ?stage82c=1
+
+When enabled, generated quest cauldron anchor rooms:
+
+- are forced to selector 0;
+- use a calm room colour;
+- suppress the Phase B four-corner block marker;
+- append background id 0x13;
+- keep the normal generated wall/arch compiler path for exits.
+
+The runtime restores the original cauldron background bytes and the original
+0x12/0x13 background offset table entries when the visual probe is enabled.
+
+The wizard background remains zeroed. The bubble template remains zeroed unless
+the separate high-risk flag is used:
+
+- ?stage8cbubbles=1
+
+Normal Phase C visual testing should not use the bubble flag yet.
+
+------------------------------------------------
+Background ID Adjustment
+
+Stage 7 custom rectangular tree-wall backgrounds had previously used 0x12 and
+0x13 as convenient runtime ids. Phase C needs those ids restored to their
+original meanings:
+
+- 0x12: original wizard background;
+- 0x13: original cauldron background.
+
+The custom tree-wall ids were therefore moved to:
+
+- 0x16: selector 2, 64x32 tree wall;
+- 0x17: selector 1, 32x64 tree wall.
+
+In the original background table, 0x16 and 0x17 are high-arch base entries.
+The current generated map does not rely on those high-arch-base backgrounds,
+so this is an acceptable runtime tradeoff for now. Authored maps should not
+depend on original 0x16/0x17 high-arch-base visuals while the custom
+rectangular tree-wall patch is active.
+
+This keeps rectangular wooden rooms available while freeing 0x13 for the
+original cauldron visual probe.
+
+------------------------------------------------
+Diagnostics And Verification
+
+The diagnostics/cache marker is now:
+
+- stage8-origin-088-blocks-20260713-1
+
+The Stage 8 table title now covers both safe static dressing and the cauldron
+visual probe:
+
+- Stage 8.2B/C - Quest Room Dressing
+
+With ?stage8c=1, a cauldron row should report:
+
+- phase: 8.2C-cauldron-visual-probe;
+- extra background: 0x13 cauldron;
+- original cauldron visual;
+- bubbles disabled.
+
+Automated checks passed:
+
+- JavaScript syntax checks for SRC/runtime/knightlore-mapgen.js;
+- JavaScript syntax checks for SRC/runtime/knightlore.js;
+- git diff whitespace check;
+- webpack rebuild;
+- direct generator probe for default Phase B and opt-in Phase C modes;
+- browser smoke test with ?stage7sliding=1&stage8c=1.
+
+The browser smoke test confirmed:
+
+- the Stage 8.2B/C diagnostics table rendered;
+- Phase C status text appeared;
+- cauldron background 0x13 was restored;
+- cauldron bubbles remained zeroed;
+- no page errors were captured.
+
+------------------------------------------------
+Current project state at end of 2026 07 13
+
+- Stage 8.2 Phase A is complete.
+- Stage 8.2 Phase B is complete.
+- Stage 8.2 Phase C has started as C1: original cauldron visual background
+  only.
+- The original cauldron body and stew can now be enabled in generated quest
+  cauldron rooms with ?stage8c=1.
+- The original bubbles are still disabled by default and should be probed
+  separately.
+- Collectable charm objects, item slots, inventory, charm-order memory,
+  wizard state, and original cauldron-completion state remain untouched.
+
+------------------------------------------------
+Manual follow-up on 2026 07 13
+
+The cauldron visual probe was manually tested across several sectors,
+including a wooden-sector cauldron room. Cauldrons appeared at the expected
+quest cauldron anchors.
+
+The bubble flag was also tested:
+
+    ?stage7sliding=1&stage8c=1&stage8cbubbles=1
+
+Result:
+
+- bubbles appeared in every room, not only cauldron rooms;
+- bubbles retained the original wolf-killing behaviour;
+- after death, respawn advanced through neighbouring logical rooms in a
+  sequence such as:
+  - (1,0) -> (2,0) -> ...
+  - (0,-1) -> (0,-2) -> ...
+- when the player died at (0,0), respawn stayed at (0,0).
+
+This confirms that the bubble template is global/live-slot behaviour, not a
+safe room-local cauldron dressing mechanism. The default remains to keep
+bubbles disabled.
+
+The built-in logical origin `(0,0)` was also updated to preserve the original
+room 0x88 eight-block floor frame:
+
+- block type 0x00;
+- positions:
+  - (2,6,0);
+  - (1,5,0);
+  - (5,6,0);
+  - (6,5,0);
+  - (6,2,0);
+  - (5,1,0);
+  - (1,2,0);
+  - (2,1,0).
+
+The central spawn/walk lanes remain clear.
+
+------------------------------------------------
+Stage 8.2C2 bubble-template probe, 2026 07 13
+
+The first attempted C2 test used:
+
+    ?stage7sliding=1&stage8c=1&stage8cbubbles=1&stage8cbubbles=cauldron
+
+At that point the runtime read the first repeated stage8cbubbles value, so it
+behaved as the global high-risk mode and produced bubbles in every room. This
+confirmed that repeated URL parameters are too easy to misread during manual
+experiments.
+
+The parser was updated so repeated stage8cbubbles values use the last value
+and report the full request chain in diagnostics, for example:
+
+    requested "1 -> cauldron"
+
+The diagnostics/cache marker for this C2 probe is now:
+
+- stage8-c2-bubble-probe-20260713-2
+
+C2 modes:
+
+- no stage8cbubbles, or stage8cbubbles=off:
+  keep the bubble template zeroed.
+- stage8cbubbles=1 or stage8cbubbles=global:
+  restore the template globally. This intentionally reproduces the dangerous
+  "bubbles in every room" control.
+- stage8cbubbles=cauldron:
+  restore the template only while the logical center room has questRole
+  cauldron; zero it elsewhere.
+
+The C2 diagnostics row reports:
+
+- interpreted mode;
+- requested parameter chain;
+- desired active/off state;
+- template restored/zeroed/mixed readback;
+- current logical room and quest role;
+- number of template gate writes;
+- first bytes read from live slot area 0x5C68.
+
+This still writes only the static bubble template at 0xB8C8..0xB8D9. It does
+not clear live bubble/object slots yet. If bubbles remain after leaving a
+cauldron room, the next probe should target live-slot cleanup around 0x5C68.
+If bubbles do not appear in a cauldron room, the template write is happening
+too late and a pre-load hook will be needed.
+
+------------------------------------------------
+Manual validation on 2026 07 17
+
+The C2 cauldron-gated bubble-template probe was manually tested with:
+
+    ?stage7sliding=1&stage8c=1&stage8cbubbles=cauldron
+
+Result: success.
+
+- Bubbles appeared only in the logical quest cauldron room at (4,4).
+- Bubbles did not appear in ordinary rooms, including the authored origin
+  (0,0).
+- The Stage 1 row `Stage 8.2C2 bubble probe` reported the expected state:
+  desired off / template zeroed outside the cauldron room, and desired active /
+  template restored in the cauldron room.
+- Bubbles were harmless when the player entered in human form.
+- Bubbles retained the original wolf-killing behaviour when the player entered
+  in wolf form.
+
+This confirms that the C2 template gate is early enough and specific enough
+for room-local cauldron bubbles under the current sliding-cross model.
+
+Observed caveats:
+
+- Bubble animation is too fast.
+- The requested-charm flashing is also too fast to appreciate comfortably.
+- After a bubble death, the player respawns in the room opposite the side used
+  to enter the cauldron. Example: if the player entered the cauldron room
+  through the east door, death respawns the player at the east door of the room
+  west of the cauldron.
+
+The animation speed is noted but not currently part of the objective. The
+respawn displacement is odd enough to deserve its own later probe. It is likely
+related to the original engine's death/entry-side/transition state rather than
+to the static bubble-template gate itself.
+
+Current C2 conclusion:
+
+- Stage 8.2C2 is successful as a room-gated bubble activation proof.
+- Do not treat the respawn displacement as blocking C2.
+- Next related probe, when needed: inspect and/or patch the death respawn
+  transition state so bubble deaths return the player to the intended cauldron
+  room/entry side under the virtual map model.
+
+
++============================================================+
+| 2026 07 18 - Stage 8.4 C3.0 Read-Only Anatomy              |
++============================================================+
+
+2026 07 18
+
+Stage 8.4 / C3.0 has started as a strictly read-only original
+charm/item/cauldron mechanic probe.
+
+The current diagnostics build marker is:
+
+- stage84-c30c-cauldron-gate-20260718-1
+
+A new table was added below the Stage 8 quest diagnostics:
+
+- Stage 8.4 C3.0 - Read-Only Mechanic Anatomy
+
+The table samples and decodes:
+
+- current logical room, quest role, and required charm context;
+- 0x5C48..0x5C67, first live item/charm candidate slot;
+- 0x5C68..0x5C87, second live item/charm/bubble/display candidate slot;
+- the first eight expanded dynamic records at 0x5C88 + n * 0x20;
+- all 32 original 9-byte static object records at 0x6FF2..0x7111.
+
+This pass does not write original item slots, inventory bytes, charm-order
+bytes, cauldron-completion bytes, or static item-table records. It is intended
+to let manual play reveal which bytes change when entering cauldron/charm
+rooms and, in later probes, when picking up, carrying, dropping, or leaving
+items.
+
+What to watch during manual testing:
+
+- Whether 0x5C48 or 0x5C68 changes when entering the generated charm room.
+- Whether 0x5C68 changes when entering the cauldron room with original visual
+  and room-gated bubbles enabled.
+- Whether any 0x6FF2 static object records change after leaving a room where
+  an item has moved or been dropped.
+- Whether dynamic records around 0x5C88 expose stable item/display/bubble
+  sprite records that can later be targeted safely.
+
+Current C3.0 conclusion:
+
+- Probe infrastructure is in place.
+- Gameplay mechanics remain untouched.
+- The next useful step is manual observation in origin, cauldron, and charm
+  rooms before attempting C3.1 item injection.
+
+Manual observation update:
+
+- At logical origin (0, 0), both 0x5C48..0x5C67 and 0x5C68..0x5C87 were all
+  zero.
+- In the generated cauldron room (4, 4), 0x5C68..0x5C87 became active with
+  sprite 0xA0 and byte +8 equal to 0xB4, while the current physical room was
+  still 0x88.
+- In the generated charm metadata room (3, 0), both live slots remained zero,
+  which is expected because actual charm/item injection has not started.
+- The C3.0 table was corrected so byte +8 is only labelled as a room for
+  item/charm-like live objects. For cauldron bubble/display objects it is now
+  reported as a state/sprite-like byte.
+- A direct read of the Knight Lore .z80 snapshot confirmed 32 raw non-zero
+  records in 0x6FF2..0x7111. This is a raw memory-table count and may differ
+  from a later gameplay classification such as visible, active, duplicate, or
+  special collectable objects.
+- A transient cauldron was observed once at logical origin (0, 0), blocking the
+  player; a reload cleared it. The likely cause is a startup ordering race:
+  Stage 8C restores background id 0x13 globally, while the original
+  unvirtualized room 0x88 also contains 0x13. If the Stage 7 cross is not
+  present before the first room decode, the original cauldron can leak into the
+  origin.
+- Startup was hardened so JSSpeccy loads the snapshot paused, waits for the
+  emulator ready callback, runs a startup-prime memory sample/injection, and
+  only then starts execution. During Stage 7 sliding, the physical cross is
+  written before the 0x13 cauldron background is restored.
+- Live-slot diagnostics now list non-zero byte offsets across the full sampled
+  32-byte slot, because the first 16 bytes shown in the byte preview can be
+  zero while later bytes still make a slot non-empty.
+- Follow-up correction: the first startup-prime implementation used the
+  existing JSSpeccy onReady hook, but that hook fired before openUrlList had
+  necessarily finished loading the Knight Lore .z80 snapshot. That meant the
+  startup-prime writes could be overwritten by the snapshot load, producing a
+  black first room or the original Knight Lore map after restart. JSSpeccy
+  readiness now waits for the requested URL/snapshot load to complete. If the
+  Stage 7 cross is not successfully injected, the runtime keeps execution
+  paused instead of auto-starting into the original map.
+- C3.0b expands the read-only table with carried/cauldron-state anatomy:
+  - 0x5BB3 pickup_drop_pressed;
+  - 0x5BB4 objects_carried_changed;
+  - 0x5BBB objects_put_in_cauldron;
+  - 0x5BC3 all_objs_in_cauldron;
+  - 0x5BC4 obj_dropping_into_cauldron;
+  - 0x5BD8..0x5BE7 inventory handoff and the three carried-object display
+    slots;
+  - live-slot +16/+17 pointers back to the original static object table.
+- The table also reports whether the original hard-coded cauldron room check
+  would be true for the current physical center. Under Stage 7 recentering,
+  physical room 0x88 is normally true even when the logical room is not a
+  quest cauldron, so C3.1 must add a gate/patch before real original item drops
+  are allowed.
+- C3.0c adds that gate as a narrow runtime patch. The original pickup/drop
+  routine has two hard-coded CP 0x88 instructions relevant to cauldron drops:
+  - 0xC086 FE 88, compare immediate at 0xC087;
+  - 0xC0C9 FE 88, compare immediate at 0xC0CA.
+- The runtime verifies the opcode byte is still 0xFE and writes only the
+  immediate byte. In logical quest cauldron rooms the immediates are 0x88. In
+  all other logical rooms they are 0xFF, so the original physical-room check
+  cannot accidentally treat every sliding center room as a cauldron.
+- No actual charms, inventory bytes, charm-order bytes, completion bytes, or
+  static object records are injected by C3.0c. This is only the acceptance gate
+  needed before C3.1 can safely try a disposable charm.
+- C3.1 has now started as an opt-in disposable charm probe.
+- The diagnostics build marker is now:
+  - stage84-c31-disposable-charm-20260718-1
+- C3.1 is enabled with ?stage84c31=1 or ?stage8c31=1, in addition to the
+  usual Stage 7 / Stage 8 cauldron-visual flags used for this line of tests.
+- The probe rewrites exactly one original static object-table record:
+  - record 31 at 0x7109..0x7111.
+- When a logical quest charm anchor is present in the current five-room
+  physical cross, that record is armed with:
+  - sprite 0x60 + (requiredCharm.id % 7), keeping the value in 0x60..0x66;
+  - X/Y/Z 0x80/0x80/0x80;
+  - current and start room equal to the target physical room id.
+- When no logical charm anchor is present in the current physical cross, the
+  record is disabled with current/start room 0xFF.
+- If the carried/inventory queue at 0x5BD8..0x5BE7 points back to 0x7109, the
+  runtime skips static-record reseeding so a carried disposable probe item is
+  not overwritten during sliding recentering.
+- C3.1 still does not directly write inventory bytes, charm-order bytes,
+  completion bytes, or JS quest-completion state. It is only a controlled
+  original-static-record placement probe.
+- Testing caveat: during this disposable proof, if the item is dropped in a
+  non-cauldron room, pick it back up before leaving the room. C3.2 is where we
+  will decide how to preserve or virtualize dropped/carried item state cleanly.
+- C3.2 has now started as a carried/inventory state probe.
+- The diagnostics build marker is now:
+  - stage84-c32-carried-inventory-20260718-1
+- The Stage 8.4 table now includes three C3.2 rows:
+  - C3.2 carried identity;
+  - C3.2 carry stability;
+  - C3.2 current-sector match.
+- The original carried queue is decoded as four 4-byte slots:
+  - 0x5BD8..0x5BDB inventory handoff;
+  - 0x5BDC..0x5BDF carried display 0;
+  - 0x5BE0..0x5BE3 carried display 1;
+  - 0x5BE4..0x5BE7 carried display 2.
+- C3.2 treats a carried disposable charm as stable when the carried slot keeps
+  a 0x60..0x66 sprite and a pointer back to 0x7109 -> static object 31 while
+  the player walks through Stage 7 recenter transitions.
+- Correction from manual review: 0x60..0x66 are the seven actual quest charm
+  types. The original 14-object requirement asks for each type twice; it is not
+  a set of 14 distinct charm identities. Object 0x67 is extra life/consumable,
+  not a quest charm.
+- The C3.1 row now says "last seeded target" to avoid implying that the saved
+  source room is the current logical room after the player has carried the
+  item away.
+- The original cauldron requested-object display is still intentionally
+  independent. C3.2 compares JS quest metadata with carried identity, but C3.3
+  is still the first stage where requested-object display or cauldron
+  acceptance should be patched or bypassed.
+
+
++============================================================+
+| 2026 07 20 - Stage 8.4 C3.3/C3.4 Hybrid Cauldron Proof     |
++============================================================+
+
+2026 07 20
+
+Stage 8.4 has now proved the first controlled hybrid version of the dispersed
+quest mechanic:
+
+- the player can collect an original-style quest charm from a generated logical
+  charm room;
+- the original carried-item queue survives Stage 7 sliding/recentering;
+- the player can carry the charm to a generated logical cauldron room;
+- the player can perform the normal human-form drop ritual at the cauldron;
+- JS persistent sector state can mark the sector as completed;
+- with C3.4 enabled, the original Knight Lore cauldron logic can also accept
+  the same drop and produce original feedback.
+
+The relevant opt-in flags for this proof were:
+
+- ?stage7sliding=1
+- ?stage8c=1
+- ?stage84c31=1
+- ?stage84c33=1
+- ?stage84c34=1
+
+Optional room-gated bubbles remain:
+
+- ?stage8cbubbles=cauldron
+
+C3.3 status:
+
+- C3.3 is the drop-gated JS-side cauldron acceptance probe.
+- A carried quest charm is accepted only when:
+  - the current logical room is a quest cauldron;
+  - the carried sprite is one of the seven real charm types, 0x60..0x66;
+  - the carried sprite matches the current sector's required charm type;
+  - the player performs a drop action in human form.
+- The charm source sector is diagnostic only. A charm is a charm; if another
+  sector asks for the same charm type, the player should be allowed to use the
+  carried charm there.
+- Before C3.4, C3.3 could complete the JS sector state but the original
+  cauldron display could still request a different object, making the visual
+  ritual confusing.
+
+C3.4 implementation:
+
+- C3.4 is the original cauldron request-order patch.
+- It is enabled with ?stage84c34=1 or ?stage8c34=1.
+- It uses the original request mechanism identified in the disassembly:
+  - 0x5BBB is objects_put_in_cauldron, the original current request index;
+  - 0xC27D..0xC28A is objects_required, the mutable 14-byte request table;
+  - ret_next_obj_required returns objects_required[objects_put_in_cauldron].
+- The runtime patches only the active request byte:
+  - address = 0xC27D + objects_put_in_cauldron;
+  - value = current JS sector required charm index, 0..6.
+- The patch is applied in the current logical cauldron room, and also pre-armed
+  from a directly reachable adjacent room. The adjacent pre-arm matters because
+  the original cauldron display may be initialized during room load.
+
+Manual proof in sector (0,0):
+
+- The sector required charm 11, mapped to original charm index 3 and sprite
+  0x63, chalice/vase.
+- In the room adjacent to the cauldron, logical (4,3), the C3.4 row reported:
+  - target (4,4), pre-armed adjacent north cauldron;
+  - objects_put 0x00;
+  - active request slot 0 at 0xC27D;
+  - desired 3 -> 0x63 chalice/vase;
+  - previous 3 -> 0x63 chalice/vase.
+- In the cauldron room, logical (4,4), the C3.4 row reported:
+  - current logical cauldron;
+  - the same active slot and desired chalice/vase request.
+- After the player dropped the chalice/vase in human form:
+  - the original game made its normal successful cauldron colour shift;
+  - objects_put_in_cauldron advanced from 0x00 to 0x01;
+  - the carried queue at 0x5BD8..0x5BE7 became empty;
+  - disposable static object record 31 was observed as 0x00@0x88;
+  - the JS sector state became completed.
+
+Conclusion from this proof:
+
+- The original cauldron acceptance path is genuinely participating when C3.4 is
+  enabled. This is not merely an external JS completion marker.
+- The original item was consumed/removed by original mechanics during the
+  successful drop.
+- The original colour-shift feedback is usable evidence that the drop was
+  accepted by the original engine.
+
+Completed-sector guard:
+
+- The first successful C3.4 test exposed a new risk: after the original counter
+  advanced to 0x01, the runtime would otherwise patch request slot 1 while the
+  player was still standing in the already completed local cauldron.
+- A guard was added in build:
+  - stage84-c34-completed-guard-20260720-1
+- If the target JS quest sector is already completed, C3.4 now reports:
+  - target completed yes;
+  - target sector already completed;
+  - request slot left unchanged.
+- Manual retest confirmed the guarded result at logical (4,4):
+  - objects_put 0x01;
+  - slot 1 / patch address 0xC27E;
+  - target completed yes;
+  - last action current logical cauldron: target sector already completed;
+    request slot left unchanged.
+- The C3.4 `writes` count is cumulative for the session. It may remain non-zero
+  after a previous write, but the decisive completed-sector result is the last
+  action saying that the request slot was left unchanged.
+
+Remaining risk:
+
+- C3.4 now prevents one completed local cauldron from repeatedly advancing the
+  original 14-object counter.
+- It does not yet solve the broader policy question of what should happen to
+  the original global counter across many different dispersed sectors.
+- Under the current proof build, each newly completed sector may still advance
+  objects_put_in_cauldron once. Before this becomes normal gameplay, we need a
+  deliberate counter policy: keep the original counter as a global progress
+  signal, virtualize it per sector, reset/isolate it after each sector, or use
+  only JS-side quest progression while preserving selected original feedback.
+
+Current C3.4 conclusion:
+
+- Stage 8.4 C3.4 is successful as a controlled hybrid proof.
+- We can combine:
+  - JS deterministic sector metadata and persistent sector completion state;
+  - original item pickup/carry/drop;
+  - original cauldron request display;
+  - original cauldron acceptance and colour-shift feedback.
+- The next design decision is not whether the hybrid is possible. It is how
+  much of the original global 14-object cauldron counter should be kept,
+  virtualized, or isolated for the dispersed infinite-map design.

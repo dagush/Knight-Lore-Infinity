@@ -285,10 +285,10 @@ Generated rectangular rooms have no procedural block runs. Stone rectangular
 rooms use the original rectangular stone arch/wall combinations.
 Tree-themed rectangular rooms are experimental. During Stage 7, the runtime
 installs custom tree-wall background definitions into the unused tail of the
-erased location table and repoints ids 0x12/0x13 to them:
+erased location table and uses runtime ids 0x16/0x17 for them:
 
-    0x12 custom tree wall size 2 -> selector 2
-    0x13 custom tree wall size 3 -> selector 1
+    0x16 custom tree wall size 2 -> selector 2
+    0x17 custom tree wall size 3 -> selector 1
 
 Tree rectangular rooms then use tree arch ids 0x04..0x07 on legal exits plus
 the custom tree wall id for their selector. This is Knight Lore-compatible
@@ -296,6 +296,11 @@ injected data, but it is not a rectangular wooden pattern found in the
 original room dump. The custom tree-wall data keeps only source records that
 already use Z/base byte 0x80. Raised stone-wall layers are discarded rather
 than moved down, because lowering them can cover otherwise valid arches.
+In the original background table, 0x16 and 0x17 are high-arch base entries.
+The current runtime can reuse them because the generated map does not rely on
+those high-arch base backgrounds. Authored maps should not depend on original
+0x16/0x17 high-arch-base visuals while the Stage 7/8 custom tree-wall runtime
+patch is active.
 
 To fill the doorless long side, rectangular tree rooms now copy the complete
 8-record square-room wall pattern on the relevant axis, then translate only
@@ -308,7 +313,7 @@ The runtime removes the matching stone-derived ground wall records from the
 custom background before appending the translated tree records. This avoids
 duplicate overlapping wall panels.
 
-Selector 1 custom 0x13 west-wall records:
+Selector 1 custom 0x17 west-wall records:
 
     0x80 0x5F 0x49 0x80 0x00 0x08 0x2C 0x10
     0x81 0x5F 0x58 0x80 0x00 0x08 0x2C 0x10
@@ -319,7 +324,7 @@ Selector 1 custom 0x13 west-wall records:
     0x81 0x5F 0xA8 0x80 0x00 0x08 0x2C 0x10
     0x82 0x5F 0xB8 0x80 0x00 0x08 0x2C 0x10
 
-Selector 2 custom 0x12 north-wall records:
+Selector 2 custom 0x16 north-wall records:
 
     0x80 0x48 0xA0 0x80 0x08 0x00 0x2C 0x50
     0x81 0x58 0xA0 0x80 0x08 0x00 0x2C 0x50
@@ -361,6 +366,15 @@ Authoring rule:
 - avoid central blocking background ids such as 0x12 wizard and 0x13 cauldron
   in the starting room unless the runtime deliberately disables their expanded
   data.
+
+The built-in generated-map origin is intentionally authored to preserve the
+original room 0x88 eight-block frame:
+
+    type 0x00 at (2,6,0), (1,5,0), (5,6,0), (6,5,0),
+                (6,2,0), (5,1,0), (1,2,0), (2,1,0)
+
+These blocks sit around the room perimeter and do not violate the central
+spawn-clearance rule.
 
 Until the exact player collision footprint is fully documented, use this
 conservative grid clearance for the origin room:
@@ -450,10 +464,14 @@ Known background ids:
 Stage 7 custom-background caveat:
 
 - in the original data, 0x12 and 0x13 are wizard and cauldron backgrounds;
-- Stage 7 repoints 0x12 and 0x13 at runtime to custom rectangular tree-wall
-  definitions after disabling the original wizard/cauldron data;
-- authored maps that need the original wizard/cauldron visuals should not rely
-  on those ids while the Stage 7 custom wall experiment is active.
+- current Stage 7/8 runtime leaves 0x12 and 0x13 available for their original
+  wizard/cauldron meanings and uses 0x16/0x17 for custom rectangular tree-wall
+  definitions;
+- in the original data, 0x16 and 0x17 are high-arch base backgrounds, so
+  authored maps should not rely on those high-arch-base visuals while the
+  custom wall experiment is active;
+- Stage 8.2C can restore 0x13 as the original cauldron background when
+  ?stage8c=1 is used.
 
 Important:
 

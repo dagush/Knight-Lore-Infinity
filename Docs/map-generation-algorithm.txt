@@ -110,6 +110,15 @@ This guarantees that the initial Stage 7 physical cross can be compiled
 immediately and that the starting room has all four logical neighbours
 available for manual testing.
 
+The logical origin `(0, 0)` is an authored override rather than a normal
+procedural room. It uses the original room `0x88` eight-block floor frame:
+
+    type 0x00 at (2,6,0), (1,5,0), (5,6,0), (6,5,0),
+                (6,2,0), (5,1,0), (1,2,0), (2,1,0)
+
+This keeps the original cauldron-room silhouette while leaving the central
+spawn/walk lanes clear.
+
 
 Corridor Branch Growth
 ----------------------
@@ -144,7 +153,7 @@ Each generated sector currently has:
 
 - one cauldron anchor room;
 - one charm anchor room;
-- one required charm type from 14 abstract charm ids;
+- one required charm type from seven original charm types;
 - difficulty metadata;
 - style metadata;
 - JavaScript-side persistent quest state.
@@ -164,6 +173,23 @@ Charm identity is global. If a player already has the required charm type from
 another sector, that charm should be usable at the current sector's cauldron.
 The local charm anchor is a nearby fair source, not an enforced sector-bound
 item.
+
+Corrected charm-type model:
+
+- Knight Lore has seven quest charm types, represented by original sprites
+  0x60..0x66.
+- The original 14-object objective requests those seven charm types twice.
+- 0x67 is life/extra life, not a quest charm, and must not be selected as a
+  sector's required charm.
+- Deterministic sector generation should therefore choose required charm type
+  with a 0..6 result, for example `hash(sectorX, sectorY, worldSeed) % 7`.
+  Repetition/ordering rules can still create a 14-delivery rhythm if desired,
+  but they must not create 14 distinct charm identities.
+- The current generator emits required charm metadata as an object with:
+  - `id`: 0..6;
+  - `sprite`: the original object sprite, 0x60..0x66;
+  - `label`: the player/debug name, such as `diamond/gem` or
+    `chalice/vase`.
 
 Anchor placement:
 
@@ -208,6 +234,185 @@ combination, which is outside the current project goals. The runtime
 diagnostic remains useful because it checks the sector the player is actually
 in.
 
+Stage 8.2A adds quest-room dressing intent as metadata only. When a generated
+room is the sector cauldron anchor or charm anchor, its logical payload gains a
+`questDressing` object and a distinct label:
+
+    quest-cauldron:x,y:biome-id
+    quest-charm:x,y:biome-id
+
+The current Phase A dressing profiles are deliberately descriptive rather than
+mechanical:
+
+- cauldron rooms are marked as open, calm, readable, and low hazard;
+- charm rooms are marked as slightly guarded or puzzle-like;
+- both profiles say that their visual marker is diagnostics-only;
+- `gameplayBytes` remains `unchanged`;
+- no original object records, item slots, cauldron state, wizard state,
+  inventory state, or charm-order memory are touched.
+
+The dressing metadata also records the future clearance rule: visual phases
+must keep the actual player entry side clear. The old central spawn-clearance
+restriction remains mandatory only for the true logical starting room `(0, 0)`,
+not for every generated room.
+
+Stage 8.2B turns that intent into a conservative visible in-game marker. The
+marker still avoids the original fragile quest machinery:
+
+- no original cauldron/wizard background ids are used as cauldrons/wizards;
+- no collectable item slots are written;
+- no original object-table quest records are duplicated;
+- no inventory, charm-order, or cauldron state bytes are changed.
+
+Instead, generated cauldron/charm anchor rooms use only static location-entry
+fields that the project already controls:
+
+- selector is forced to 0, producing a square room for the first safe visual
+  proof;
+- colour/attribute is overridden deterministically;
+- foreground block runs are replaced with a fixed four-corner marker pattern;
+- normal generated wall/arch backgrounds are still used for the final exits.
+
+The first Phase B patterns are:
+
+- cauldron room:
+  - colour 1;
+  - ordinary block type `0x00`;
+  - block positions `(2,2,0)`, `(5,2,0)`, `(2,5,0)`, `(5,5,0)`;
+- charm room:
+  - colour 5;
+  - spike block type `0x05`;
+  - the same four positions.
+
+These positions deliberately leave x=3..4 and y=3..4 clear, which keeps the
+central approach lanes open for any cardinal entry side. This is stricter than
+the old starting-room-only center rule, but only for the marker pattern itself:
+ordinary generated non-start rooms are still allowed to place content away
+from their actual entrance strips.
+
+Manual validation on 2026 07 13 covered several sectors with full
+cauldron-to-charm-and-back loops. A recorded example was sector `(0, -1)`:
+
+    current room: (6, -8)
+    cauldron:     (6, -8), local (6, 0)
+    charm:        (0, -5), local (0, 3)
+    required:     charm 12 (#12)
+    reachability: OK, anchors CH, path 9, searched 42, margin 2 chunks
+
+That recorded `charm 12` label came from the earlier 14-abstract-id diagnostic
+model. Under the corrected seven-charm model it should be interpreted as the
+corresponding original charm type modulo seven, not as a distinct twelfth
+charm identity.
+
+No reset, freeze, invalid retrieve_screen decode, or entry-side trapping was
+observed. This marks Phase 8.2B complete as a practical play-test proof. It is
+still not an exhaustive proof over the infinite map, but the marker rule is
+coordinate-independent and uses the same compact-entry compiler path for every
+sector.
+
+Stage 8.2C starts Phase C as a deliberately narrow cauldron visual probe. It
+does not yet inject collectable charms or use the original cauldron state
+machine.
+
+The probe is opt-in:
+
+    ?stage8c=1
+    ?stage82c=1
+
+When enabled, the runtime restores the original cauldron background expansion
+and makes generated quest cauldron anchor rooms append background id `0x13`:
+
+- the original background offset table entries at `0x6D06` are restored so
+  `0x12` points at the wizard background and `0x13` points at the cauldron
+  background;
+- the original cauldron background bytes at `0x6FBF..0x6FCF` are restored;
+- generated quest cauldron rooms are forced to selector 0 and a calm colour;
+- the Phase B four-corner block marker is suppressed for those rooms;
+- the generated room still uses the normal wall/arch compiler for exits;
+- no item slot, charm-order byte, inventory byte, wizard state, or original
+  cauldron completion state is touched.
+
+The original cauldron visual is two background records:
+
+    0x8D cauldron body
+    0x8E cauldron contents / stew
+
+The attack bubbles are deliberately separate. The original bubble template
+bytes at `0xB8C8..0xB8D9` remain zeroed by default, even with `?stage8c=1`.
+They are restored only with the extra experimental flag:
+
+    ?stage8cbubbles=1
+
+That bubble flag should be treated as high risk until we understand how the
+original wolf-form attack behaviour, live slots around `0x5C68`, and quest
+state interact. For normal Phase 8.2C testing, use `?stage8c=1` without the
+bubble flag.
+
+Manual testing on 2026 07 13 confirmed that `?stage8cbubbles=1` restores a
+global behaviour, not a cauldron-room-local one: bubbles appeared in every
+room and kept the original wolf-killing behaviour. After death, respawn walked
+through a coordinate sequence such as `(1,0)`, `(2,0)`, ... or `(0,-1)`,
+`(0,-2)`, ..., while deaths at `(0,0)` respawned at `(0,0)`. Keep the flag off
+until bubble activation can be gated per room or per live slot.
+
+Stage 8.2C2 adds explicit bubble-template probe modes:
+
+    ?stage8cbubbles=off        disabled / default
+    ?stage8cbubbles=1          global high-risk control
+    ?stage8cbubbles=global     same as 1
+    ?stage8cbubbles=cauldron   cauldron-gated timing probe
+
+If a URL accidentally repeats `stage8cbubbles`, the runtime uses the last
+value and reports the full chain in diagnostics. For example:
+
+    ?stage8cbubbles=1&stage8cbubbles=cauldron
+
+is interpreted as the cauldron-gated probe, with a requested chain of
+`1 -> cauldron`.
+
+The cauldron-gated probe writes only the template at `0xB8C8..0xB8D9`:
+
+- if the current logical center room has `questRole === "cauldron"`, restore
+  the original template bytes;
+- otherwise write zeros back over the template.
+
+It deliberately does not clear or patch live/object bytes around `0x5C68`.
+If bubbles still appear after leaving a cauldron room, that will mean the
+engine has already copied or activated live bubble state and C2 needs a
+separate live-slot cleanup probe.
+
+The Stage 1 diagnostics table has a `Stage 8.2C2 bubble probe` row showing:
+
+- requested mode;
+- desired active/off state;
+- template restored/zeroed/mixed readback;
+- current logical room and quest role;
+- number of gate writes;
+- first bytes read from the live area around `0x5C68`.
+
+Manual validation on 2026 07 17 passed:
+
+- `?stage8cbubbles=cauldron` produced bubbles only in the current logical
+  quest cauldron room;
+- ordinary rooms and the origin `(0,0)` stayed bubble-free;
+- the Stage 1 `Stage 8.2C2 bubble probe` row reported the expected desired
+  active/off and template restored/zeroed states;
+- bubbles were harmless in human form and retained the original wolf-killing
+  behaviour.
+
+Known non-blocking side effects:
+
+- the bubble animation is very fast;
+- the requested-charm flash is also very fast;
+- after a bubble death, the player respawns in the room opposite the entry
+  side. For example, entering the cauldron through the east door can respawn
+  at the east door of the room west of the cauldron.
+
+This marks C2 as successful for room-gated bubble-template activation. The
+respawn displacement should be handled as a later death/respawn-state probe,
+probably around current-room, entry-side, and transition-state working memory,
+rather than as part of the static bubble-template gate.
+
 
 Biome / Style Layer
 -------------------
@@ -251,8 +456,8 @@ The current style layer is conservative:
 - rectangular rooms have no procedural block runs;
 - wooden/tree rectangular rooms are experimental: Stage 7 installs custom
   tree-wall background records in the unused tail of the erased location table
-  and repoints ids 0x12/0x13 to them, while tree arch ids 0x04..0x07 provide
-  the legal narrow-side exits; the custom wall records keep only source
+  and uses runtime ids 0x16/0x17 for them, while tree arch ids 0x04..0x07
+  provide the legal narrow-side exits; the custom wall records keep only source
   records already at Z/base byte 0x80 and discard raised stone layers; the
   long doorless side is filled by replacing the stone-derived ground wall
   records with full 8-row square-tree wall patterns translated to x=0x5F
@@ -356,10 +561,16 @@ observed in the original 1984 room set.
 The current Stage 7 rectangular tree-wall patch uses two custom background ids
 installed at runtime:
 
-    0x12 custom tree wall size 2 -> selector 2, 64x32 rooms
-    0x13 custom tree wall size 3 -> selector 1, 32x64 rooms
+    0x16 custom tree wall size 2 -> selector 2, 64x32 rooms
+    0x17 custom tree wall size 3 -> selector 1, 32x64 rooms
 
-For selector 1 rooms, custom 0x13 replaces the stone-derived west-wall records
+In the original background table, ids 0x16 and 0x17 are high-arch base
+entries. The current generated map does not rely on those high-arch-base
+backgrounds, so the runtime can reuse the ids for custom rectangular tree
+walls while keeping 0x12 and 0x13 available for the original wizard and
+cauldron backgrounds.
+
+For selector 1 rooms, custom 0x17 replaces the stone-derived west-wall records
 with the full original square-tree west-wall sequence translated to x=0x5F:
 
     0x80 0x5F 0x49 0x80 0x00 0x08 0x2C 0x10
@@ -371,7 +582,7 @@ with the full original square-tree west-wall sequence translated to x=0x5F:
     0x81 0x5F 0xA8 0x80 0x00 0x08 0x2C 0x10
     0x82 0x5F 0xB8 0x80 0x00 0x08 0x2C 0x10
 
-For selector 2 rooms, custom 0x12 replaces the stone-derived north-wall records
+For selector 2 rooms, custom 0x16 replaces the stone-derived north-wall records
 with the full original square-tree north-wall sequence translated to y=0xA0:
 
     0x80 0x48 0xA0 0x80 0x08 0x00 0x2C 0x50

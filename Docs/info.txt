@@ -103,19 +103,23 @@ Room/location shape and background presets:
         custom background definitions later.
         Current experimental Stage 7 rectangular tree rooms install custom
         background definitions in the unused tail of the erased location table
-        and repoint background ids 0x12 and 0x13 to them:
-           0x12: custom tree wall size 2, for selector 2 rooms.
-           0x13: custom tree wall size 3, for selector 1 rooms.
+        and use runtime background ids 0x16 and 0x17 for them:
+           0x16: custom tree wall size 2, for selector 2 rooms.
+           0x17: custom tree wall size 3, for selector 1 rooms.
+        In the original background table, 0x16 and 0x17 are high-arch base
+        entries. The current generated map does not depend on those high-arch
+        base visuals, so the runtime can reuse their ids for the custom
+        rectangular tree walls.
         They also use tree arch ids 0x04..0x07 for legal narrow-side exits.
         Their custom wall records keep only source records that already use
         Z/base byte 0x80. Raised stone-wall layers are discarded rather than
         moved down, because lowering them can cover otherwise valid arches.
         The current long-wall fill strategy copies the complete original
         square-tree wall pattern and translates only the room-size plane:
-           selector 1 / custom 0x13:
+           selector 1 / custom 0x17:
               full west wall pattern, x moved from 0x3F to 0x5F.
               rows use y = 0x49, 0x58, 0x68, 0x78, 0x88, 0x98, 0xA8, 0xB8.
-           selector 2 / custom 0x12:
+           selector 2 / custom 0x16:
               full north wall pattern, y moved from 0xC0 to 0xA0.
               rows use x = 0x48, 0x58, 0x68, 0x78, 0x88, 0x98, 0xA8, 0xB8.
         The runtime removes the matching stone-derived ground wall records
@@ -126,15 +130,104 @@ Room/location shape and background presets:
         new explicit records caused unstable player/emulator behaviour. These
         attempts were reverted.
         This is new Knight Lore-compatible data, not a pattern observed in the
-        original room dump. Outside Stage 7, 0x12/0x13 should still be treated
-        cautiously because they are the original wizard/cauldron ids.
+        original room dump. IDs 0x12 and 0x13 are reserved again for their
+        original meanings: wizard background and cauldron background.
      Fixed-size entry caveat:
         When testing by rewriting a room entry without changing its total byte
         length, preserve the number of background slots before 0xFF. Cleaned
-        null expansion ids such as 0x12 and 0x13 can be used as fillers after
-        the wizard/cauldron expansion data has been zeroed.
-        Example selector 1 background list: 0x00, 0x02, 0x0E, 0x12, 0x13, 0x12, 0x13, 0xFF
-        Example selector 2 background list: 0x01, 0x03, 0x0D, 0x12, 0x13, 0x12, 0x13, 0xFF
+        null expansion ids may be used as fillers only when their expansion
+        data is confirmed zeroed in the current runtime mode. In particular,
+        do not use 0x13 as a filler when Stage 8.2C cauldron visual probing is
+        enabled, because 0x13 is restored to the original cauldron background.
+     Stage 8.2B quest-room marker rule:
+        Quest cauldron/charm anchor rooms are visually dressed without using
+        original cauldron, wizard, item, inventory, or charm-order mechanics.
+        The generator forces these anchor rooms to selector 0 for the first
+        safe visual proof and changes only compact static location-entry bytes:
+           header colour/attribute;
+           foreground block runs.
+        Cauldron marker:
+           colour 1;
+           block type 0x00 at (2,2,0), (5,2,0), (2,5,0), (5,5,0).
+        Charm marker:
+           colour 5;
+           block type 0x05 at the same four positions.
+        These positions leave x=3..4 and y=3..4 clear, so the central entry
+        lanes remain open from every cardinal side. Do not replace this with
+        original background ids 0x12/0x13 or item/object records until a later
+        read-only memory probe proves the original mechanics are safe to reuse.
+     Stage 8.2C cauldron visual probe:
+        Phase C is currently only a cauldron-background visual probe, enabled
+        explicitly with ?stage8c=1 or ?stage82c=1. It is not yet full original
+        charm/cauldron gameplay injection.
+        Read-only probes recovered the original expansion data:
+           background offset table at 0x6D06:
+              0x12 -> 0x6FAE, 0x13 -> 0x6FBF.
+           wizard background 0x12 at 0x6FAE..0x6FBE:
+              0x9E 0x98 0x68 0x80 0x05 0x05 0x18 0x10
+              0x90 0xA0 0x60 0x80 0x05 0x05 0x00 0x12 0x00
+           cauldron background 0x13 at 0x6FBF..0x6FCF:
+              0x8D 0x80 0x80 0x80 0x0A 0x0A 0x18 0x10
+              0x8E 0x80 0x88 0x80 0x00 0x00 0x00 0x12 0x00
+           bubble template at 0xB8C8..0xB8D9:
+              0xA0 0x80 0x80 0x80 0x05 0x05 0x0C 0x10
+              0xB4 0x00 0x00 0x00 0x00 0xA0 0x00 0x00 0x00 0x00
+        With ?stage8c=1, generated quest cauldron anchor rooms are forced to
+        selector 0, use a calm colour, emit no Phase B corner blocks, and append
+        background id 0x13. This displays the original cauldron body and stew
+        while leaving original item slots, charm-order bytes, inventory bytes,
+        wizard state, and cauldron-completion state untouched.
+        The bubble template remains zeroed unless the separate experimental
+        ?stage8cbubbles=1 flag is also set. That flag should be treated as
+        high risk because bubbles may be coupled to wolf-form attack behaviour
+        and original live slots around 0x5C68.
+        Manual test result, 2026 07 13: restoring the bubble template with
+        ?stage8cbubbles=1 made bubbles appear in every room, not only cauldron
+        rooms. They retained the original wolf-killing behaviour. After death,
+        respawn advanced through neighbouring logical rooms in a sequence such
+        as (1,0), (2,0), ... or (0,-1), (0,-2), ..., while deaths at (0,0)
+        respawned at (0,0). Treat bubbles as a global/live-slot behaviour until
+        per-room activation is understood.
+        Stage 8.2C2 URL modes:
+           no stage8cbubbles parameter, or stage8cbubbles=off:
+              keep the bubble template zeroed.
+           stage8cbubbles=1 or stage8cbubbles=global:
+              restore the bubble template globally. This reproduces the
+              high-risk "bubbles in every room" behaviour and is useful only
+              as a control experiment.
+           stage8cbubbles=cauldron:
+              restore 0xB8C8..0xB8D9 only while the current logical center
+              room has questRole cauldron; zero the same template elsewhere.
+              This is a timing probe, not a complete fix, because it does not
+              clear or patch live bubble/object slots around 0x5C68.
+        If multiple stage8cbubbles parameters are present, the runtime uses
+        the last one and reports the chain in diagnostics, for example
+        "1 -> cauldron".
+        The Stage 8.2C2 diagnostics row reports requested mode, desired state,
+        template readback, current logical role, gate writes, and live bytes at
+        0x5C68.
+        Manual test result, 2026 07 17: stage8cbubbles=cauldron behaved
+        correctly. Bubbles appeared only in the logical quest cauldron room
+        (sector (0,0), cauldron at (4,4)) and not in ordinary rooms. They were
+        harmless to human Sabreman and retained the original wolf-killing
+        behaviour. Known side effect: after a bubble death, the player respawns
+        in the room opposite the entry side, for example entering through the
+        east door can respawn at the east door of the room west of the
+        cauldron. This is likely original death/respawn transition state and
+        should be treated as a separate probe, not a failure of the bubble gate.
+        Startup hardening, 2026 07 18: because restoring background id 0x13
+        makes the original cauldron expansion live again, the emulator now
+        starts paused, waits for the Knight Lore .z80 snapshot to finish
+        loading, injects the Stage 7 physical cross first, then restores/zeros
+        the Stage 8C background and bubble templates, and only then starts
+        execution. This avoids a startup leak where early writes could be made
+        before the snapshot load completed and then be overwritten by the
+        original unvirtualized map.
+     Built-in logical origin rule:
+        Room (0,0) is authored to keep the original room 0x88 eight-block frame
+        while leaving the center clear:
+           type 0x00 at (2,6,0), (1,5,0), (5,6,0), (6,5,0),
+                       (6,2,0), (5,1,0), (1,2,0), (2,1,0).
 
 Working memory: between 5BA0h and 6107h
 
@@ -175,8 +268,10 @@ Note: portcullis: 0x08~0x09 west/east
 guard: head: 0x96: west, 0x97: east
        body: 0x90~0x95: west, 0x98~0x9D: east
 
-items/charms: During the game, the player has to collect and bring to the mage a number of items,
-       of 8 different types. I have found this page:
+items/charms: During the game, the player has to collect and bring to the mage
+       14 objects, but these are seven charm types requested twice. The eighth
+       object code in the nearby sprite range, 0x67, is an extra life/consumable
+       and should not be treated as a quest charm. I have found this page:
        https://www.porotal.org/knightlore/
        which describes, from a player's perspective, where they can be found (and in
        which order they must be retrieved).
@@ -195,14 +290,213 @@ item codes:
        0x64: cup
        0x65: bottle
        0x66: ball/crystal ball
-       0x67: life
+       0x67: life / extra life, not a quest charm
 item locations in working memory (only 2):
 1st:   0x5C48 -> sprite/object ID 1
        0x5C49 ~ 0x5C4B -> XYZ
        0x5C50 -> room ID
 2nd:   0x5C68 -> sprite/object ID 2
        0x5C69 ~ 0x5C6B -> X, Y, Z
-       0x5C70 -> room ID
+       0x5C70 -> room ID only for item/charm-like live objects. In the
+       cauldron bubble/display slot this byte is state/sprite-like instead:
+       the room-gated cauldron bubble probe observed 0xB4 here while the
+       current physical room remained 0x88.
+Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
+       The runtime samples these values without writing item/charm/cauldron
+       gameplay bytes, except for the explicit C3.0c cauldron acceptance gate
+       noted below:
+       - 0x5BB3: pickup_drop_pressed.
+       - 0x5BB4: objects_carried_changed.
+       - 0x5BBB: objects_put_in_cauldron.
+       - 0x5BC3: all_objs_in_cauldron.
+       - 0x5BC4: obj_dropping_into_cauldron.
+       - 0x5BD8..0x5BE7: inventory handoff plus three carried-object display
+         slots, 4 bytes each.
+       - 0x5C48..0x5C67: first live item/charm candidate slot.
+       - 0x5C68..0x5C87: second live item/charm/bubble/display candidate slot.
+       - 0x5C88 + n * 0x20: first 8 bytes of expanded dynamic room/object
+         records, currently n=0..7.
+       - 0x6FF2..0x7111: 32 raw original static object-table records,
+         9 bytes each. A direct read of the Knight Lore .z80 snapshot shows
+         32 non-zero records in this span; gameplay-level object counts may
+         still classify one or more records as special, duplicate, inactive,
+         or otherwise not a normal visible collectible.
+       The C3.0 table is meant for manual comparison while entering cauldron
+       and charm rooms, picking up/dropping items in later probes, and watching
+       whether leaving a room writes object state back into the static table.
+       Live-slot rows also list all non-zero offsets in the sampled 32-byte
+       slot. This is important because the visible byte preview may show the
+       first 16 bytes as zero while a later byte still makes the slot non-empty.
+       C3.0b also decodes live-slot pointer bytes +16/+17. For real special
+       objects these should point back into 0x6FF2..0x7111.
+       Cauldron caveat: the original drop code checks whether the player's
+       physical room is 0x88. Under the Stage 7 sliding-center model, that can
+       be true for any logical center room, so C3.1 must gate or patch original
+       cauldron acceptance before allowing real item drops.
+       C3.0c cauldron acceptance gate:
+          The original handle_pickup_drop routine has two relevant hard-coded
+          CP 0x88 checks:
+             0xC086 FE 88, immediate byte at 0xC087:
+                drop-slot scan limiter for the cauldron room.
+             0xC0C9 FE 88, immediate byte at 0xC0CA:
+                arm object-dropping-into-cauldron when room is 0x88 and
+                player Z is high enough.
+          The runtime verifies the opcode byte is still 0xFE, then changes only
+          the immediate byte. In logical quest cauldron rooms, both immediates
+          are restored to 0x88. Outside logical quest cauldron rooms, they are
+          changed to 0xFF so the original physical-room comparison cannot match
+          the sliding center room 0x88.
+          This is still a probe/gate for original acceptance logic; it does not
+          inject actual charms, change inventory bytes, or complete quests.
+       C3.1 disposable charm record probe:
+          Enabled explicitly with ?stage84c31=1 or ?stage8c31=1.
+          The runtime rewrites exactly one original static object-table record:
+             record 31, 0x7109..0x7111.
+          This record is used as a disposable test charm source. No inventory,
+          charm-order, cauldron-completion, or JS quest-completion bytes are
+          directly written by this probe.
+          Active record shape:
+             byte +0: sprite/object code, normally the explicit
+                      requiredCharm.sprite value in 0x60..0x66. Older
+                      metadata without a sprite field falls back to
+                      0x60 + (requiredCharm.id % 7), keeping the value inside
+                      the original seven-charm range.
+             byte +1..+3: X/Y/Z position, currently 0x80/0x80/0x80.
+             byte +4: current physical room id for the logical charm anchor
+                      visible in the five-room cross.
+             byte +5..+7: start X/Y/Z, currently the same 0x80/0x80/0x80.
+             byte +8: start physical room id, same as byte +4.
+          Inactive record shape:
+             0x00 0x80 0x80 0x80 0xFF 0x80 0x80 0x80 0xFF
+          The record is armed whenever a logical quest charm anchor is present
+          in the current physical five-room cross, preferably the center if the
+          player is already in the charm room. Otherwise it is set inactive.
+          If the live inventory/carried queue at 0x5BD8..0x5BE7 points back to
+          0x7109, the runtime skips static-record reseeding so a carried probe
+          item is not clobbered by recentering.
+          Disposable-probe caveat: if the player drops this probe charm in a
+          non-cauldron room, pick it back up before leaving the room. Until C3.2
+          understands writeback and carried state fully, leaving after such a
+          drop may cause the single disposable static record to be rearmed or
+          disabled for the next cross instead of preserving that dropped state.
+       C3.2 carried/inventory state probe:
+          Build marker:
+             stage84-c32-carried-inventory-20260718-1
+          This is still an observation probe. It does not directly write
+          inventory bytes, charm-order bytes, cauldron-completion bytes, or
+          JS quest-completion state.
+          The probe decodes the original inventory/carried queue:
+             0x5BD8..0x5BDB: inventory handoff;
+             0x5BDC..0x5BDF: carried display 0;
+             0x5BE0..0x5BE3: carried display 1;
+             0x5BE4..0x5BE7: carried display 2.
+          Each four-byte slot is decoded as:
+             byte +0: displayed carried object sprite;
+             byte +1: flags/state;
+             byte +2/+3: pointer back into the 0x6FF2..0x7111 static object
+                         table, little endian.
+          For the C3.1 disposable charm, the key success signal is:
+             carried slot sprite 0x60..0x66;
+             pointer 0x7109 -> static object 31.
+          After pickup, record 31 may show sprite byte 0x00 while bytes +4/+8
+          still hold the physical room. That does not mean the carried identity
+          is lost; during this probe the carried display slot and its 0x7109
+          pointer are the authoritative original-engine evidence.
+          C3.2 adds three diagnostics rows:
+             C3.2 carried identity:
+                selected carried slot, object sprite, object class, flags,
+                pointer, source static record, and exact JS source charm when
+                the source is the C3.1 disposable record.
+             C3.2 carry stability:
+                first/last logical coordinate seen while carrying, number of
+                distinct logical rooms visited while carrying, and recenter
+                transitions survived while the pointer remains stable.
+             C3.2 current-sector match:
+                compares the exact JS source charm and sprite class with the
+                current sector's required charm metadata.
+          Corrected charm-identity conclusion:
+             The original game has seven charm types, 0x60..0x66, and asks for
+             each type twice across the 14-object order. Therefore the carried
+             sprite class is a valid charm-type identity for C3.3 matching.
+             0x67 is life/extra life and must be excluded from quest charm
+             matching.
+       C3.3 drop-gated JS-side cauldron acceptance probe:
+          Enabled explicitly with ?stage84c33=1 or ?stage8c33=1.
+          This first acceptance proof is intentionally JavaScript-side and
+          player-action gated. It does not write original inventory bytes,
+          charm-order bytes, original cauldron-completion bytes, or original
+          global quest counters.
+          Acceptance condition:
+             current logical room role is cauldron;
+             current sector has a quest and is not already completed;
+             the carried queue at 0x5BD8..0x5BE7 contains a quest charm sprite
+             in 0x60..0x66;
+             the carried sprite equals the current sector's required charm
+             sprite;
+             the player is human or the form decode is unknown;
+             a cauldron/drop signal is observed.
+          The carried charm may come from any sector. Source sector is shown
+          only for diagnostics; it is not part of the acceptance rule.
+          Drop signal policy:
+             strongest: obj_dropping_into_cauldron at 0x5BC4 changes from zero;
+             strongest: objects_put_in_cauldron at 0x5BBB changes;
+             fallback: pickup_drop_pressed at 0x5BB3 has a rising edge while
+             at the logical cauldron with the matching carried charm and
+             cant_drop at 0x5BD3 is zero.
+          The diagnostics counter labelled "ready drop events" only counts
+          drop-like edges observed while this ready condition is true. This
+          avoids counting unrelated pickup/drop edges from earlier charm pickup
+          or ordinary item handling.
+          On acceptance the runtime marks the external persistent quest-sector
+          state as completed and records the charm/source summary there. With
+          C3.3 alone, the original carried object is not consumed by the JS
+          state update. With C3.4 enabled, original cauldron acceptance may
+          consume the carried object itself.
+          The original requested-object cauldron display is independent unless
+          the later C3.4 display/order patch is explicitly enabled.
+       C3.4 original cauldron request-order patch:
+          Enabled explicitly with ?stage84c34=1 or ?stage8c34=1.
+          This probe uses the original request path discovered in the
+          disassembly:
+             objects_put_in_cauldron at 0x5BBB is the current request index;
+             objects_required at 0xC27D..0xC28A is the mutable 14-byte request
+             table;
+             ret_next_obj_required returns objects_required[0x5BBB].
+          In a logical quest cauldron room, or while standing in a directly
+          reachable adjacent room before entering that cauldron, the runtime
+          patches exactly one request table byte:
+             address = 0xC27D + objects_put_in_cauldron;
+             value = current JS sector required charm index 0..6.
+          If the target JS quest sector is already completed, C3.4 leaves the
+          original request slot unchanged. This prevents a completed local
+          cauldron from repeatedly advancing the original 14-object counter
+          during this probe.
+          This should make the original cauldron reveal/display ask for the
+          same charm as the JS sector. It also affects original cauldron
+          acceptance, because the original drop code uses the same lookup when
+          comparing the object being put into the cauldron.
+          Risk:
+             a matching drop may increment original objects_put_in_cauldron and
+             trigger original colour/sound feedback. This is useful evidence,
+             but it also means the original global request counter may drift
+             across dispersed sectors until a later probe virtualizes or resets
+             it deliberately.
+          Manual validation on 2026 07 20:
+             In sector (0,0), the JS required charm was mapped to original
+             index 3 / sprite 0x63 chalice/vase. C3.4 pre-armed the adjacent
+             cauldron room, the cauldron requested the chalice/vase, and a
+             human-form drop produced the original successful colour shift.
+             objects_put_in_cauldron advanced from 0x00 to 0x01, the carried
+             queue became empty, and the JS sector state became completed.
+             Build stage84-c34-completed-guard-20260720-1 then confirmed the
+             completed-sector guard: at objects_put 0x01 / slot 1, target
+             completed yes, C3.4 left the active request slot unchanged.
+          Remaining C3.4 policy risk:
+             The guard prevents one completed local cauldron from repeatedly
+             advancing the original counter. It does not yet decide whether
+             the original 14-object counter should advance across many
+             different dispersed sectors, be virtualized per sector, be reset
+             after each sector, or be replaced by JS-side quest progression.
 
 wizard: 0x9F and 0x9E -> head
         0x90 ~ 0x95 -> body
