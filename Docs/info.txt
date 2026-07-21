@@ -497,6 +497,118 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
              the original 14-object counter should advance across many
              different dispersed sectors, be virtualized per sector, be reset
              after each sector, or be replaced by JS-side quest progression.
+       C3.5a read-only animation/display timing probe:
+          Build marker:
+             stage84-c35c-request-hold-20260721-1.
+          C3.5a does not patch animation counters, live slots, display bytes,
+          or emulator speed. It only measures observed visual-state cadence.
+          Primary candidate:
+             0x5C68..0x5C87, the second live item/bubble/display slot.
+          The probe classifies sprite byte +0 as:
+             0xA0..0xA7: cauldron bubble / wolf-attack bubble frames;
+             0xA8..0xAE: requested-object display flashes, corresponding to
+             original request indices 0..6.
+          The expected requested-object display sprite is computed as:
+             0xA8 + required charm index.
+          Diagnostics report:
+             current live sprite and classification;
+             frame/sample interval between sprite changes;
+             frame/sample interval between requested-object flashes;
+             recent sprite trail;
+             context reset reason;
+             supporting dynamic-record candidates in 0x5C88 + n * 0x20.
+          This is the evidence-gathering step before C3.5b attempts any
+          slowdown. Short intervals here confirm the symptom but are not yet a
+          fix.
+       C3.5b opt-in cauldron display slowdown probe:
+          URL flags:
+             ?stage84c35b=1 enables the experiment;
+             ?stage84c35bhold=6 chooses the target visible hold length
+             (clamped to 1..30 frames, default 6);
+             ?stage84c35bbubbles=human additionally enables human-form
+             0xA0..0xA3 bubble-frame holding.
+          Failed first attempt, observed 2026 07 21:
+             predecessor replay on 0xA0..0xA7 bubble phases made C3.5a report
+             constant writes, no releases, a reversed/forced sprite trail, and
+             wolf-form bubbles stopped killing the player.
+          Safer revision:
+             default mode writes only 0xA8..0xAE requested-object display
+             sprites;
+             optional human-bubble mode also writes 0xA0..0xA3, but only while
+             the player is human;
+             the write uses the same observed sprite, not the predecessor
+             sprite;
+             never write 0xA4..0xA7 wolf-attack bubble frames;
+             pause all writes when the player is wolf, transforming, or
+             unknown form;
+             keep original room-gated bubble behaviour untouched.
+          Cyclic hold correction, 2026 07 21:
+             A row showing values such as "visible 231/6" means the holder
+             released once and then failed to start a new hold cycle. The
+             corrected probe now releases one sample, resets the target, and
+             allows the next eligible sprite sample to start a fresh cycle.
+          Motion-hold revision, 2026 07 21:
+             Sprite-only holding did not perceptibly slow the visible bubble
+             motion. Human-bubble mode now holds the first sampled +0 sprite,
+             +3 Z, and +11 dZ values during each hold cycle. Request flashes
+             remain sprite-only. This is still post-frame memory surgery, so
+             it may not become the final policy if a cleaner routine-level
+             patch is found.
+          Human-bubble mode may make harmless cauldron bubbles more readable
+          while preserving the original wolf attack path. It remains a probe:
+          manual testing must confirm that wolf-form bubbles still kill and
+          human-form drops still complete correctly.
+       C3.5c opt-in routine-level bubble throttle probe:
+          URL flags:
+             ?stage84c35c=1 enables the probe;
+             ?stage84c35cperiod=4 runs one original bubble update frame for
+             every four frames by default (clamped to 2..12).
+          Targets:
+             0xB8E8: CALL dec_dZ_and_update_XYZ inside upd_160_to_163;
+             0xB8EB: CALL next_graphic_no_mod_4 inside upd_160_to_163;
+             0xB926: LD (IX+0),0xA0 inside upd_168_to_175, expected bytes
+             DD 36 00 A0.
+          The probe reads and stores the original CALL/reset bytes, then
+          on selected human-form frames patches 0xB8E8 to JP 0xB916, the
+          routine's normal set_wipe_and_draw_flags exit. This skips the
+          motion, graphic advance, dZ reset, and request-display branch as one
+          unit, while leaving 0xB8EB restored/original.
+          When the live sprite is a requested-object display 0xA8..0xAE, the
+          probe instead patches the 0xB926 reset instruction to NOP NOP NOP
+          NOP on throttled frames so the requested charm remains visible for
+          the same cadence as the bubble frames. On active frames, outside
+          logical cauldron rooms, and whenever the player is not human, it
+          restores the original CALL/reset bytes.
+          This is still a runtime poke, not a source-code modification. It is
+          meant to test whether throttling the original routine before it
+          draws is a better timing lever than post-frame live-slot pokes.
+          C3.5b is automatically suspended while C3.5c is enabled so the two
+          experiments do not interfere.
+          Manual validation, 2026 07 21:
+             - The first routine-level NOP attempt proved that the right
+               routine had been found, but produced irregular human-form
+               bubble speeds.
+             - The early-exit revision, 0xB8E8 -> JP 0xB916 on throttled
+               human-form bubble frames, produced a readable bubble cadence.
+             - The request-hold revision, 0xB926 -> NOP NOP NOP NOP on
+               throttled 0xA8..0xAE request-display frames, made the requested
+               charm stay visible long enough to be useful.
+             - Wolf-form behaviour remained original: diagnostic bytes were
+               restored and the bubbles still killed the wolf.
+             - With the default period 4, the rhythm is usable but slightly
+               slow. Period 3 is the next recommended tuning candidate for
+               longer play tests.
+          Remaining C3.5 risks:
+             - Bubble-death respawn displacement is still a separate known
+               issue. A bubble death can respawn the player in a neighbouring
+               room related to the entry side.
+             - The C3.5c row should always show original bytes outside logical
+               cauldron rooms and in wolf form. If it does not, reload the
+               snapshot before continuing the probe.
+             - This timing patch has only been tested over short sessions. It
+               should remain opt-in until multi-sector quest runs confirm that
+               cauldron display, wolf hazards, drops, and sliding recentering
+               continue to coexist.
 
 wizard: 0x9F and 0x9E -> head
         0x90 ~ 0x95 -> body

@@ -741,28 +741,221 @@ Remaining C3.4 design decision:
   - be reset/isolated after each sector completion; or
   - be bypassed for progression while retaining selected original feedback.
 
-C3.5 - Animation And Respawn Follow-Ups
----------------------------------------
+C3.5 - Animation, Display Timing, And Respawn Follow-Ups
+--------------------------------------------------------
 
 Goal:
 
 - Track the two non-blocking issues revealed by C1/C2 before they become
   confusing during playable quest tests.
 
+C3.5a - Read-Only Timing Probe
+------------------------------
+
+Goal:
+
+- Measure the actual animation/display cadence before changing it.
+
 Tasks:
 
-- Investigate fast bubble animation and fast requested-charm flashing:
-  - identify candidate counters/state bytes;
-  - avoid emulator-wide slowdown unless the whole game speed is wrong;
-  - consider an external HTML-side requested-charm display if the original
-    flash is not readable enough.
-- Investigate bubble-death respawn displacement:
-  - record entry side, current logical room, physical room id, and player
-    coordinates before death;
-  - record post-death current room, logical center, physical room id, and
-    player coordinates;
-  - identify whether the original engine keeps an entry-side/transition flag
-    that needs patching after bubble death.
+- Do not patch animation speed, display speed, counters, live slots, or emulator
+  timing in C3.5a.
+- Track the live cauldron bubble/display slot around 0x5C68..0x5C87:
+  - current sprite;
+  - whether the sprite is a bubble frame 0xA0..0xA7;
+  - whether the sprite is a requested-object flash 0xA8..0xAE;
+  - frame/sample interval between sprite changes;
+  - frame/sample interval between requested-object flashes.
+- Compute the expected requested-object display sprite from:
+  - JS sector required charm;
+  - original request index mapping 0..6;
+  - displayed sprite 0xA8 + index.
+- Keep a short recent sprite trail so manual testing can see whether the slot
+  is cycling every frame, every few frames, or more slowly.
+- Watch dynamic records for matching 0xA0..0xAE sprites as supporting evidence,
+  but treat 0x5C68 as the primary candidate because C2 showed this slot holds
+  cauldron bubble/display state.
+- Confirm whether the whole game speed feels normal while only this visual
+  cycle appears fast.
+
+Exit criteria:
+
+- Diagnostics can say how many frames a bubble/display sprite phase lasts.
+- Diagnostics can say how often a requested-charm flash appears.
+- We know whether the fast bubble cycle and fast requested-charm flash are the
+  same live-slot behaviour or two separate behaviours.
+
+C3.5b - Safe Slowdown Experiment
+--------------------------------
+
+Goal:
+
+- Slow only the confirmed requested-object display cadence, if possible, while
+  leaving active bubble hazard logic original.
+
+Tasks:
+
+- Keep this opt-in with a separate URL flag.
+- Do not change emulator speed globally.
+- First implementation flag:
+  - `?stage84c35b=1` enables the experiment;
+  - `?stage84c35bhold=6` chooses the target visible hold length, clamped to
+    1..30 frames;
+  - `?stage84c35bbubbles=human` additionally enables human-form 0xA0..0xA3
+    bubble-frame holding.
+- Prefer a minimal runtime patch around the confirmed animation/display state:
+  - freeze or stretch only harmless display phase changes first;
+  - avoid changing collision, wolf-kill, item drop, or cauldron acceptance
+    logic until proven separate.
+- Failed first implementation:
+  - predecessor replay on 0xA0..0xA7 bubble phases did not preserve original
+    wolf-kill behaviour;
+  - C3.5a showed constant writes, no releases, and a forced/reversed sprite
+    trail;
+  - therefore direct bubble-phase stretching is rejected for now.
+- Safer revision:
+  - default mode writes only 0xA8..0xAE requested-object display sprites;
+  - optional human-bubble mode also writes 0xA0..0xA3, but only while the
+    player is human;
+  - write the same observed sprite, not the predecessor sprite;
+  - never write 0xA4..0xA7 wolf-attack bubble frames;
+  - pause all writes when the player is wolf, transforming, or unknown form.
+- Cyclic hold correction:
+  - rows such as "visible 231/6" show the holder released once but failed to
+    start a fresh cycle;
+  - after each release, reset the target so the next eligible sample can begin
+    another hold cycle.
+- Motion-hold revision:
+  - sprite-only holding did not perceptibly slow the visible bubble motion;
+  - human-bubble mode now holds the first sampled +0 sprite, +3 Z, and +11 dZ
+    values during each hold cycle;
+  - request flashes remain sprite-only.
+- Compare before/after C3.5a timing rows.
+- Preserve room-gated bubble behaviour: bubbles must remain confined to logical
+  cauldron rooms when `?stage8cbubbles=cauldron` is used.
+- Retest wolf-form bubble danger after every C3.5b change. The same 0x5C68
+  live slot is used for both requested-object display and active cauldron
+  hazard state.
+
+Exit criteria:
+
+- The requested-object flash is readable without breaking original cauldron
+  acceptance.
+- Bubble movement/animation is either deliberately left original or slowed
+  only in human form without affecting wolf-form hazard behaviour.
+- Wolf-form bubble danger is preserved.
+
+C3.5c - Routine-Level Bubble Throttle Probe
+-------------------------------------------
+
+Goal:
+
+- Test whether throttling the original bubble updater before drawing is a
+  better timing lever than post-frame live-slot pokes.
+
+Tasks:
+
+- Keep this opt-in:
+  - `?stage84c35c=1` enables the probe;
+  - `?stage84c35cperiod=4` runs one original update frame for every four
+    frames by default, clamped to 2..12.
+- Suspend C3.5b while C3.5c is enabled so live-slot holding and routine
+  patching cannot interfere.
+- Patch only the confirmed routine body around `upd_160_to_163`:
+  - `0xB8E8`: `CALL dec_dZ_and_update_XYZ`;
+  - `0xB8EB`: `CALL next_graphic_no_mod_4`.
+- Also patch the confirmed request-display reset in `upd_168_to_175`:
+  - `0xB926`: `LD (IX+0),0xA0`, expected bytes `DD 36 00 A0`.
+- Read and store the original CALL/reset bytes before patching.
+- The first routine-level attempt patched both calls to `NOP NOP NOP`; manual
+  testing showed irregular speeds, likely because the remaining routine body
+  still ran.
+- Early-exit revision:
+  - on throttled human-form frames, patch `0xB8E8` to `JP 0xB916`;
+  - `0xB916` is the routine's normal `set_wipe_and_draw_flags` exit;
+  - this skips motion, graphic advance, dZ reset, and request-display logic as
+    one unit;
+  - keep `0xB8EB` restored/original.
+- Request-hold revision:
+  - when the observed live sprite is 0xA8..0xAE, patch `0xB926` to
+    `NOP NOP NOP NOP` on throttled frames;
+  - restore `0xB926` on active frames so the display returns to 0xA0 normally;
+  - this should keep the requested charm visible for the same cadence as each
+    bubble phase.
+- On active frames, outside logical cauldron rooms, and whenever the player is
+  not human, restore the original CALL/reset bytes.
+- Show current/original call bytes in diagnostics.
+
+Manual status, 2026 07 21:
+
+- The first routine-level NOP attempt confirmed the target routine, but gave
+  irregular human-form bubble speeds.
+- The early-exit revision, `0xB8E8 -> JP 0xB916`, produced a stable, readable
+  human-form bubble cadence.
+- The request-hold revision, `0xB926 -> NOP NOP NOP NOP` on throttled
+  `0xA8..0xAE` request-display frames, made the requested charm readable.
+- Wolf-form bubbles still kill the player, and the diagnostics show the
+  original bytes restored in wolf form.
+- Default period 4 is playable but a little slow. Period 3 is the next tuning
+  candidate for longer two- or three-sector play tests.
+
+Exit criteria:
+
+- Human-form bubble motion is visibly slower.
+- The routine bytes are restored outside cauldron rooms and in wolf form.
+- Wolf-form bubbles still kill the player.
+- Correct human-form charm drop still works.
+
+C3.5d - Display/Feedback Policy
+-------------------------------
+
+Goal:
+
+- Decide the final player-facing treatment.
+
+Options:
+
+- Keep original in-game timing if it proves acceptable.
+- Slow the original visual cycle with a narrowly scoped runtime patch.
+- Leave bubbles original but add an external HTML-side current request display.
+- Disable bubbles by default for generated cauldrons and reserve them for
+  special/harder sectors.
+- Use original colour/sound acceptance feedback but JS-side readable quest
+  guidance.
+
+Current provisional policy:
+
+- Use C3.5c as the preferred timing probe for manual tests, because it works
+  before the original routine draws instead of rewriting the live slot after the
+  frame.
+- Keep it opt-in until longer runs prove that it does not affect carry state,
+  cauldron drops, room sliding, or wolf-form hazard behaviour.
+- Keep the HTML diagnostics as the authoritative readable request display while
+  the in-game requested-charm flash is being tuned.
+
+Exit criteria:
+
+- The project has a stable policy for readable cauldron requests and bubble
+  difficulty.
+- Any timing patch remains opt-in or documented until long-play testing confirms
+  it does not destabilize original mechanics.
+
+C3.5e - Bubble-Death Respawn Probe
+----------------------------------
+
+Goal:
+
+- Investigate the observed bubble-death respawn displacement separately from
+  animation speed.
+
+Tasks:
+
+- Record entry side, current logical room, physical room id, and player
+  coordinates before death.
+- Record post-death current room, logical center, physical room id, and player
+  coordinates.
+- Identify whether the original engine keeps an entry-side/transition flag that
+  needs patching after bubble death.
 
 Exit criteria:
 

@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage84-c34-completed-guard-20260720-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage84-c35c-request-hold-20260721-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -43,6 +43,29 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     const KL_STAGE84_C34_ENABLED = ['1', 'true', 'on', 'yes'].includes(
         (KL_URL_PARAMS.get('stage84c34') || KL_URL_PARAMS.get('stage8c34') || '').trim().toLowerCase()
     );
+    const KL_STAGE84_C35B_ENABLED = ['1', 'true', 'on', 'yes'].includes(
+        (KL_URL_PARAMS.get('stage84c35b') || KL_URL_PARAMS.get('stage8c35b') || '').trim().toLowerCase()
+    );
+    const KL_STAGE84_C35B_HOLD_FRAMES = (() => {
+        const raw = KL_URL_PARAMS.get('stage84c35bhold') || KL_URL_PARAMS.get('stage8c35bhold') || '6';
+        const parsed = Number.parseInt(String(raw).trim(), 10);
+        if (!Number.isFinite(parsed)) return 6;
+        return Math.max(1, Math.min(30, parsed));
+    })();
+    const KL_STAGE84_C35B_HUMAN_BUBBLES_ENABLED = [
+        '1', 'true', 'on', 'yes', 'human', 'human-only',
+    ].includes(
+        (KL_URL_PARAMS.get('stage84c35bbubbles') || KL_URL_PARAMS.get('stage8c35bbubbles') || '').trim().toLowerCase()
+    );
+    const KL_STAGE84_C35C_ENABLED = ['1', 'true', 'on', 'yes'].includes(
+        (KL_URL_PARAMS.get('stage84c35c') || KL_URL_PARAMS.get('stage8c35c') || '').trim().toLowerCase()
+    );
+    const KL_STAGE84_C35C_PERIOD = (() => {
+        const raw = KL_URL_PARAMS.get('stage84c35cperiod') || KL_URL_PARAMS.get('stage8c35cperiod') || '4';
+        const parsed = Number.parseInt(String(raw).trim(), 10);
+        if (!Number.isFinite(parsed)) return 4;
+        return Math.max(2, Math.min(12, parsed));
+    })();
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
             ? 'maps/knight-lore-3x3-static-map.json'
@@ -322,6 +345,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             0xb4, 0x00, 0x00, 0x00, 0x00, 0xa0, 0x00, 0x00,
             0x00, 0x00,
         ],
+        bubbleUpdateMotionCallAddr: 0xb8e8,
+        bubbleUpdateGraphicCallAddr: 0xb8eb,
+        bubbleUpdateExitAddr: 0xb916,
+        requestDisplayResetAddr: 0xb926,
         liveBubbleSlotAddr: 0x5c68,
         liveBubbleSlotLength: 0x18,
     };
@@ -512,7 +539,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         0xa5: 'wolf-attack bubble 1',
         0xa6: 'wolf-attack bubble 2',
         0xa7: 'wolf-attack bubble 3',
-        0xae: 'cauldron item-display state',
+        0xa8: 'request diamond/gem display',
+        0xa9: 'request poison display',
+        0xaa: 'request shoe/boot display',
+        0xab: 'request chalice/vase display',
+        0xac: 'request cup display',
+        0xad: 'request bottle display',
+        0xae: 'request ball/crystal ball display',
         0xb4: 'fire/bubble support 0',
         0xb5: 'fire/bubble support 1',
     };
@@ -1706,6 +1739,84 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             lastAction: KL_STAGE84_C34_ENABLED
                 ? 'waiting for logical cauldron request context'
                 : 'disabled; add ?stage84c34=1 to patch the original requested-object order slot',
+            lastError: null,
+        };
+        let stage84C35aTimingProbe = {
+            enabled: true,
+            lastCoord: {x: 0, y: 0},
+            lastRole: 'none',
+            currentSprite: 0,
+            currentKind: 'empty',
+            expectedRequestSprite: null,
+            expectedRequestIndex: null,
+            contextKey: null,
+            resetReason: 'initial',
+            bytes: [],
+            lastSprite: null,
+            lastSpriteFrame: null,
+            lastSpriteSample: null,
+            spriteChanges: 0,
+            lastSpriteDeltaFrames: null,
+            lastSpriteDeltaSamples: null,
+            minSpriteDeltaFrames: null,
+            maxSpriteDeltaFrames: null,
+            totalSpriteDeltaFrames: 0,
+            requestFlashes: 0,
+            lastRequestFrame: null,
+            lastRequestSample: null,
+            lastRequestDeltaFrames: null,
+            lastRequestDeltaSamples: null,
+            minRequestDeltaFrames: null,
+            maxRequestDeltaFrames: null,
+            totalRequestDeltaFrames: 0,
+            recentSprites: [],
+            lastAction: 'waiting for live cauldron bubble/display slot samples',
+        };
+        let stage84C35bSlowdownProbe = {
+            requested: KL_STAGE84_C35B_ENABLED,
+            enabled: KL_STAGE84_C35B_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+            mode: KL_STAGE84_C35B_HUMAN_BUBBLES_ENABLED ? 'request+human-bubble' : 'request-flash-only',
+            holdFrames: KL_STAGE84_C35B_HOLD_FRAMES,
+            writes: 0,
+            releases: 0,
+            targetSprite: null,
+            targetVisibleFrames: 0,
+            writeSprite: null,
+            writeKind: 'none',
+            holdWrites: [],
+            holdDetail: '-',
+            lastCoord: {x: 0, y: 0},
+            lastRole: 'none',
+            lastPlayerForm: 'unknown',
+            lastObservedSprite: 0,
+            lastObservedKind: 'empty',
+            lastWriteFrame: null,
+            lastAction: KL_STAGE84_C35B_ENABLED
+                ? 'waiting for human-form cauldron request display sprite'
+                : 'disabled; add ?stage84c35b=1 to try opt-in display slowdown',
+            lastError: null,
+        };
+        let stage84C35cRoutineThrottle = {
+            requested: KL_STAGE84_C35C_ENABLED,
+            enabled: KL_STAGE84_C35C_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+            period: KL_STAGE84_C35C_PERIOD,
+            originalMotionCall: null,
+            originalGraphicCall: null,
+            originalRequestReset: null,
+            currentMotionCall: [],
+            currentGraphicCall: [],
+            currentRequestReset: [],
+            patchState: 'unknown',
+            cycle: 0,
+            patches: 0,
+            restores: 0,
+            lastCoord: {x: 0, y: 0},
+            lastRole: 'none',
+            lastPlayerForm: 'unknown',
+            lastObservedSprite: 0,
+            lastAction: KL_STAGE84_C35C_ENABLED
+                ? 'waiting to read original bubble updater call bytes'
+                : 'disabled; add ?stage84c35c=1 for the routine-level throttle probe',
             lastError: null,
         };
 
@@ -3802,6 +3913,696 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             ].join('; ');
         };
 
+        const classifyStage84C35aSprite = sprite => {
+            if (!sprite) return 'empty';
+            if (sprite >= 0xa0 && sprite <= 0xa7) return 'bubble frame';
+            if (sprite >= 0xa8 && sprite <= 0xae) return 'request flash';
+            return 'other';
+        };
+
+        const formatStage84C35aDelta = (frames, samples) => (
+            frames === null || samples === null
+                ? '-'
+                : `${frames} frame(s), ${samples} sample(s)`
+        );
+
+        const formatStage84C35aAverage = (total, count) => (
+            count > 0 ? (total / count).toFixed(1) : '-'
+        );
+
+        const formatStage84C35aRange = (min, max) => (
+            min === null || max === null ? '-' : `${min}..${max} frame(s)`
+        );
+
+        const updateStage84C35aMinMax = (min, max, value) => ({
+            min: min === null ? value : Math.min(min, value),
+            max: max === null ? value : Math.max(max, value),
+        });
+
+        const updateStage84C35aTimingProbe = workRange => {
+            const coord = getStage8CurrentCoord();
+            const room = logicalMap.getRoomAt(coord.x, coord.y);
+            const sector = logicalMap.getQuestSectorAt(coord.x, coord.y);
+            const quest = sector && sector.quest ? sector.quest : {exists: false};
+            const expectedRequestIndex = quest.requiredCharm
+                ? getStage84C31ObjectIndex(quest.requiredCharm)
+                : null;
+            const expectedRequestSprite = Number.isInteger(expectedRequestIndex)
+                ? 0xa8 + expectedRequestIndex
+                : null;
+            const bytes = readBytesFromRange(
+                workRange,
+                KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr,
+                KL_STAGE84_C30.liveSlotSize
+            );
+            const sprite = bytes[0] || 0;
+            const kind = classifyStage84C35aSprite(sprite);
+            const frame = frameCompletedCount;
+            const sample = sampleCount;
+            const role = room.questRole || 'none';
+            const contextKey = [
+                logicalCoordKey(coord.x, coord.y),
+                role,
+                expectedRequestSprite === null ? '-' : expectedRequestSprite,
+            ].join(':');
+            const rawPrevious = stage84C35aTimingProbe;
+            const contextChanged = rawPrevious.contextKey !== null && rawPrevious.contextKey !== contextKey;
+            const activeStarted = rawPrevious.currentKind === 'empty' && kind !== 'empty';
+            const resetReason = contextChanged
+                ? 'logical room/request context changed'
+                : activeStarted
+                    ? 'live slot became active'
+                    : rawPrevious.resetReason;
+            const previous = contextChanged || activeStarted
+                ? {
+                    ...rawPrevious,
+                    lastSprite: null,
+                    lastSpriteFrame: null,
+                    lastSpriteSample: null,
+                    spriteChanges: 0,
+                    lastSpriteDeltaFrames: null,
+                    lastSpriteDeltaSamples: null,
+                    minSpriteDeltaFrames: null,
+                    maxSpriteDeltaFrames: null,
+                    totalSpriteDeltaFrames: 0,
+                    requestFlashes: 0,
+                    lastRequestFrame: null,
+                    lastRequestSample: null,
+                    lastRequestDeltaFrames: null,
+                    lastRequestDeltaSamples: null,
+                    minRequestDeltaFrames: null,
+                    maxRequestDeltaFrames: null,
+                    totalRequestDeltaFrames: 0,
+                    recentSprites: [],
+                }
+                : rawPrevious;
+            let next = {
+                ...previous,
+                enabled: true,
+                lastCoord: cloneData(coord),
+                lastRole: role,
+                currentSprite: sprite,
+                currentKind: kind,
+                expectedRequestSprite,
+                expectedRequestIndex,
+                contextKey,
+                resetReason,
+                bytes,
+            };
+
+            const firstSprite = previous.lastSprite === null;
+            const spriteChanged = firstSprite || sprite !== previous.lastSprite;
+            if (spriteChanged) {
+                const deltaFrames = firstSprite ? null : frame - previous.lastSpriteFrame;
+                const deltaSamples = firstSprite ? null : sample - previous.lastSpriteSample;
+                let minMax = {
+                    min: previous.minSpriteDeltaFrames,
+                    max: previous.maxSpriteDeltaFrames,
+                };
+
+                if (!firstSprite) {
+                    minMax = updateStage84C35aMinMax(
+                        previous.minSpriteDeltaFrames,
+                        previous.maxSpriteDeltaFrames,
+                        deltaFrames
+                    );
+                }
+
+                next = {
+                    ...next,
+                    lastSprite: sprite,
+                    lastSpriteFrame: frame,
+                    lastSpriteSample: sample,
+                    spriteChanges: previous.spriteChanges + (firstSprite ? 0 : 1),
+                    lastSpriteDeltaFrames: deltaFrames,
+                    lastSpriteDeltaSamples: deltaSamples,
+                    minSpriteDeltaFrames: minMax.min,
+                    maxSpriteDeltaFrames: minMax.max,
+                    totalSpriteDeltaFrames: previous.totalSpriteDeltaFrames + (firstSprite ? 0 : deltaFrames),
+                    recentSprites: [
+                        ...previous.recentSprites,
+                        `${frame}:${fmtMechanicSprite(sprite)}`,
+                    ].slice(-14),
+                };
+            }
+
+            const isRequestFlash = kind === 'request flash';
+            const newRequestFlash = isRequestFlash && (
+                previous.currentKind !== 'request flash' ||
+                previous.currentSprite !== sprite
+            );
+            if (newRequestFlash) {
+                const firstRequest = previous.lastRequestFrame === null;
+                const deltaFrames = firstRequest ? null : frame - previous.lastRequestFrame;
+                const deltaSamples = firstRequest ? null : sample - previous.lastRequestSample;
+                let minMax = {
+                    min: previous.minRequestDeltaFrames,
+                    max: previous.maxRequestDeltaFrames,
+                };
+
+                if (!firstRequest) {
+                    minMax = updateStage84C35aMinMax(
+                        previous.minRequestDeltaFrames,
+                        previous.maxRequestDeltaFrames,
+                        deltaFrames
+                    );
+                }
+
+                next = {
+                    ...next,
+                    requestFlashes: previous.requestFlashes + 1,
+                    lastRequestFrame: frame,
+                    lastRequestSample: sample,
+                    lastRequestDeltaFrames: deltaFrames,
+                    lastRequestDeltaSamples: deltaSamples,
+                    minRequestDeltaFrames: minMax.min,
+                    maxRequestDeltaFrames: minMax.max,
+                    totalRequestDeltaFrames: previous.totalRequestDeltaFrames + (firstRequest ? 0 : deltaFrames),
+                };
+            }
+
+            const expectedText = expectedRequestSprite === null
+                ? 'no expected request sprite'
+                : `expected ${fmtMechanicSprite(expectedRequestSprite)}`;
+            next.lastAction = `${kind}; ${fmtMechanicSprite(sprite)}; ${expectedText}`;
+            stage84C35aTimingProbe = next;
+        };
+
+        const getStage84C35aDynamicCandidates = workRange => {
+            const candidates = [];
+            for (let index = 0; index < KL_STAGE84_C30.dynamicProbeCount; index++) {
+                const addr = KL_STAGE84_C30.dynamicStart + index * KL_STAGE84_C30.dynamicSlotSize;
+                const bytes = readBytesFromRange(workRange, addr, 8);
+                const sprite = bytes[0] || 0;
+                if (sprite >= 0xa0 && sprite <= 0xae) {
+                    candidates.push({
+                        index,
+                        addr,
+                        sprite,
+                        kind: classifyStage84C35aSprite(sprite),
+                        bytes,
+                    });
+                }
+            }
+            return candidates;
+        };
+
+        const formatStage84C35aTiming = () => {
+            const probe = stage84C35aTimingProbe;
+            return [
+                `current ${fmtMechanicSprite(probe.currentSprite)} (${probe.currentKind})`,
+                `expected request ${probe.expectedRequestSprite === null ? '-' : fmtMechanicSprite(probe.expectedRequestSprite)}`,
+                `sprite changes ${probe.spriteChanges}`,
+                `last phase ${formatStage84C35aDelta(probe.lastSpriteDeltaFrames, probe.lastSpriteDeltaSamples)}`,
+                `avg phase ${formatStage84C35aAverage(probe.totalSpriteDeltaFrames, probe.spriteChanges)} frame(s)`,
+                `phase range ${formatStage84C35aRange(probe.minSpriteDeltaFrames, probe.maxSpriteDeltaFrames)}`,
+                `request flashes ${probe.requestFlashes}`,
+                `last flash gap ${formatStage84C35aDelta(probe.lastRequestDeltaFrames, probe.lastRequestDeltaSamples)}`,
+                `avg flash gap ${formatStage84C35aAverage(probe.totalRequestDeltaFrames, Math.max(0, probe.requestFlashes - 1))} frame(s)`,
+                `flash range ${formatStage84C35aRange(probe.minRequestDeltaFrames, probe.maxRequestDeltaFrames)}`,
+                `reset ${probe.resetReason}`,
+            ].join('; ');
+        };
+
+        const formatStage84C35aRoom = () => (
+            [
+                `logical ${fmtLogicalCoord(stage84C35aTimingProbe.lastCoord)}`,
+                `role ${stage84C35aTimingProbe.lastRole}`,
+                `frame ${frameCompletedCount}`,
+                `sample ${sampleCount}`,
+            ].join('; ')
+        );
+
+        const formatStage84C35aTrail = () => (
+            stage84C35aTimingProbe.recentSprites.length
+                ? stage84C35aTimingProbe.recentSprites.join(' -> ')
+                : 'no sprite changes observed yet'
+        );
+
+        const formatStage84C35aDynamicCandidates = candidates => (
+            candidates.length
+                ? candidates.map(item => (
+                    `${item.index}:${fmtMechanicSprite(item.sprite)} (${item.kind}) @${hexWord(item.addr)}`
+                )).join('; ')
+                : 'none in sampled dynamic records'
+        );
+
+        const getStage84C35bHoldCandidate = (sprite, playerForm, workRange) => {
+            if (sprite >= 0xa8 && sprite <= 0xae) {
+                return {
+                    sprite,
+                    kind: 'request flash',
+                    writes: [{offset: 0, value: sprite}],
+                    detail: 'sprite only',
+                };
+            }
+            if (
+                KL_STAGE84_C35B_HUMAN_BUBBLES_ENABLED &&
+                playerForm.kind === 'human' &&
+                sprite >= 0xa0 &&
+                sprite <= 0xa3
+            ) {
+                const base = KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr;
+                const z = readByte(workRange, base + 3);
+                const dz = readByte(workRange, base + 11);
+                if (z === undefined || dz === undefined) return null;
+                return {
+                    sprite,
+                    kind: 'human bubble motion',
+                    writes: [
+                        {offset: 0, value: sprite},
+                        {offset: 3, value: z},
+                        {offset: 11, value: dz},
+                    ],
+                    detail: `sprite/Z/dZ; Z ${hexByte(z)}; dZ ${hexByte(dz)}`,
+                };
+            }
+            return null;
+        };
+
+        const updateStage84C35bSlowdownProbe = async workRange => {
+            const coord = getStage8CurrentCoord();
+            const room = logicalMap.getRoomAt(coord.x, coord.y);
+            const role = room.questRole || 'none';
+            const playerForm = decodeStage84PlayerForm(workRange);
+            const observedSprite = stage84C35aTimingProbe.currentSprite;
+            const observedKind = stage84C35aTimingProbe.currentKind;
+            const contextChanged = (
+                stage84C35bSlowdownProbe.lastCoord.x !== coord.x ||
+                stage84C35bSlowdownProbe.lastCoord.y !== coord.y ||
+                stage84C35bSlowdownProbe.lastRole !== role ||
+                stage84C35bSlowdownProbe.lastPlayerForm !== playerForm.kind
+            );
+            let targetSprite = contextChanged ? null : stage84C35bSlowdownProbe.targetSprite;
+            let targetVisibleFrames = contextChanged ? 0 : stage84C35bSlowdownProbe.targetVisibleFrames;
+            const holdCandidate = getStage84C35bHoldCandidate(observedSprite, playerForm, workRange);
+            let writeSprite = holdCandidate ? holdCandidate.sprite : null;
+            let writeKind = holdCandidate ? holdCandidate.kind : 'none';
+            let holdWrites = contextChanged ? [] : stage84C35bSlowdownProbe.holdWrites;
+            let holdDetail = contextChanged ? '-' : stage84C35bSlowdownProbe.holdDetail;
+            let writes = 0;
+            let releases = 0;
+            let lastAction = stage84C35bSlowdownProbe.lastAction;
+            let lastError = null;
+            let lastWriteFrame = stage84C35bSlowdownProbe.lastWriteFrame;
+
+            const setState = extra => {
+                stage84C35bSlowdownProbe = {
+                    ...stage84C35bSlowdownProbe,
+                    enabled: KL_STAGE84_C35B_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+                    holdFrames: KL_STAGE84_C35B_HOLD_FRAMES,
+                    writes: stage84C35bSlowdownProbe.writes + writes,
+                    releases: stage84C35bSlowdownProbe.releases + releases,
+                    targetSprite,
+                    targetVisibleFrames,
+                    writeSprite,
+                    writeKind,
+                    holdWrites,
+                    holdDetail,
+                    lastCoord: cloneData(coord),
+                    lastRole: role,
+                    lastPlayerForm: playerForm.kind,
+                    lastObservedSprite: observedSprite,
+                    lastObservedKind: observedKind,
+                    lastWriteFrame,
+                    lastAction,
+                    lastError,
+                    ...extra,
+                };
+            };
+
+            if (!stage84C35bSlowdownProbe.requested) {
+                lastAction = 'disabled; add ?stage84c35b=1 to try opt-in display slowdown';
+                setState({enabled: false});
+                return;
+            }
+
+            if (KL_STAGE84_C35C_ENABLED) {
+                targetSprite = null;
+                targetVisibleFrames = 0;
+                writeSprite = null;
+                writeKind = 'none';
+                holdWrites = [];
+                holdDetail = '-';
+                lastAction = 'suspended because C3.5c routine-level throttle is enabled';
+                setState({enabled: false});
+                return;
+            }
+
+            if (!KL_STAGE7_SLIDING_CROSS.enabled || typeof emu.writeMemory !== 'function') {
+                lastAction = KL_STAGE7_SLIDING_CROSS.enabled
+                    ? 'writeMemory unavailable'
+                    : 'disabled because Stage 7 sliding is off';
+                setState({enabled: false});
+                return;
+            }
+
+            if (role !== 'cauldron') {
+                targetSprite = null;
+                targetVisibleFrames = 0;
+                writeSprite = null;
+                writeKind = 'none';
+                holdWrites = [];
+                holdDetail = '-';
+                lastAction = `waiting for logical cauldron; current role ${role}`;
+                setState({enabled: true});
+                return;
+            }
+
+            if (playerForm.kind !== 'human') {
+                targetSprite = null;
+                targetVisibleFrames = 0;
+                writeSprite = null;
+                writeKind = 'none';
+                holdWrites = [];
+                holdDetail = '-';
+                lastAction = `hazard-safe pause; player ${playerForm.kind}; bubble logic left original`;
+                setState({enabled: true});
+                return;
+            }
+
+            if (writeSprite === null) {
+                targetSprite = null;
+                targetVisibleFrames = 0;
+                writeKind = 'none';
+                holdWrites = [];
+                holdDetail = '-';
+                const bubblePolicy = KL_STAGE84_C35B_HUMAN_BUBBLES_ENABLED
+                    ? 'waiting for human 0xA0..0xA3 bubble or 0xA8..0xAE request flash'
+                    : 'bubble frame left original; waiting for 0xA8..0xAE request flash';
+                lastAction = `${bubblePolicy}; observed ${fmtMechanicSprite(observedSprite)} (${observedKind})`;
+                setState({enabled: true});
+                return;
+            }
+
+            if (targetSprite !== observedSprite) {
+                targetSprite = observedSprite;
+                targetVisibleFrames = 1;
+                holdWrites = holdCandidate.writes;
+                holdDetail = holdCandidate.detail;
+            } else {
+                targetVisibleFrames += 1;
+            }
+
+            if (targetVisibleFrames < KL_STAGE84_C35B_HOLD_FRAMES) {
+                try {
+                    for (const item of holdWrites) {
+                        await emu.writeMemory(
+                            KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr + item.offset,
+                            Uint8Array.from([item.value])
+                        );
+                    }
+                    writes = 1;
+                    lastWriteFrame = frameCompletedCount;
+                    lastAction = `holding ${writeKind} ${fmtMechanicSprite(targetSprite)} ${targetVisibleFrames}/${KL_STAGE84_C35B_HOLD_FRAMES}; rewrote ${holdDetail}`;
+                } catch (err) {
+                    lastError = `Failed C3.5b sprite hold write: ${err}`;
+                    lastAction = 'write failed';
+                }
+            } else {
+                const releasedSprite = targetSprite;
+                const releasedKind = writeKind;
+                const releasedFrames = targetVisibleFrames;
+                releases = 1;
+                targetSprite = null;
+                targetVisibleFrames = 0;
+                writeSprite = null;
+                writeKind = 'none';
+                holdWrites = [];
+                holdDetail = '-';
+                lastAction = `released ${releasedKind} ${fmtMechanicSprite(releasedSprite)} after ${releasedFrames}/${KL_STAGE84_C35B_HOLD_FRAMES} observed frame(s); next candidate starts a fresh hold cycle`;
+            }
+
+            setState({enabled: true});
+        };
+
+        const formatStage84C35bSlowdown = () => (
+            [
+                `requested ${stage84C35bSlowdownProbe.requested ? 'yes' : 'no'}`,
+                `enabled ${stage84C35bSlowdownProbe.enabled ? 'yes' : 'no'}`,
+                `mode ${stage84C35bSlowdownProbe.mode}`,
+                `hold ${stage84C35bSlowdownProbe.holdFrames} frame(s)`,
+                `player ${stage84C35bSlowdownProbe.lastPlayerForm}`,
+                `observed ${fmtMechanicSprite(stage84C35bSlowdownProbe.lastObservedSprite)} (${stage84C35bSlowdownProbe.lastObservedKind})`,
+                `target ${stage84C35bSlowdownProbe.targetSprite === null ? '-' : fmtMechanicSprite(stage84C35bSlowdownProbe.targetSprite)}`,
+                `visible ${stage84C35bSlowdownProbe.targetVisibleFrames}/${stage84C35bSlowdownProbe.holdFrames}`,
+                `write ${stage84C35bSlowdownProbe.writeSprite === null ? '-' : fmtMechanicSprite(stage84C35bSlowdownProbe.writeSprite)}`,
+                `write kind ${stage84C35bSlowdownProbe.writeKind}`,
+                `hold detail ${stage84C35bSlowdownProbe.holdDetail}`,
+                `hold bytes ${stage84C35bSlowdownProbe.holdWrites.length ? stage84C35bSlowdownProbe.holdWrites.map(item => `+${item.offset}:${hexByte(item.value)}`).join(' ') : '-'}`,
+                `writes ${stage84C35bSlowdownProbe.writes}`,
+                `releases ${stage84C35bSlowdownProbe.releases}`,
+                `last action ${stage84C35bSlowdownProbe.lastAction}`,
+            ].join('; ')
+        );
+
+        const formatStage84C35bRoom = () => (
+            [
+                `logical ${fmtLogicalCoord(stage84C35bSlowdownProbe.lastCoord)}`,
+                `role ${stage84C35bSlowdownProbe.lastRole}`,
+                stage84C35bSlowdownProbe.lastWriteFrame === null
+                    ? 'no write yet'
+                    : `last write frame ${stage84C35bSlowdownProbe.lastWriteFrame}`,
+            ].join('; ')
+        );
+
+        const KL_STAGE84_C35C_NOP_CALL = [0x00, 0x00, 0x00];
+        const KL_STAGE84_C35C_EARLY_EXIT = [
+            0xc3,
+            KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateExitAddr & 0xff,
+            KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateExitAddr >> 8,
+        ];
+        const KL_STAGE84_C35C_EXPECTED_REQUEST_RESET = [0xdd, 0x36, 0x00, 0xa0];
+        const KL_STAGE84_C35C_NOP_RESET = [0x00, 0x00, 0x00, 0x00];
+        const isStage84C35cPatchBytes = bytes => (
+            sameBytes(bytes, KL_STAGE84_C35C_NOP_CALL) ||
+            sameBytes(bytes, KL_STAGE84_C35C_EARLY_EXIT) ||
+            sameBytes(bytes, KL_STAGE84_C35C_NOP_RESET)
+        );
+
+        const readStage84C35cCallBytes = async () => {
+            const motion = await emu.readMemory(KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateMotionCallAddr, 3);
+            const graphic = await emu.readMemory(KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateGraphicCallAddr, 3);
+            const requestReset = await emu.readMemory(KL_STAGE82C_ORIGINAL_CAULDRON.requestDisplayResetAddr, 4);
+            return {
+                motion: Array.from(motion.data),
+                graphic: Array.from(graphic.data),
+                requestReset: Array.from(requestReset.data),
+            };
+        };
+
+        const setStage84C35cPatchBytes = async (motionBytes, graphicBytes, requestResetBytes) => {
+            await emu.writeMemory(
+                KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateMotionCallAddr,
+                Uint8Array.from(motionBytes)
+            );
+            await emu.writeMemory(
+                KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateGraphicCallAddr,
+                Uint8Array.from(graphicBytes)
+            );
+            await emu.writeMemory(
+                KL_STAGE82C_ORIGINAL_CAULDRON.requestDisplayResetAddr,
+                Uint8Array.from(requestResetBytes)
+            );
+        };
+
+        const updateStage84C35cRoutineThrottle = async workRange => {
+            const coord = getStage8CurrentCoord();
+            const room = logicalMap.getRoomAt(coord.x, coord.y);
+            const role = room.questRole || 'none';
+            const playerForm = decodeStage84PlayerForm(workRange);
+            const observedSprite = stage84C35aTimingProbe.currentSprite;
+            let currentMotionCall = stage84C35cRoutineThrottle.currentMotionCall;
+            let currentGraphicCall = stage84C35cRoutineThrottle.currentGraphicCall;
+            let currentRequestReset = stage84C35cRoutineThrottle.currentRequestReset;
+            let originalMotionCall = stage84C35cRoutineThrottle.originalMotionCall;
+            let originalGraphicCall = stage84C35cRoutineThrottle.originalGraphicCall;
+            let originalRequestReset = stage84C35cRoutineThrottle.originalRequestReset;
+            let patchState = stage84C35cRoutineThrottle.patchState;
+            let patches = 0;
+            let restores = 0;
+            let lastAction = stage84C35cRoutineThrottle.lastAction;
+            let lastError = null;
+
+            const setState = extra => {
+                stage84C35cRoutineThrottle = {
+                    ...stage84C35cRoutineThrottle,
+                    enabled: KL_STAGE84_C35C_ENABLED && KL_STAGE7_SLIDING_CROSS.enabled,
+                    period: KL_STAGE84_C35C_PERIOD,
+                    originalMotionCall,
+                    originalGraphicCall,
+                    originalRequestReset,
+                    currentMotionCall,
+                    currentGraphicCall,
+                    currentRequestReset,
+                    patchState,
+                    patches: stage84C35cRoutineThrottle.patches + patches,
+                    restores: stage84C35cRoutineThrottle.restores + restores,
+                    lastCoord: cloneData(coord),
+                    lastRole: role,
+                    lastPlayerForm: playerForm.kind,
+                    lastObservedSprite: observedSprite,
+                    lastAction,
+                    lastError,
+                    ...extra,
+                };
+            };
+
+            if (!stage84C35cRoutineThrottle.requested) {
+                lastAction = 'disabled; add ?stage84c35c=1 for the routine-level throttle probe';
+                setState({enabled: false});
+                return;
+            }
+
+            if (!KL_STAGE7_SLIDING_CROSS.enabled || typeof emu.readMemory !== 'function' || typeof emu.writeMemory !== 'function') {
+                lastAction = KL_STAGE7_SLIDING_CROSS.enabled
+                    ? 'readMemory/writeMemory unavailable'
+                    : 'disabled because Stage 7 sliding is off';
+                setState({enabled: false});
+                return;
+            }
+
+            try {
+                const readback = await readStage84C35cCallBytes();
+                currentMotionCall = readback.motion;
+                currentGraphicCall = readback.graphic;
+                currentRequestReset = readback.requestReset;
+                if (!originalMotionCall && !isStage84C35cPatchBytes(currentMotionCall)) {
+                    originalMotionCall = currentMotionCall.slice();
+                }
+                if (!originalGraphicCall && !isStage84C35cPatchBytes(currentGraphicCall)) {
+                    originalGraphicCall = currentGraphicCall.slice();
+                }
+                if (!originalRequestReset && !isStage84C35cPatchBytes(currentRequestReset)) {
+                    originalRequestReset = currentRequestReset.slice();
+                }
+            } catch (err) {
+                lastError = `Failed to read bubble updater call bytes: ${err}`;
+                lastAction = 'read failed';
+                setState({enabled: true});
+                return;
+            }
+
+            if (!originalMotionCall || !originalGraphicCall || !originalRequestReset) {
+                lastError = 'Cannot capture original call bytes; reload with C3.5c enabled before any other routine patch';
+                lastAction = 'refused to patch without original bytes';
+                setState({enabled: true});
+                return;
+            }
+
+            if (!sameBytes(originalRequestReset, KL_STAGE84_C35C_EXPECTED_REQUEST_RESET)) {
+                lastError = `Unexpected request reset bytes at ${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.requestDisplayResetAddr)}: ${fmtBytes(originalRequestReset, 4)}`;
+                lastAction = 'refused to patch unexpected request reset instruction';
+                setState({enabled: true});
+                return;
+            }
+
+            const restoreOriginal = async reason => {
+                if (
+                    !sameBytes(currentMotionCall, originalMotionCall) ||
+                    !sameBytes(currentGraphicCall, originalGraphicCall) ||
+                    !sameBytes(currentRequestReset, originalRequestReset)
+                ) {
+                    await setStage84C35cPatchBytes(originalMotionCall, originalGraphicCall, originalRequestReset);
+                    currentMotionCall = originalMotionCall.slice();
+                    currentGraphicCall = originalGraphicCall.slice();
+                    currentRequestReset = originalRequestReset.slice();
+                    restores = 1;
+                }
+                patchState = 'original';
+                lastAction = reason;
+            };
+
+            try {
+                if (role !== 'cauldron') {
+                    await restoreOriginal(`restored original updater; current role ${role}`);
+                    setState({enabled: true});
+                    return;
+                }
+
+                if (playerForm.kind !== 'human') {
+                    await restoreOriginal(`restored original updater for player ${playerForm.kind}; wolf hazard left original`);
+                    setState({enabled: true});
+                    return;
+                }
+
+                const cycle = frameCompletedCount % KL_STAGE84_C35C_PERIOD;
+                const skipThisFrame = cycle !== 0;
+                const holdingRequest = observedSprite >= 0xa8 && observedSprite <= 0xae;
+                if (skipThisFrame) {
+                    if (holdingRequest) {
+                        if (
+                            !sameBytes(currentMotionCall, originalMotionCall) ||
+                            !sameBytes(currentGraphicCall, originalGraphicCall) ||
+                            !sameBytes(currentRequestReset, KL_STAGE84_C35C_NOP_RESET)
+                        ) {
+                            await setStage84C35cPatchBytes(originalMotionCall, originalGraphicCall, KL_STAGE84_C35C_NOP_RESET);
+                            currentMotionCall = originalMotionCall.slice();
+                            currentGraphicCall = originalGraphicCall.slice();
+                            currentRequestReset = KL_STAGE84_C35C_NOP_RESET.slice();
+                            patches = 1;
+                        }
+                        patchState = 'request-hold';
+                        lastAction = `next frame holds request display; cycle ${cycle}/${KL_STAGE84_C35C_PERIOD - 1}; request reset patched to NOP`;
+                    } else {
+                        if (
+                            !sameBytes(currentMotionCall, KL_STAGE84_C35C_EARLY_EXIT) ||
+                            !sameBytes(currentGraphicCall, originalGraphicCall) ||
+                            !sameBytes(currentRequestReset, originalRequestReset)
+                        ) {
+                            await setStage84C35cPatchBytes(KL_STAGE84_C35C_EARLY_EXIT, originalGraphicCall, originalRequestReset);
+                            currentMotionCall = KL_STAGE84_C35C_EARLY_EXIT.slice();
+                            currentGraphicCall = originalGraphicCall.slice();
+                            currentRequestReset = originalRequestReset.slice();
+                            patches = 1;
+                        }
+                        patchState = 'early-exit';
+                        lastAction = `next frame throttled; cycle ${cycle}/${KL_STAGE84_C35C_PERIOD - 1}; motion call patched to JP ${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateExitAddr)}`;
+                    }
+                } else {
+                    await restoreOriginal(`next frame original; cycle ${cycle}/${KL_STAGE84_C35C_PERIOD - 1}`);
+                }
+                setState({enabled: true, cycle});
+            } catch (err) {
+                lastError = `Failed to update bubble updater throttle patch: ${err}`;
+                lastAction = 'write failed';
+                setState({enabled: true});
+            }
+        };
+
+        const formatStage84C35cRoutineThrottle = () => (
+            [
+                `requested ${stage84C35cRoutineThrottle.requested ? 'yes' : 'no'}`,
+                `enabled ${stage84C35cRoutineThrottle.enabled ? 'yes' : 'no'}`,
+                `period ${stage84C35cRoutineThrottle.period}`,
+                `state ${stage84C35cRoutineThrottle.patchState}`,
+                `cycle ${stage84C35cRoutineThrottle.cycle}/${Math.max(1, stage84C35cRoutineThrottle.period - 1)}`,
+                `player ${stage84C35cRoutineThrottle.lastPlayerForm}`,
+                `observed ${fmtMechanicSprite(stage84C35cRoutineThrottle.lastObservedSprite)}`,
+                `patches ${stage84C35cRoutineThrottle.patches}`,
+                `restores ${stage84C35cRoutineThrottle.restores}`,
+                `last action ${stage84C35cRoutineThrottle.lastAction}`,
+            ].join('; ')
+        );
+
+        const formatStage84C35cRoutineBytes = () => (
+            [
+                `motion ${fmtBytes(stage84C35cRoutineThrottle.currentMotionCall, 3)}`,
+                `graphic ${fmtBytes(stage84C35cRoutineThrottle.currentGraphicCall, 3)}`,
+                `request reset ${fmtBytes(stage84C35cRoutineThrottle.currentRequestReset, 4)}`,
+                `original motion ${stage84C35cRoutineThrottle.originalMotionCall ? fmtBytes(stage84C35cRoutineThrottle.originalMotionCall, 3) : '-'}`,
+                `original graphic ${stage84C35cRoutineThrottle.originalGraphicCall ? fmtBytes(stage84C35cRoutineThrottle.originalGraphicCall, 3) : '-'}`,
+                `original request reset ${stage84C35cRoutineThrottle.originalRequestReset ? fmtBytes(stage84C35cRoutineThrottle.originalRequestReset, 4) : '-'}`,
+            ].join('; ')
+        );
+
+        const formatStage84C35cRoutineRoom = () => (
+            [
+                `logical ${fmtLogicalCoord(stage84C35cRoutineThrottle.lastCoord)}`,
+                `role ${stage84C35cRoutineThrottle.lastRole}`,
+            ].join('; ')
+        );
+
         const formatStage84RecordRefs = records => {
             if (!records.length) return 'none';
             const labels = records.slice(0, 10).map(record => (
@@ -3831,7 +4632,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const nonZeroOffsets = getNonZeroOffsets(bytes);
             const empty = nonZeroOffsets.length === 0;
             const itemLike = sprite >= 0x60 && sprite <= 0x67;
-            const cauldronDisplayLike = (sprite >= 0xa0 && sprite <= 0xa7) || sprite === 0xae;
+            const cauldronDisplayLike = sprite >= 0xa0 && sprite <= 0xae;
             const kind = empty
                 ? 'empty'
                 : itemLike
@@ -3932,6 +4733,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const inventoryState = decodeStage84InventoryState(workRange);
             const originalCauldronCheck = sample.room0 === KL_STAGE84_C30.cauldronPhysicalRoom;
             const logicalCauldron = currentRoom.questRole === 'cauldron';
+            const c35aDynamicCandidates = getStage84C35aDynamicCandidates(workRange);
             const rows = [];
             const addRow = row => rows.push(row);
 
@@ -4074,6 +4876,72 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             });
 
             addRow({
+                state: stage84C35aTimingProbe.currentKind === 'request flash'
+                    ? 'ok'
+                    : stage84C35aTimingProbe.currentKind === 'bubble frame'
+                        ? 'warn'
+                        : 'muted',
+                probe: 'C3.5a bubble/request timing',
+                address: `${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr)}..${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr + KL_STAGE84_C30.liveSlotSize - 1)}`,
+                decode: formatStage84C35aTiming(),
+                room: formatStage84C35aRoom(),
+                bytes: fmtBytes(stage84C35aTimingProbe.bytes, 18),
+                notes: 'Read-only. Tracks the 0x5C68 live cauldron bubble/display slot. Use this as both the baseline and after-change cadence measurement for C3.5b.',
+            });
+
+            addRow({
+                state: stage84C35bSlowdownProbe.lastError
+                    ? 'bad'
+                    : stage84C35bSlowdownProbe.requested
+                        ? stage84C35bSlowdownProbe.lastRole === 'cauldron' ? 'warn' : 'muted'
+                        : 'muted',
+                probe: 'C3.5b slowdown experiment',
+                address: `${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr)} sprite byte`,
+                decode: formatStage84C35bSlowdown(),
+                room: formatStage84C35bRoom(),
+                bytes: '-',
+                notes: stage84C35bSlowdownProbe.lastError
+                    ? stage84C35bSlowdownProbe.lastError
+                    : 'Opt-in with ?stage84c35b=1. Default mode writes only 0xA8..0xAE request sprites. Add ?stage84c35bbubbles=human to also hold harmless human-form 0xA0..0xA3 bubbles by holding sprite/Z/dZ bytes. All writes pause outside human form so wolf bubble collision remains original.',
+            });
+
+            addRow({
+                state: stage84C35cRoutineThrottle.lastError
+                    ? 'bad'
+                    : stage84C35cRoutineThrottle.requested
+                        ? stage84C35cRoutineThrottle.patchState === 'throttled' ? 'warn' : 'ok'
+                        : 'muted',
+                probe: 'C3.5c routine throttle',
+                address: `${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateMotionCallAddr)} / ${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.bubbleUpdateGraphicCallAddr)} / ${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.requestDisplayResetAddr)}`,
+                decode: formatStage84C35cRoutineThrottle(),
+                room: formatStage84C35cRoutineRoom(),
+                bytes: formatStage84C35cRoutineBytes(),
+                notes: stage84C35cRoutineThrottle.lastError
+                    ? stage84C35cRoutineThrottle.lastError
+                    : 'Opt-in with ?stage84c35c=1. Routine-level probe patches the first original cauldron bubble updater call to JP the normal exit on selected human-form bubble frames, holds the request-display reset on request frames, then restores original bytes on active frames and whenever the player is not human.',
+            });
+
+            addRow({
+                state: stage84C35aTimingProbe.recentSprites.length ? 'ok' : 'muted',
+                probe: 'C3.5a recent sprite trail',
+                address: `${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr)} sprite byte`,
+                decode: formatStage84C35aTrail(),
+                room: `expected request ${stage84C35aTimingProbe.expectedRequestSprite === null ? '-' : fmtMechanicSprite(stage84C35aTimingProbe.expectedRequestSprite)}`,
+                bytes: '-',
+                notes: 'Read-only trail of observed sprite changes. Look for 0xA0..0xA3 bubble frames interrupted by 0xA8..0xAE requested-object flashes.',
+            });
+
+            addRow({
+                state: c35aDynamicCandidates.length ? 'warn' : 'muted',
+                probe: 'C3.5a dynamic display candidates',
+                address: `${hexWord(KL_STAGE84_C30.dynamicStart)}..${hexWord(KL_STAGE84_C30.dynamicStart + KL_STAGE84_C30.dynamicProbeCount * KL_STAGE84_C30.dynamicSlotSize - 1)}`,
+                decode: formatStage84C35aDynamicCandidates(c35aDynamicCandidates),
+                room: `logical ${fmtLogicalCoord(currentCoord)}; physical ${hexByte(sample.room0)}`,
+                bytes: c35aDynamicCandidates.length ? fmtBytes(c35aDynamicCandidates[0].bytes, 8) : '-',
+                notes: 'Supporting read-only scan of expanded dynamic records for 0xA0..0xAE sprites. 0x5C68 remains the primary timing candidate unless this row shows a clearer display record.',
+            });
+
+            addRow({
                 state: carryState.changed ? 'warn' : 'muted',
                 probe: 'C3.0b carry/control bytes',
                 address: `${hexWord(KL_STAGE84_C30.carryStateStart)}..${hexWord(KL_STAGE84_C30.carryStateEnd - 1)}`,
@@ -4156,13 +5024,16 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             }
 
             stage84C30Status.textContent = [
-                `C3.0/C3.1/C3.2/C3.3/C3.4 mechanic anatomy at ${fmtLogicalCoord(currentCoord)} (${currentRoom.questRole || 'none'}).`,
+                `C3.0/C3.1/C3.2/C3.3/C3.4/C3.5a mechanic anatomy at ${fmtLogicalCoord(currentCoord)} (${currentRoom.questRole || 'none'}).`,
                 quest.exists ? `Required ${formatQuestCharm(quest.requiredCharm)}.` : 'No quest in current sector.',
                 `Sampling carry state ${hexWord(KL_STAGE84_C30.carryStateStart)}..${hexWord(KL_STAGE84_C30.carryStateEnd - 1)}, ${KL_STAGE84_C30.liveSlots.length} live slots, ${KL_STAGE84_C30.dynamicProbeCount} dynamic records, and ${staticRecordCount} raw static object records (${nonZeroStaticRecordCount} currently non-zero).`,
                 `C3.1 disposable record ${stage84C31DisposableCharm.recordIndex} is ${stage84C31DisposableCharm.requested ? 'requested' : 'off'}; last action: ${stage84C31DisposableCharm.lastAction}.`,
                 `C3.2 carried state: ${stage84C32CarryProbe.lastAction}.`,
                 `C3.3 JS acceptance: ${stage84C33CauldronAcceptance.lastAction}.`,
                 `C3.4 request patch: ${stage84C34RequestOrderPatch.lastAction}.`,
+                `C3.5a timing: ${stage84C35aTimingProbe.lastAction}.`,
+                `C3.5b slowdown: ${stage84C35bSlowdownProbe.lastAction}.`,
+                `C3.5c routine throttle: ${stage84C35cRoutineThrottle.lastAction}.`,
                 `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
             ].join(' ');
 
@@ -4847,6 +5718,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 updateStage84C31ObservedState(workRange);
                 updateStage84C32C33FromSnapshot(workRange, sample);
                 await updateStage84C34RequestOrderPatch(workRange);
+                updateStage84C35aTimingProbe(workRange);
+                await updateStage84C35bSlowdownProbe(workRange);
+                await updateStage84C35cRoutineThrottle(workRange);
 
                 const entry = decodeLocationEntry(staticRange, sample.room0);
                 if (stage5RoomIdRecenterTest.enabled && !KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {

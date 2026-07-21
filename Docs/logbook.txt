@@ -2515,3 +2515,112 @@ Current C3.4 conclusion:
 - The next design decision is not whether the hybrid is possible. It is how
   much of the original global 14-object cauldron counter should be kept,
   virtualized, or isolated for the dispersed infinite-map design.
+
+
++============================================================+
+| 2026 07 21 - Stage 8.4 C3.5 Cauldron Timing Probe          |
++============================================================+
+
+2026 07 21
+
+Stage 8.4 C3.5 investigated the two visual/timing issues exposed by the real
+cauldron probe:
+
+- the cauldron bubble cycle was much faster than was comfortable to read;
+- the requested charm flash was too brief, even after the original request
+  table was patched correctly by C3.4.
+
+C3.5a:
+
+- C3.5a remained read-only.
+- It measured the live cauldron bubble/display slot at 0x5C68..0x5C87.
+- The row classified:
+  - 0xA0..0xA7 as bubble / wolf-attack bubble frames;
+  - 0xA8..0xAE as requested-object display flashes.
+- Manual observations confirmed very short frame gaps for both the bubble
+  frames and the requested-object flashes.
+
+C3.5b:
+
+- C3.5b tested post-frame live-slot holding.
+- The first predecessor-replay attempt was rejected because wolf-form bubbles
+  stopped killing the player.
+- Request-only holding preserved wolf danger but did not slow the bubbles.
+- Human-form bubble holding, including the later sprite/Z/dZ hold, still did
+  not produce a clean enough visual rhythm.
+- Conclusion: post-frame pokes into 0x5C68 are useful for diagnosis, but are
+  not the preferred final timing lever.
+
+C3.5c:
+
+- C3.5c moved the experiment to the original bubble/update routine.
+- It is enabled with:
+  - ?stage84c35c=1
+  - ?stage84c35cperiod=4 by default, clamped to 2..12.
+- C3.5b is suspended automatically while C3.5c is enabled.
+- Confirmed routine targets:
+  - 0xB8E8: CALL dec_dZ_and_update_XYZ inside upd_160_to_163;
+  - 0xB8EB: CALL next_graphic_no_mod_4 inside upd_160_to_163;
+  - 0xB916: the normal set_wipe_and_draw_flags exit;
+  - 0xB926: LD (IX+0),0xA0 inside upd_168_to_175.
+
+The first routine-level attempt patched the two calls to NOP. This proved that
+the right code path had been found, but the human-form bubble rhythm was
+irregular.
+
+The working revision is:
+
+- on throttled human-form bubble frames, patch 0xB8E8 to JP 0xB916;
+- keep 0xB8EB restored/original;
+- when the live sprite is a request display, 0xA8..0xAE, patch 0xB926 to
+  NOP NOP NOP NOP on throttled frames;
+- restore all original bytes on active frames, outside logical cauldron rooms,
+  and whenever the player is not human.
+
+Manual validation:
+
+- In human form, the bubble rhythm is now readable. With period 4 it is a bit
+  slow, but acceptable for a first proof.
+- The requested charm display is now much easier to see.
+- In wolf form, the routine bytes are restored and the bubbles still kill the
+  player.
+- The C3.5c diagnostics row reports current/original bytes for the motion call,
+  graphic call, and request-reset instruction, which gives us a quick safety
+  check before and after testing.
+
+Recommended run for the next manual pass:
+
+- Use the C3.4 hybrid stack plus C3.5c:
+  - ?stage7sliding=1
+  - ?stage8c=1
+  - ?stage8cbubbles=cauldron
+  - ?stage84c31=1
+  - ?stage84c33=1
+  - ?stage84c34=1
+  - ?stage84c35c=1
+- Start with ?stage84c35cperiod=4.
+- If the timing feels too slow over a two- or three-sector run, try
+  ?stage84c35cperiod=3.
+
+Expected anomalies to watch during the 2026 07 22 run:
+
+- Bubble-death respawn displacement is still unresolved. A bubble death may
+  respawn the player in a neighbouring room related to the entry side.
+- The original objects_put_in_cauldron counter is still global. C3.4 patches
+  the active request slot for the current logical cauldron, but multi-sector
+  policy for that global counter is not final.
+- Carrying a charm across sector boundaries should work, but should be watched
+  carefully because C3.2 only proved stability over short routes.
+- Revisited rooms should remain deterministic. If a room changes unexpectedly,
+  check whether it is a real generator issue or a completed-sector dressing
+  state change.
+- The C3.5c diagnostics row should show original bytes outside cauldron rooms
+  and in wolf form. If it does not, reload the snapshot before continuing.
+
+Current C3.5 conclusion:
+
+- C3.5c is the best timing probe so far.
+- It preserves wolf danger, improves request readability, and keeps all changes
+  opt-in runtime patches.
+- It is ready for a two- or three-sector continuity run, but should not yet be
+  treated as final gameplay policy.
