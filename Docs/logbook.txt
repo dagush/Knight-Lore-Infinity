@@ -2624,3 +2624,210 @@ Current C3.5 conclusion:
   opt-in runtime patches.
 - It is ready for a two- or three-sector continuity run, but should not yet be
   treated as final gameplay policy.
+
+
++============================================================+
+| 2026 07 21 - Stage 8.4 C3.5e Bubble-Death Respawn Guard    |
++============================================================+
+
+2026 07 21
+
+A three-sector manual run exposed the C3.5e respawn issue as a real gameplay
+blocker:
+
+- the player entered a logical cauldron room as a wolf;
+- the cauldron room did not have an exit on the side opposite the entry side;
+- the bubbles killed the wolf;
+- the original death/respawn routine sent the player to the physical neighbour
+  on that opposite side;
+- that neighbour represented a missing logical room, so the emulator rendered a
+  black empty room and the player could not recover.
+
+First mitigation:
+
+- Build marker:
+  - stage84-c35e-bubble-respawn-20260721-1
+- A new C3.5e guard row was added to the Stage 8.4 diagnostics table.
+- The guard is enabled by default with Stage 7 sliding.
+- It can be disabled with:
+  - ?stage84c35e=0
+- While in a logical cauldron room, the guard records:
+  - entry side;
+  - logical coordinate;
+  - physical room id;
+  - player body XYZ;
+  - player head XYZ;
+  - current lives.
+- If the previous sample was a wolf-form logical cauldron with bubbles active,
+  and the current sample shows a life drop, the guard arms a pending
+  bubble-death correction.
+- If the original death routine then changes the active physical room away from
+  0x88, the guard writes the active room-id slots back to 0x88 and restores the
+  body/head XYZ triplets to the recorded cauldron entry coordinates.
+
+What to test next:
+
+- Reproduce the original failure: enter a cauldron room as wolf from a side
+  where the opposite-side neighbour does not exist.
+- After bubble death, the player should remain in the same logical cauldron
+  room, at the same recorded entry side.
+- The Stage 7 row should not report a normal recenter into the missing
+  neighbour.
+- The C3.5e row should increment `corrections` and show the intercepted
+  physical room.
+
+Known risk:
+
+- This is a post-detection correction. If the original engine has already
+  decoded the blank placeholder room before the correction takes effect, the
+  logical room id may be fixed but the visible room may still be wrong.
+- If that happens, the next mitigation is to pre-arm the expected
+  death-respawn physical neighbour with duplicate cauldron room data during the
+  death sequence.
+
+
++============================================================+
+| 2026 07 22 - C3.5e Trigger Revision                        |
++============================================================+
+
+2026 07 22
+
+Manual testing in sector (0,0) showed that the first C3.5e guard armed
+correctly, but did not correct the displacement:
+
+- before death, the row showed player wolf, lives 0x02, logical cauldron (4,4),
+  entry south, pending none, corrections 0;
+- after the visible respawn/displacement case, the lives byte could still read
+  0x02;
+- therefore `0x5BBA` is not reliable enough as the only visible-death trigger.
+
+Revision:
+
+- Build marker:
+  - stage84-c35e-form-jump-20260722-1
+- C3.5e now also watches for:
+  - previous sample armed as wolf in a logical cauldron with active bubbles;
+  - current sample no longer wolf;
+  - either a physical-neighbour room load or a large body XYZ jump.
+- The correction now runs even if 0x5C10 is still 0x88, so it can restore the
+  player to the recorded cauldron entry point in the same physical room.
+- The diagnostics row now includes:
+  - current body XYZ;
+  - trigger kind;
+  - measured XYZ jump.
+
+What to test:
+
+- Repeat the sector (0,0) cauldron wolf-death test.
+- The row should increment `corrections`.
+- The `trigger` field should read either `wolf respawn body jump` or
+  `wolf respawn physical-room change`.
+- The player should return to the recorded entry side instead of the opposite
+  side.
+
+Follow-up trace:
+
+- A later run clarified that the player appeared at the correct entrance, but
+  in the room one step opposite the previous room with respect to the cauldron.
+- The row after death showed:
+  - lives 0x03;
+  - current logical coordinate (4,5);
+  - previous cauldron entry (4,4) south;
+  - corrections 0.
+- This means Stage 7 had already accepted the death respawn as a normal
+  transition before C3.5e acted.
+
+Post-recenter revision:
+
+- Build marker:
+  - stage84-c35e-post-recenter-20260722-1
+- C3.5e now runs a second correction pass immediately after normal Stage 7
+  recentering.
+- If that pass sees a life drop from a previously armed wolf-form cauldron, it
+  rolls the logical center and static cross back to the recorded cauldron room,
+  then restores room-id bytes and body/head XYZ.
+- This should stop the persistent one-room logical shift.
+- If the visible room still remains the already-expanded neighbour, that tells
+  us the correction is still too late for working-memory room contents and the
+  next fix must pre-arm the expected death target with duplicate cauldron data.
+
+Entry-lifedrop refinement:
+
+- Build marker:
+  - stage84-c35e-entry-lifedrop-20260722-1
+- The newest trace showed the remembered entry `(4,4)` still present, lives
+  lower at `(4,5)`, but corrections still zero. That means the immediate
+  previous-sample detector had already lost the cauldron as its source.
+- C3.5e now treats the recorded cauldron entry itself as a short-lived death
+  source.
+- If the player entered the cauldron from the south, the expected bad respawn is
+  the room north of the cauldron. The guard now checks that geometry and the
+  lower lives byte.
+- Expected trigger text:
+  - entry life drop after recenter
+
+Latched-entry refinement:
+
+- Build marker:
+  - stage84-c35e-latched-entry-20260722-1
+- The next manual trace showed a narrower race:
+  - before death, the real entry was `(4,4)` south with lives `0x04`;
+  - after death, the logical center again read `(4,4)` and lives read `0x03`;
+  - however, the engine had produced a false north-entry transition, replacing
+    the south-entry snapshot before the guard used it.
+- C3.5e now maintains a separate armed-entry latch. It preserves the real
+  cauldron entry side, entry XYZ, and pre-death lives independently of later
+  transition diagnostics.
+- After correction, the latch is re-baselined at the restored entrance and new
+  life count so a repeated death during the same visit remains protected.
+- The C3.5e row now shows `armed entry ... lives ... age ...`.
+- Expected result after a bubble death:
+  - trigger `latched cauldron life drop`;
+  - `corrections` increments;
+  - the player remains in logical cauldron `(4,4)` at the original south
+    entrance.
+
+
++============================================================+
+| 2026 07 22 - C3.5e Bubble-Death Guard Confirmed            |
++============================================================+
+
+2026 07 22
+
+The latched-entry C3.5e guard passed its manual wolf-death test in the sector
+(0,0) cauldron.
+
+Immediately before death, diagnostics reported:
+
+- logical room (4,4), role cauldron;
+- current entry south at X=0x81, Y=0xFF, Z=0x80;
+- armed entry (4,4) south with lives 0x04 and age 0;
+- corrections 0 and writes 0.
+
+Immediately after death, diagnostics reported:
+
+- lives reduced from 0x04 to 0x03;
+- trigger `latched cauldron life drop`;
+- corrections 1 and writes 4;
+- attempted wrong physical room 0x98;
+- room-id writes to 0x5C10 and 0x5C30;
+- body/head XYZ restoration through 0x5C09..0x5C0B and
+  0x5C29..0x5C2B;
+- logical center still (4,4), role cauldron;
+- real and armed entry still south;
+- armed latch re-baselined to lives 0x03.
+
+The player remained in the same logical cauldron room at the entrance used
+before death. Body Y later reading 0x49 rather than the stored boundary value
+0xFF is expected: the original engine had already moved the restored player
+inward from the entrance.
+
+Conclusion:
+
+- The original bubble-death routine did attempt to load physical room 0x98.
+- The JS guard caught the life loss, restored physical center 0x88, preserved
+  logical center (4,4), restored the player coordinates, and safely re-armed.
+- The feared missing-room/black-room lockout is fixed for the tested timing
+  path.
+- The duplicate-cauldron pre-arm fallback is not currently needed.
+- Stage C3.5e is empirically complete.

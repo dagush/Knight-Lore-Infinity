@@ -215,6 +215,81 @@ Room/location shape and background presets:
         east door can respawn at the east door of the room west of the
         cauldron. This is likely original death/respawn transition state and
         should be treated as a separate probe, not a failure of the bubble gate.
+        First mitigation, 2026 07 21:
+           Build stage84-c35e-bubble-respawn-20260721-1 adds a C3.5e
+           bubble-death respawn guard. It is enabled by default while Stage 7
+           sliding is active, and can be disabled with ?stage84c35e=0.
+           The guard records the cauldron entry side and player body/head XYZ,
+           watches for a wolf-form life loss in a logical cauldron, and if the
+           original death routine changes the active physical room to a
+           neighbour, it writes the active room-id bytes back to 0x88 and
+           restores the player to the recorded cauldron entry coordinates.
+           This first mitigation is intentionally post-detection. If manual
+           testing still shows the original engine has already decoded a blank
+           placeholder room before the correction, the next strategy is to
+           pre-arm the expected death-respawn physical neighbour with duplicate
+           cauldron room data during the death sequence.
+        Trigger revision, 2026 07 22:
+           Manual testing showed that the visible bubble-death displacement can
+           occur while the lives byte still reads the same value, for example
+           0x02 before and after the observed respawn. Build
+           stage84-c35e-form-jump-20260722-1 therefore no longer relies on
+           0x5BBA alone. It also treats an armed wolf-form cauldron sample
+           followed by a non-wolf form plus a large body-XYZ jump or physical
+           neighbour load as a bubble-death respawn. The correction now runs
+           even if 0x5C10 is still 0x88, restoring the recorded entry
+           coordinates inside the same logical cauldron room.
+        Post-recenter revision, 2026 07 22:
+           A second manual trace showed another timing shape: the row after
+           death reported lives 0x03, but the logical center had already moved
+           from the cauldron (4,4) to (4,5), so the first guard pass had missed
+           the useful signal and normal Stage 7 recentering had already run.
+           Build stage84-c35e-post-recenter-20260722-1 adds a second guard
+           pass immediately after Stage 7 recentering. If the previous sample
+           was an armed wolf-form cauldron and the post-recenter sample shows
+           a life drop, C3.5e rolls the Stage 7 logical center and static cross
+           back to the recorded cauldron coordinate, then restores room-id
+           bytes and body/head XYZ. This should stop the persistent one-room
+           logical shift. If the already-expanded working room still displays
+           the wrong room visually, the next step is the pre-arm duplicate
+           cauldron-room strategy.
+        Entry-lifedrop revision, 2026 07 22:
+           Build stage84-c35e-entry-lifedrop-20260722-1 keeps the recorded
+           cauldron entry snapshot as an active death source for a short
+           window. If that entry was an armed wolf-form cauldron, and the
+           current logical center is the room in the same direction the player
+           originally moved when entering the cauldron, and lives are now lower
+           than at entry, C3.5e triggers even if the immediate previous sample
+           has already become the wrong room. Diagnostics should report
+           "entry life drop after recenter" for this case.
+        Latched-entry revision, 2026 07 22:
+           A later trace showed that Stage 7 could return the logical center
+           to (4,4), but the death-generated transition then replaced the real
+           south-entry snapshot with a false north-entry snapshot. Lives had
+           fallen from 0x04 to 0x03, yet the replacement snapshot made the
+           guard lose its pre-death baseline. Build
+           stage84-c35e-latched-entry-20260722-1 therefore keeps a separate
+           armed-entry latch containing the original cauldron coordinate,
+           entry side/XYZ, and pre-death lives. Synthetic transitions cannot
+           replace this latch after lives fall. A lower lives byte triggers
+           "latched cauldron life drop", even when the logical center already
+           reads (4,4). After correction it is re-baselined at the restored
+           entrance with the new life count, so a repeated bubble death cannot
+           reopen the race. It is cleared after a confirmed normal departure
+           from the cauldron.
+        Manual confirmation, 2026 07 22:
+           Build stage84-c35e-latched-entry-20260722-1 passed the sector
+           (0,0) wolf-death test. Immediately before death, diagnostics showed
+           logical cauldron (4,4), real entry south, armed entry south, and
+           lives 0x04. After death, diagnostics showed lives 0x03, trigger
+           "latched cauldron life drop", corrections 1, writes 4, and the
+           logical center still at cauldron (4,4). The original engine had
+           attempted physical room 0x98; C3.5e rewrote 0x5C10 and 0x5C30 to
+           0x88 and restored body/head XYZ. The latch then re-armed at the
+           original south entry with the new 0x03 life baseline. The observed
+           post-correction body Y=0x49 is normal movement inward from the saved
+           boundary entry Y=0xFF. No duplicate-room pre-arm was needed for
+           this tested timing path. C3.5e is empirically complete.
         Startup hardening, 2026 07 18: because restoring background id 0x13
         makes the original cauldron expansion live again, the emulator now
         starts paused, waits for the Knight Lore .z80 snapshot to finish
@@ -599,9 +674,17 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
                slow. Period 3 is the next recommended tuning candidate for
                longer play tests.
           Remaining C3.5 risks:
-             - Bubble-death respawn displacement is still a separate known
-               issue. A bubble death can respawn the player in a neighbouring
-               room related to the entry side.
+             - Bubble-death respawn displacement now has a first C3.5e guard,
+               but it must be manually tested. The desired outcome is same
+               logical cauldron room, same recorded entry side, no Stage 7
+               recenter into a missing neighbour.
+             - The 2026 07 22 revision confirms 0x5BBA is not sufficient as a
+               death signal. C3.5e also watches the wolf-to-human respawn jump
+               and can correct same-room displacement with 0x5C10 still 0x88.
+             - The later 2026 07 22 post-recenter revision confirms a life
+               drop may only be visible after Stage 7 has already shifted the
+               logical center. C3.5e now runs a rollback pass after normal
+               Stage 7 recentering too.
              - The C3.5c row should always show original bytes outside logical
                cauldron rooms and in wolf form. If it does not, reload the
                snapshot before continuing the probe.

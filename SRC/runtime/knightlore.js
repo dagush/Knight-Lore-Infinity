@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage84-c35c-request-hold-20260721-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage84-c35e-latched-entry-20260722-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -66,6 +66,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         if (!Number.isFinite(parsed)) return 4;
         return Math.max(2, Math.min(12, parsed));
     })();
+    const KL_STAGE84_C35E_REQUESTED = !['0', 'false', 'off', 'disabled', 'no'].includes(
+        (KL_URL_PARAMS.get('stage84c35e') || KL_URL_PARAMS.get('stage8c35e') || '1').trim().toLowerCase()
+    );
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
             ? 'maps/knight-lore-3x3-static-map.json'
@@ -399,6 +402,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         disposableRecordIndex: 31,
         disposableInactiveRoom: 0xff,
         disposablePosition: {x: 0x80, y: 0x80, z: 0x80},
+        playerBodyXyzAddr: 0x5c09,
+        playerHeadXyzAddr: 0x5c29,
         liveSlots: [
             {label: 'live item slot 1', addr: 0x5c48},
             {label: 'live item/bubble slot 2', addr: 0x5c68},
@@ -1817,6 +1822,28 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             lastAction: KL_STAGE84_C35C_ENABLED
                 ? 'waiting to read original bubble updater call bytes'
                 : 'disabled; add ?stage84c35c=1 for the routine-level throttle probe',
+            lastError: null,
+        };
+        let stage84C35eBubbleRespawnGuard = {
+            requested: KL_STAGE84_C35E_REQUESTED,
+            enabled: KL_STAGE84_C35E_REQUESTED && KL_STAGE7_SLIDING_CROSS.enabled,
+            entrySnapshot: null,
+            armedEntrySnapshot: null,
+            pendingDeath: null,
+            lastSnapshot: null,
+            corrections: 0,
+            writes: 0,
+            lastPatchedAddrs: [],
+            lastWrongRoom: null,
+            lastTrigger: 'none',
+            lastBodyJump: null,
+            lastCoord: {x: 0, y: 0},
+            lastRole: 'none',
+            lastPlayerForm: 'unknown',
+            lastLives: null,
+            lastAction: KL_STAGE84_C35E_REQUESTED
+                ? 'armed; waiting for wolf-form bubble death in a logical cauldron'
+                : 'disabled with ?stage84c35e=0',
             lastError: null,
         };
 
@@ -4603,6 +4630,484 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             ].join('; ')
         );
 
+        const byteOr = (value, fallback = 0) => (
+            Number.isInteger(value) ? value & 0xff : fallback & 0xff
+        );
+
+        const stage84C35eAxisDelta = (a, b) => (
+            Math.abs(byteOr(a, 0) - byteOr(b, 0))
+        );
+
+        const measureStage84C35eBodyJump = (previous, current) => {
+            if (!previous || !previous.body || !current || !current.body) {
+                return {x: 0, y: 0, z: 0, max: 0, jumped: false};
+            }
+            const jump = {
+                x: stage84C35eAxisDelta(previous.body.x, current.body.x),
+                y: stage84C35eAxisDelta(previous.body.y, current.body.y),
+                z: stage84C35eAxisDelta(previous.body.z, current.body.z),
+            };
+            jump.max = Math.max(jump.x, jump.y, jump.z);
+            jump.jumped = jump.max >= 0x20;
+            return jump;
+        };
+
+        const makeStage84C35eSnapshot = (workRange, sample) => {
+            const coord = getStage8CurrentCoord();
+            const room = logicalMap.getRoomAt(coord.x, coord.y);
+            const role = room.questRole || 'none';
+            const playerForm = decodeStage84PlayerForm(workRange);
+            const lives = readByte(workRange, 0x5bba);
+            const liveSprite = readByte(workRange, KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr);
+            const transition = sample && sample.stage7Action && sample.stage7Action.recentered
+                ? sample.stage7Action
+                : stage7SlidingCross.lastTransition;
+            const enteredByTransition = !!(
+                transition &&
+                transition.newCenter &&
+                sameCoord(transition.newCenter, coord)
+            );
+            const entryDirection = enteredByTransition ? transition.direction : null;
+            const entrySide = entryDirection ? KL_OPPOSITE_DIRECTIONS[entryDirection] : null;
+            const entryTransitionKey = enteredByTransition
+                ? `${transition.frame}:${transition.sample}:${transition.direction}:${logicalCoordKey(coord.x, coord.y)}`
+                : `direct:${logicalCoordKey(coord.x, coord.y)}`;
+
+            return {
+                coord: cloneData(coord),
+                role,
+                roomLabel: room.label,
+                physicalRoom: sample ? sample.room0 : null,
+                playerForm: playerForm.kind,
+                playerFormText: playerForm.text,
+                lives: Number.isInteger(lives) ? lives : null,
+                liveSprite: Number.isInteger(liveSprite) ? liveSprite : null,
+                bubblesActive: !!(
+                    KL_STAGE82C_CAULDRON_VISUAL_ENABLED &&
+                    ['global', 'cauldron'].includes(KL_STAGE82C_BUBBLE_MODE) &&
+                    role === 'cauldron'
+                ),
+                body: sample && sample.body ? cloneData(sample.body) : null,
+                head: sample && sample.head ? cloneData(sample.head) : null,
+                entryDirection,
+                entrySide,
+                entryTransitionKey,
+                frame: frameCompletedCount,
+                sample: sampleCount,
+            };
+        };
+
+        const isStage84C35eArmedSnapshot = snapshot => !!(
+            snapshot &&
+            snapshot.role === 'cauldron' &&
+            snapshot.physicalRoom === KL_STAGE7_SLIDING_CROSS.centerRoom &&
+            snapshot.playerForm === 'wolf' &&
+            snapshot.bubblesActive
+        );
+
+        const isStage84C35eRecentSnapshot = snapshot => !!(
+            snapshot &&
+            Number.isInteger(snapshot.frame) &&
+            frameCompletedCount - snapshot.frame <= 180
+        );
+
+        const isStage84C35eLikelyRespawnTarget = (entrySnapshot, context) => {
+            if (!entrySnapshot || !context || sameCoord(entrySnapshot.coord, context.coord)) return false;
+            if (!entrySnapshot.entryDirection) return true;
+            const delta = KL_DIRECTION_DELTAS[entrySnapshot.entryDirection];
+            if (!delta) return true;
+            return (
+                context.coord.x === entrySnapshot.coord.x + delta.x &&
+                context.coord.y === entrySnapshot.coord.y + delta.y
+            );
+        };
+
+        const updateStage84C35eBubbleRespawnState = (workRange, sample) => {
+            const context = makeStage84C35eSnapshot(workRange, sample);
+            let entrySnapshot = stage84C35eBubbleRespawnGuard.entrySnapshot;
+            let armedEntrySnapshot = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
+            let pendingDeath = stage84C35eBubbleRespawnGuard.pendingDeath;
+            let lastAction = stage84C35eBubbleRespawnGuard.lastAction;
+            const justCorrected = !!(sample && sample.stage84C35eAction && sample.stage84C35eAction.corrected);
+            const unresolvedArmedLifeDrop = !!(
+                armedEntrySnapshot &&
+                armedEntrySnapshot.lives !== null &&
+                context.lives !== null &&
+                context.lives < armedEntrySnapshot.lives
+            );
+
+            if (!stage84C35eBubbleRespawnGuard.requested) {
+                lastAction = 'disabled with ?stage84c35e=0';
+            } else if (!KL_STAGE7_SLIDING_CROSS.enabled) {
+                lastAction = 'disabled because Stage 7 sliding is off';
+            } else if (justCorrected) {
+                lastAction = stage84C35eBubbleRespawnGuard.lastAction;
+            } else if (context.role === 'cauldron' && context.physicalRoom === KL_STAGE7_SLIDING_CROSS.centerRoom) {
+                const needsNewEntry = !entrySnapshot ||
+                    !sameCoord(entrySnapshot.coord, context.coord) ||
+                    entrySnapshot.entryTransitionKey !== context.entryTransitionKey;
+                const preserveLatchedEntry = !!(
+                    armedEntrySnapshot &&
+                    sameCoord(armedEntrySnapshot.coord, context.coord)
+                );
+                if (needsNewEntry && !unresolvedArmedLifeDrop && !preserveLatchedEntry) {
+                    entrySnapshot = cloneData(context);
+                    lastAction = `recorded cauldron entry ${context.entrySide || 'unknown side'} at ${fmtLogicalCoord(context.coord)}`;
+                } else if (!pendingDeath) {
+                    lastAction = isStage84C35eArmedSnapshot(context)
+                        ? `armed in wolf form at ${fmtLogicalCoord(context.coord)}; entry ${entrySnapshot.entrySide || 'unknown side'}`
+                        : `watching cauldron at ${fmtLogicalCoord(context.coord)}; player ${context.playerForm}`;
+                }
+            } else if (context.role !== 'cauldron' && !pendingDeath) {
+                lastAction = `watching; current role ${context.role}`;
+            }
+
+            if (!justCorrected && isStage84C35eArmedSnapshot(context)) {
+                if (!armedEntrySnapshot) {
+                    const entry = entrySnapshot && sameCoord(entrySnapshot.coord, context.coord)
+                        ? entrySnapshot
+                        : context;
+                    armedEntrySnapshot = {
+                        ...cloneData(entry),
+                        playerForm: 'wolf',
+                        playerFormText: context.playerFormText,
+                        physicalRoom: context.physicalRoom,
+                        bubblesActive: true,
+                        lives: context.lives,
+                        frame: context.frame,
+                        sample: context.sample,
+                    };
+                } else if (
+                    sameCoord(armedEntrySnapshot.coord, context.coord) &&
+                    (
+                        armedEntrySnapshot.lives === null ||
+                        context.lives === null ||
+                        context.lives >= armedEntrySnapshot.lives
+                    )
+                ) {
+                    // Keep entry geometry and the pre-death life baseline fixed.
+                    armedEntrySnapshot = {
+                        ...armedEntrySnapshot,
+                        frame: context.frame,
+                        sample: context.sample,
+                    };
+                }
+            } else if (
+                armedEntrySnapshot &&
+                context.role !== 'cauldron' &&
+                !unresolvedArmedLifeDrop &&
+                frameCompletedCount - armedEntrySnapshot.frame > 12
+            ) {
+                armedEntrySnapshot = null;
+            }
+
+            if (pendingDeath && frameCompletedCount - pendingDeath.frame > 180) {
+                pendingDeath = null;
+                lastAction = 'expired stale pending bubble-death correction';
+            }
+
+            stage84C35eBubbleRespawnGuard = {
+                ...stage84C35eBubbleRespawnGuard,
+                enabled: KL_STAGE84_C35E_REQUESTED && KL_STAGE7_SLIDING_CROSS.enabled,
+                entrySnapshot,
+                armedEntrySnapshot,
+                pendingDeath,
+                lastSnapshot: context,
+                lastCoord: cloneData(context.coord),
+                lastRole: context.role,
+                lastPlayerForm: context.playerForm,
+                lastLives: context.lives,
+                lastAction,
+            };
+        };
+
+        const applyStage84C35eBubbleRespawnGuard = async (workRange, sample) => {
+            const context = makeStage84C35eSnapshot(workRange, sample);
+            let pendingDeath = stage84C35eBubbleRespawnGuard.pendingDeath;
+            let lastAction = stage84C35eBubbleRespawnGuard.lastAction;
+            let lastError = null;
+
+            const previous = stage84C35eBubbleRespawnGuard.lastSnapshot;
+            const entrySnapshot = stage84C35eBubbleRespawnGuard.entrySnapshot;
+            const armedEntrySnapshot = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
+            const bodyJump = measureStage84C35eBodyJump(previous, context);
+            const entryBodyJump = measureStage84C35eBodyJump(entrySnapshot, context);
+            const armedBodyJump = measureStage84C35eBodyJump(armedEntrySnapshot, context);
+            const lifeDropped = !!(
+                previous &&
+                previous.lives !== null &&
+                context.lives !== null &&
+                context.lives < previous.lives
+            );
+
+            if (!stage84C35eBubbleRespawnGuard.requested) {
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    enabled: false,
+                    lastCoord: cloneData(context.coord),
+                    lastRole: context.role,
+                    lastPlayerForm: context.playerForm,
+                    lastLives: context.lives,
+                    lastAction: 'disabled with ?stage84c35e=0',
+                    lastError: null,
+                };
+                return null;
+            }
+
+            if (!KL_STAGE7_SLIDING_CROSS.enabled || typeof emu.writeMemory !== 'function') {
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    enabled: false,
+                    lastCoord: cloneData(context.coord),
+                    lastRole: context.role,
+                    lastPlayerForm: context.playerForm,
+                    lastLives: context.lives,
+                    lastAction: KL_STAGE7_SLIDING_CROSS.enabled
+                        ? 'writeMemory unavailable'
+                        : 'disabled because Stage 7 sliding is off',
+                    lastError: null,
+                };
+                return null;
+            }
+
+            const wrongPhysicalRoom = sample.room0 !== KL_STAGE7_SLIDING_CROSS.centerRoom
+                ? sample.room0
+                : null;
+            const previousArmed = isStage84C35eArmedSnapshot(previous);
+            const entryArmed = isStage84C35eArmedSnapshot(entrySnapshot) &&
+                isStage84C35eRecentSnapshot(entrySnapshot);
+            const entryLifeDroppedAfterShift = !!(
+                entryArmed &&
+                entrySnapshot.lives !== null &&
+                context.lives !== null &&
+                context.lives < entrySnapshot.lives &&
+                isStage84C35eLikelyRespawnTarget(entrySnapshot, context)
+            );
+            const latchedEntryLifeDrop = !!(
+                isStage84C35eArmedSnapshot(armedEntrySnapshot) &&
+                isStage84C35eRecentSnapshot(armedEntrySnapshot) &&
+                armedEntrySnapshot.lives !== null &&
+                context.lives !== null &&
+                context.lives < armedEntrySnapshot.lives
+            );
+            const formChangedFromWolf = !!(
+                previous &&
+                previous.playerForm === 'wolf' &&
+                context.playerForm !== 'wolf'
+            );
+            const suspiciousRespawnJump = !!(
+                previousArmed &&
+                formChangedFromWolf &&
+                (
+                    wrongPhysicalRoom !== null ||
+                    bodyJump.jumped ||
+                    lifeDropped
+                )
+            );
+            const deathTrigger = previousArmed && (
+                lifeDropped ||
+                suspiciousRespawnJump
+            ) || entryLifeDroppedAfterShift || latchedEntryLifeDrop;
+
+            if (deathTrigger) {
+                const trigger = latchedEntryLifeDrop
+                    ? 'latched cauldron life drop'
+                    : lifeDropped
+                    ? 'life drop'
+                    : entryLifeDroppedAfterShift
+                        ? 'entry life drop after recenter'
+                        : wrongPhysicalRoom !== null
+                        ? 'wolf respawn physical-room change'
+                        : 'wolf respawn body jump';
+                const source = latchedEntryLifeDrop
+                    ? armedEntrySnapshot
+                    : entryLifeDroppedAfterShift
+                        ? entrySnapshot
+                        : previous;
+                pendingDeath = {
+                    coord: cloneData(source.coord),
+                    entry: cloneData(latchedEntryLifeDrop
+                        ? armedEntrySnapshot
+                        : entrySnapshot && sameCoord(entrySnapshot.coord, source.coord)
+                            ? entrySnapshot
+                            : source),
+                    previous: source,
+                    lifeBefore: source.lives,
+                    lifeAfter: context.lives,
+                    trigger,
+                    bodyJump: latchedEntryLifeDrop
+                        ? armedBodyJump
+                        : entryLifeDroppedAfterShift
+                            ? entryBodyJump
+                            : bodyJump,
+                    frame: frameCompletedCount,
+                    sample: sampleCount,
+                };
+                lastAction = `bubble death detected in ${fmtLogicalCoord(source.coord)} by ${trigger}`;
+            }
+
+            if (!pendingDeath) {
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    enabled: true,
+                    pendingDeath,
+                    lastBodyJump: bodyJump,
+                    lastCoord: cloneData(context.coord),
+                    lastRole: context.role,
+                    lastPlayerForm: context.playerForm,
+                    lastLives: context.lives,
+                    lastAction,
+                    lastError: null,
+                };
+                return null;
+            }
+
+            const restorePoint = pendingDeath.entry || pendingDeath.previous;
+            const body = restorePoint.body || {x: 0x80, y: 0x80, z: 0x80};
+            const head = restorePoint.head || body;
+            const needsCrossRefresh = !sameCoord(stage7SlidingCross.center, pendingDeath.coord);
+            const patchAddrs = Array.from(new Set([
+                KL_STAGE7_SLIDING_CROSS.currentRoomAddr,
+                0x5c30,
+                ...collectStage7RoomIdPatchAddrs(workRange, wrongPhysicalRoom),
+            ])).sort((a, b) => a - b);
+
+            try {
+                const fromText = wrongPhysicalRoom === null
+                    ? needsCrossRefresh
+                        ? `logical ${fmtLogicalCoord(stage7SlidingCross.center)}`
+                        : 'same physical room'
+                    : `physical ${hexByte(wrongPhysicalRoom)}`;
+                if (needsCrossRefresh) {
+                    stage7SlidingCross = {
+                        ...stage7SlidingCross,
+                        center: cloneData(pendingDeath.coord),
+                        done: false,
+                        lastCompiled: null,
+                        lastPatchedSlots: [],
+                        message: `C3.5e detected bubble-death recenter into ${fromText}; restoring cross around ${fmtLogicalCoord(pendingDeath.coord)}.`,
+                    };
+                    renderStage7SlidingRow();
+                    await applyStage7CrossInjection(`C3.5e restored bubble-death center to ${fmtLogicalCoord(pendingDeath.coord)}`);
+                }
+
+                for (const addr of patchAddrs) {
+                    await emu.writeMemory(addr, Uint8Array.from([KL_STAGE7_SLIDING_CROSS.centerRoom]));
+                }
+                await emu.writeMemory(
+                    KL_STAGE84_C30.playerBodyXyzAddr,
+                    Uint8Array.from([byteOr(body.x, 0x80), byteOr(body.y, 0x80), byteOr(body.z, 0x80)])
+                );
+                await emu.writeMemory(
+                    KL_STAGE84_C30.playerHeadXyzAddr,
+                    Uint8Array.from([byteOr(head.x, body.x), byteOr(head.y, body.y), byteOr(head.z, body.z)])
+                );
+                const restoredEntry = {
+                    ...cloneData(restorePoint),
+                    playerForm: context.playerForm,
+                    playerFormText: context.playerFormText,
+                    physicalRoom: KL_STAGE7_SLIDING_CROSS.centerRoom,
+                    bubblesActive: context.playerForm === 'wolf',
+                    lives: context.lives,
+                    frame: frameCompletedCount,
+                    sample: sampleCount,
+                };
+                lastAction = `corrected bubble-death respawn from ${fromText} back to ${fmtLogicalCoord(pendingDeath.coord)} at entry ${restorePoint.entrySide || 'unknown side'}`;
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    enabled: true,
+                    entrySnapshot: restoredEntry,
+                    pendingDeath: null,
+                    armedEntrySnapshot: context.playerForm === 'wolf' ? restoredEntry : null,
+                    corrections: stage84C35eBubbleRespawnGuard.corrections + 1,
+                    writes: stage84C35eBubbleRespawnGuard.writes + patchAddrs.length + 2,
+                    lastPatchedAddrs: patchAddrs,
+                    lastWrongRoom: wrongPhysicalRoom,
+                    lastTrigger: pendingDeath.trigger || 'unknown',
+                    lastBodyJump: pendingDeath.bodyJump || bodyJump,
+                    lastCoord: cloneData(pendingDeath.coord),
+                    lastRole: 'cauldron',
+                    lastPlayerForm: context.playerForm,
+                    lastLives: context.lives,
+                    lastAction,
+                    lastError: null,
+                };
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    center: cloneData(pendingDeath.coord),
+                    lastPatchedSlots: patchAddrs,
+                    message: `${stage7SlidingCross.message} C3.5e corrected bubble-death respawn from ${fromText} back to the logical cauldron center.`,
+                };
+                renderStage7SlidingRow();
+                return {
+                    corrected: true,
+                    wrongPhysicalRoom,
+                    coord: cloneData(pendingDeath.coord),
+                    entry: cloneData(restorePoint),
+                    patchedAddrs: patchAddrs,
+                };
+            } catch (err) {
+                lastError = `Failed C3.5e bubble-death respawn correction: ${err}`;
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    enabled: true,
+                    pendingDeath,
+                    lastWrongRoom: wrongPhysicalRoom,
+                    lastTrigger: pendingDeath.trigger || 'unknown',
+                    lastBodyJump: pendingDeath.bodyJump || bodyJump,
+                    lastCoord: cloneData(context.coord),
+                    lastRole: context.role,
+                    lastPlayerForm: context.playerForm,
+                    lastLives: context.lives,
+                    lastAction: 'write failed',
+                    lastError,
+                };
+                return {corrected: false, error: lastError};
+            }
+        };
+
+        const formatStage84C35eRespawnGuard = () => {
+            const entry = stage84C35eBubbleRespawnGuard.entrySnapshot;
+            const armedEntry = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
+            const pending = stage84C35eBubbleRespawnGuard.pendingDeath;
+            const entryBody = entry && entry.body ? entry.body : {x: 0, y: 0, z: 0};
+            const armedAge = armedEntry && Number.isInteger(armedEntry.frame)
+                ? Math.max(0, frameCompletedCount - armedEntry.frame)
+                : null;
+            const current = stage84C35eBubbleRespawnGuard.lastSnapshot;
+            const currentBody = current && current.body ? current.body : null;
+            const jump = stage84C35eBubbleRespawnGuard.lastBodyJump;
+            return [
+                `requested ${stage84C35eBubbleRespawnGuard.requested ? 'yes' : 'no'}`,
+                `enabled ${stage84C35eBubbleRespawnGuard.enabled ? 'yes' : 'no'}`,
+                `player ${stage84C35eBubbleRespawnGuard.lastPlayerForm}`,
+                `lives ${stage84C35eBubbleRespawnGuard.lastLives === null ? '-' : hexByte(stage84C35eBubbleRespawnGuard.lastLives)}`,
+                `current ${currentBody ? fmtXYZ(currentBody.x, currentBody.y, currentBody.z) : '-'}`,
+                `entry ${entry ? `${fmtLogicalCoord(entry.coord)} ${entry.entrySide || 'unknown side'} ${fmtXYZ(entryBody.x, entryBody.y, entryBody.z)}` : 'none'}`,
+                `armed entry ${armedEntry ? `${fmtLogicalCoord(armedEntry.coord)} ${armedEntry.entrySide || 'unknown side'} lives ${armedEntry.lives === null ? '-' : hexByte(armedEntry.lives)} age ${armedAge}` : 'none'}`,
+                `pending ${pending ? `${fmtLogicalCoord(pending.coord)} ${hexByte(pending.lifeBefore)}->${hexByte(pending.lifeAfter)} ${pending.trigger || ''}` : 'none'}`,
+                `trigger ${stage84C35eBubbleRespawnGuard.lastTrigger}`,
+                `jump ${jump ? `dx ${jump.x} dy ${jump.y} dz ${jump.z}` : '-'}`,
+                `corrections ${stage84C35eBubbleRespawnGuard.corrections}`,
+                `writes ${stage84C35eBubbleRespawnGuard.writes}`,
+                `last action ${stage84C35eBubbleRespawnGuard.lastAction}`,
+            ].join('; ');
+        };
+
+        const formatStage84C35eRespawnRoom = () => (
+            [
+                `logical ${fmtLogicalCoord(stage84C35eBubbleRespawnGuard.lastCoord)}`,
+                `role ${stage84C35eBubbleRespawnGuard.lastRole}`,
+                `last wrong room ${stage84C35eBubbleRespawnGuard.lastWrongRoom === null ? '-' : hexByte(stage84C35eBubbleRespawnGuard.lastWrongRoom)}`,
+            ].join('; ')
+        );
+
+        const formatStage84C35eRespawnBytes = () => (
+            stage84C35eBubbleRespawnGuard.lastPatchedAddrs.length
+                ? `room-id writes ${stage84C35eBubbleRespawnGuard.lastPatchedAddrs.map(hexWord).join(' ')}; body ${hexWord(KL_STAGE84_C30.playerBodyXyzAddr)}..${hexWord(KL_STAGE84_C30.playerBodyXyzAddr + 2)}; head ${hexWord(KL_STAGE84_C30.playerHeadXyzAddr)}..${hexWord(KL_STAGE84_C30.playerHeadXyzAddr + 2)}`
+                : '-'
+        );
+
         const formatStage84RecordRefs = records => {
             if (!records.length) return 'none';
             const labels = records.slice(0, 10).map(record => (
@@ -4919,6 +5424,26 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 notes: stage84C35cRoutineThrottle.lastError
                     ? stage84C35cRoutineThrottle.lastError
                     : 'Opt-in with ?stage84c35c=1. Routine-level probe patches the first original cauldron bubble updater call to JP the normal exit on selected human-form bubble frames, holds the request-display reset on request frames, then restores original bytes on active frames and whenever the player is not human.',
+            });
+
+            addRow({
+                state: stage84C35eBubbleRespawnGuard.lastError
+                    ? 'bad'
+                    : stage84C35eBubbleRespawnGuard.corrections
+                        ? 'ok'
+                        : stage84C35eBubbleRespawnGuard.pendingDeath
+                            ? 'warn'
+                            : stage84C35eBubbleRespawnGuard.enabled
+                                ? 'ok'
+                                : 'muted',
+                probe: 'C3.5e bubble-death respawn guard',
+                address: `${hexWord(KL_STAGE7_SLIDING_CROSS.currentRoomAddr)} / ${hexWord(KL_STAGE84_C30.playerBodyXyzAddr)} / ${hexWord(KL_STAGE84_C30.playerHeadXyzAddr)}`,
+                decode: formatStage84C35eRespawnGuard(),
+                room: formatStage84C35eRespawnRoom(),
+                bytes: formatStage84C35eRespawnBytes(),
+                notes: stage84C35eBubbleRespawnGuard.lastError
+                    ? stage84C35eBubbleRespawnGuard.lastError
+                    : 'Enabled by default with Stage 7 sliding; add ?stage84c35e=0 to disable. Detects a wolf-form bubble death in a logical cauldron, suppresses the death-induced physical-neighbour slide, and restores the player to the recorded cauldron entry coordinates.',
             });
 
             addRow({
@@ -5326,6 +5851,21 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return addrs;
         };
 
+        const annotateStage7SampleRoomFields = (sample, staticRange) => {
+            const entry = decodeLocationEntry(staticRange, sample.room0);
+            sample.attrOk = false;
+            sample.sizeOk = false;
+            if (!entry) return;
+
+            const decodedSize = decodeSize(staticRange, entry.selector);
+            sample.attrOk = (sample.attrWork & 0x07) === entry.attr;
+            sample.sizeOk = (
+                decodedSize.x === sample.sizeX &&
+                decodedSize.y === sample.sizeY &&
+                decodedSize.z === sample.sizeZ
+            );
+        };
+
         const handleStage7SlidingTransition = async (sample, workRange) => {
             if (!stage7SlidingCross.enabled || !stage7SlidingCross.done) return null;
             if (sample.room0 === KL_STAGE7_SLIDING_CROSS.centerRoom) return null;
@@ -5694,23 +6234,26 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 let stage7Action = null;
 
                 if (stage7SlidingCross.enabled) {
-                    const preRecenterEntry = decodeLocationEntry(staticRange, sample.room0);
-                    sample.attrOk = false;
-                    sample.sizeOk = false;
-                    if (preRecenterEntry) {
-                        const preRecenterSize = decodeSize(staticRange, preRecenterEntry.selector);
-                        sample.attrOk = (sample.attrWork & 0x07) === preRecenterEntry.attr;
-                        sample.sizeOk = (
-                            preRecenterSize.x === sample.sizeX &&
-                            preRecenterSize.y === sample.sizeY &&
-                            preRecenterSize.z === sample.sizeZ
-                        );
+                    annotateStage7SampleRoomFields(sample, staticRange);
+                    const respawnAction = await applyStage84C35eBubbleRespawnGuard(workRange, sample);
+                    if (respawnAction && respawnAction.corrected) {
+                        ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
+                        sample.stage84C35eAction = respawnAction;
+                        annotateStage7SampleRoomFields(sample, staticRange);
                     }
                     updateTransition(sample);
                     stage7Action = await handleStage7SlidingTransition(sample, workRange);
                     if (stage7Action && stage7Action.recentered) {
                         ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
                         sample.stage7Action = stage7Action;
+                        annotateStage7SampleRoomFields(sample, staticRange);
+                        const postRecenterRespawnAction = await applyStage84C35eBubbleRespawnGuard(workRange, sample);
+                        if (postRecenterRespawnAction && postRecenterRespawnAction.corrected) {
+                            ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
+                            sample.stage7Action = stage7Action;
+                            sample.stage84C35eAction = postRecenterRespawnAction;
+                            annotateStage7SampleRoomFields(sample, staticRange);
+                        }
                     }
                 }
                 await updateStage82CBubbleProbe(workRange, sample);
@@ -5721,6 +6264,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 updateStage84C35aTimingProbe(workRange);
                 await updateStage84C35bSlowdownProbe(workRange);
                 await updateStage84C35cRoutineThrottle(workRange);
+                updateStage84C35eBubbleRespawnState(workRange, sample);
 
                 const entry = decodeLocationEntry(staticRange, sample.room0);
                 if (stage5RoomIdRecenterTest.enabled && !KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {
