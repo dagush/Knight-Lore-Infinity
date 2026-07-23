@@ -232,6 +232,26 @@ Room fields:
   Optional provenance/debug object. The compiler ignores it. It is safe to
   delete meta when copying a room into a custom map.
 
+Runtime quest dressing may add an `originalCharmRoom` diagnostic object under
+`questDressing.staticDressing`. This is generated metadata, not a required
+authoring field. It records:
+
+- the selected original special-object room id and catalogue index;
+- the original charm XYZ;
+- compact foreground run and object counts;
+- the policy that generated architecture remains authoritative.
+
+When this mode is active, only the original room's `blocks`-equivalent
+foreground groups and charm XYZ are imported. Its `backgrounds`, `exits`, size,
+colour, room id, and coordinate are deliberately not imported. Authors can use
+the same principle when copying an original puzzle interior: copy `blocks`,
+then define new logical exits and backgrounds that match the authored map.
+
+The built-in procedural provider currently selects original interiors by a
+sector hash, with one authored selection override: quest sector `(0,0)` uses
+original interior `0x74` as the easier first-room proof. This is runtime
+generation policy, not a special JSON syntax.
+
 
 Labels and Uniqueness
 ---------------------

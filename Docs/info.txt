@@ -692,6 +692,73 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
                should remain opt-in until multi-sector quest runs confirm that
                cauldron display, wolf hazards, drops, and sliding recentering
                continue to coexist.
+       C3.6 original charm-room interior catalogue:
+          URL flags:
+             ?stage84c36=1 enables original interiors;
+             ?stage8originalcharmrooms=1 is an alias;
+             ?stage84c31=1 also seeds the actual disposable charm at the
+             selected original XYZ.
+          Source:
+             the 32 room records referenced by `special_objs_tbl`, reduced to
+             their compact foreground block groups and original item XYZ;
+             385 foreground objects are represented across the catalogue.
+          Topology rule:
+             original exits, room ids, backgrounds, walls, arches, selectors,
+             colours, and map coordinates are not copied;
+             the procedural room and Stage 7 reciprocal overlay remain
+             authoritative for all four exits and physical cross ids.
+          Interior rule:
+             compact block groups preserve ordinary/static blocks and dynamic
+             hazards/moving objects. `retrieve_screen` expands them normally;
+             they are not separately injected into working memory.
+          Determinism:
+             hash(worldSeed, sectorX, sectorY, 0xC4F0) modulo 32 selects the
+             same template whenever a sector is regenerated.
+          Known risk:
+             an original object arrangement may obstruct a generated entrance
+             because the puzzle was composed for different original doors.
+             Diagnose this by logical coordinate and source room id; retain our
+             exits and add a template-specific clearance rule if needed.
+          Starting-sector template:
+             sector (0,0) deliberately uses original room 0x74 instead of the
+             hash-selected 0xE8. Its original charm XYZ is
+             X=0x48, Y=0xB8, Z=0x80. Other sectors remain hash-selected.
+       C3.5e general death-respawn revision:
+          A normal hazard death in imported charm-room interior 0xE8 reproduced
+          the same opposite-room displacement previously seen after bubble
+          death. The displacement is therefore a general death/Stage 7 issue.
+          The guard now records every logical-room entry, not only wolf-form
+          cauldron entries. It preserves:
+             logical coordinate and room role;
+             entry direction/side;
+             body and head XYZ;
+             physical center room id;
+             lives baseline.
+          It also retains the immediately previous entry for 24 frames. If the
+          lives byte drops after Stage 7 has already recentered into the death-
+          generated neighbour, that previous entry identifies the real death
+          room and entrance.
+          On correction the runtime refreshes the cross around the recorded
+          logical room, rewrites working room ids to 0x88, and restores body and
+          head XYZ. Bubble/form detection remains as a fallback, but is no
+          longer required for an ordinary life-drop correction.
+          Diagnostics row:
+             C3.5e general death respawn guard
+          Disable control:
+             ?stage84c35e=0
+          Manual confirmation, 2026 07 23:
+             two deaths in logical charm room (3,0), original interior 0x74,
+             produced corrections 2 and writes 8;
+             the latest trigger was `general life drop`;
+             attempted physical room 0x89 was intercepted;
+             0x5C10/0x5C30 and body/head XYZ were restored;
+             the player remained at the west entrance of logical room (3,0).
+             A normal leave/re-enter cycle did not increment either counter.
+          Transition-key refinement:
+             the first post-recenter action now includes frame, sample, source,
+             and viaPhysicalRoom metadata, matching Stage 7 lastTransition.
+             This prevents a second snapshot of the same newly entered room
+             from replacing the true previous-room latch one frame later.
 
 wizard: 0x9F and 0x9E -> head
         0x90 ~ 0x95 -> body

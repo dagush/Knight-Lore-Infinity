@@ -1057,6 +1057,45 @@ Manual completion confirmation, 2026 07 22:
   timing path. Retain it only as a contingency for a different future trace.
 - C3.5e status: empirically completed.
 
+General-death revision, 2026 07 22:
+
+- A death while solving original charm-room interior `0xE8` reproduced the
+  same one-room displacement without cauldron bubbles. The cause is therefore
+  general original death/respawn behaviour interacting with Stage 7 sliding,
+  not a bubble-only rule.
+- C3.5e now records the entry side, body/head XYZ, logical coordinate, physical
+  center id, and lives baseline for every logical room.
+- The immediately previous room entry remains available for 24 frames. This
+  covers the observed race where Stage 7 has already accepted the death-
+  generated neighbour transition before the lives byte decreases.
+- Any confirmed life drop can now restore:
+  - the previous logical center;
+  - the five-room physical cross;
+  - active room ids to physical center `0x88`;
+  - player body/head XYZ to the recorded entrance.
+- The wolf/bubble form-change detector remains only as a fallback for the
+  already-proven cauldron path.
+- `?stage84c35e=0` still disables the guard for control tests.
+- The diagnostic row is renamed `C3.5e general death respawn guard` and shows
+  current, armed, and previous room entries.
+
+Manual completion confirmation, 2026 07 23:
+
+- A hazard death in logical charm room `(3,0)`, original interior `0x74`, was
+  corrected successfully.
+- The guard observed a general life drop, intercepted attempted physical room
+  `0x89`, rewrote `0x5C10` and `0x5C30`, and restored body/head XYZ.
+- The player remained in logical room `(3,0)` at the recorded west entrance.
+- Diagnostics showed `corrections 2` and `writes 8` after two tested deaths.
+- Leaving and re-entering normally left both counters unchanged, confirming
+  ordinary transitions were not classified as deaths.
+- The Stage 7 recenter result now carries its frame/sample/source metadata into
+  the first post-transition snapshot. This keeps the entry transition key
+  stable and prevents `previous entry` from being overwritten by a duplicate
+  snapshot of the same room one frame later.
+- C3.5e general-death status: empirically completed for the tested hazard and
+  bubble paths.
+
 Exit criteria:
 
 - The animation/display issue is either fixed, externally supplemented, or
@@ -1065,6 +1104,74 @@ Exit criteria:
   plan.
 - Manual testing confirms the mitigation keeps the player in the logical
   cauldron room at the original entry side after a wolf bubble death.
+
+C3.6 - Original Charm-Room Interior Injection
+----------------------------------------------
+
+Goal:
+
+- Give each generated quest charm room one of the original game's special-
+  object room challenges without surrendering control of the infinite map's
+  topology.
+
+Architecture rule:
+
+- The procedural generator remains authoritative for:
+  - whether the logical room exists;
+  - all north/east/south/west exits;
+  - reciprocal connectivity;
+  - wall and arch backgrounds;
+  - room theme and generated quest-room presentation;
+  - physical sliding-cross ids.
+- The selected original room contributes only:
+  - compact foreground block groups, including ordinary/static blocks and
+    dynamic hazards or moving objects;
+  - the original special-object XYZ position used to seed the logical charm.
+- Do not copy original room exits, walls, arches, size selector, colour, room
+  id, or background list into generated topology.
+
+Tasks:
+
+- Build a compact catalogue from the 32 entries referenced by the original
+  `special_objs_tbl`.
+- Deterministically select one catalogue entry from `(sectorX, sectorY,
+  worldSeed)` so revisiting or reloading a sector chooses the same interior.
+- Replace the Phase B charm-room marker blocks with the selected original
+  foreground groups.
+- Keep the generated room's exits and reciprocal-overlay result unchanged.
+- When C3.1 is enabled, seed the required logical charm at the selected
+  original record's XYZ rather than at the generic room centre.
+- Expose source room id, XYZ, group count, object count, and architecture policy
+  in diagnostics.
+
+First proof:
+
+- Opt in with `?stage84c36=1` or `?stage8originalcharmrooms=1`.
+- Add `?stage84c31=1` to place the actual disposable charm at the imported XYZ.
+- In sector `(0,0)`, the origin-sector override chooses original interior
+  `0x74` for charm room `(3,0)` while retaining that generated room's four
+  exits. Other sectors keep their deterministic hash selection.
+- Verify every generated entrance remains usable, the original interior
+  decodes without reset/freeze, and the charm can be reached and collected.
+
+Risks:
+
+- An original puzzle was designed around its original door positions. A
+  generated exit can therefore open behind a blocking object even though the
+  static entry is byte-valid.
+- One original candidate was rectangular. Its interior is deliberately hosted
+  in the current square quest-room envelope for this proof.
+- Dynamic hazards may have assumptions that only become visible during longer
+  play. Keep this opt-in until several templates have been crossed and solved.
+
+Exit criteria:
+
+- The same sector always selects the same original interior.
+- Generated exits and reciprocal connectivity are unchanged.
+- Static and dynamic interior groups render and behave without reset, freeze,
+  or corrupt transition.
+- The charm appears at the selected original XYZ and remains compatible with
+  the established C3.1-C3.4 carry/drop flow.
 
 Strict policy:
 

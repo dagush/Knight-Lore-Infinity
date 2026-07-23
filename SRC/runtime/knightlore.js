@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage84-c35e-latched-entry-20260722-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage84-c36-general-death-confirmed-20260723-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -68,6 +68,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     })();
     const KL_STAGE84_C35E_REQUESTED = !['0', 'false', 'off', 'disabled', 'no'].includes(
         (KL_URL_PARAMS.get('stage84c35e') || KL_URL_PARAMS.get('stage8c35e') || '1').trim().toLowerCase()
+    );
+    const KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED = ['1', 'true', 'on', 'yes'].includes(
+        (KL_URL_PARAMS.get('stage84c36') || KL_URL_PARAMS.get('stage8originalcharmrooms') || '').trim().toLowerCase()
     );
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
@@ -928,6 +931,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             questCauldronOriginalVisual: KL_STAGE82C_CAULDRON_VISUAL_ENABLED,
             questCauldronBubbles: KL_STAGE82C_BUBBLE_MODE === 'global' || KL_STAGE82C_BUBBLE_MODE === 'cauldron',
             questCauldronBubbleMode: KL_STAGE82C_BUBBLE_MODE,
+            questCharmOriginalRooms: KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED,
         });
         let activeDocument = {
             format: KL_MAP_FORMAT,
@@ -1022,7 +1026,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             room.questRole = info.role;
             room.questSector = cloneData(info.sector);
             room.questCharm = info.quest.requiredCharm ? cloneData(info.quest.requiredCharm) : null;
-            room.questDressing = cloneData(info.dressing || room.questDressing || null);
+            room.questDressing = cloneData(room.questDressing || info.dressing || null);
             room.meta = {
                 ...room.meta,
                 quest: {
@@ -1497,6 +1501,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 questSector: cloneData(reciprocal.room.questSector),
                 questCharm: cloneData(reciprocal.room.questCharm),
                 questDressing: cloneData(reciprocal.room.questDressing),
+                originalCharmRoom: cloneData(
+                    reciprocal.room.questDressing &&
+                    reciprocal.room.questDressing.staticDressing
+                        ? reciprocal.room.questDressing.staticDressing.originalCharmRoom || null
+                        : null
+                ),
                 questState: reciprocal.room.meta && reciprocal.room.meta.quest
                     ? cloneData(reciprocal.room.meta.quest.state)
                     : null,
@@ -1829,6 +1839,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             enabled: KL_STAGE84_C35E_REQUESTED && KL_STAGE7_SLIDING_CROSS.enabled,
             entrySnapshot: null,
             armedEntrySnapshot: null,
+            previousEntrySnapshot: null,
             pendingDeath: null,
             lastSnapshot: null,
             corrections: 0,
@@ -1842,7 +1853,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             lastPlayerForm: 'unknown',
             lastLives: null,
             lastAction: KL_STAGE84_C35E_REQUESTED
-                ? 'armed; waiting for wolf-form bubble death in a logical cauldron'
+                ? 'armed; recording every logical-room entry for general death recovery'
                 : 'disabled with ?stage84c35e=0',
             lastError: null,
         };
@@ -2676,6 +2687,16 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const parts = [];
             if (staticDressing.forceSquare) parts.push('forced square');
             if (Number.isInteger(staticDressing.colour)) parts.push(`colour ${staticDressing.colour}`);
+            if (staticDressing.originalCharmRoom) {
+                const original = staticDressing.originalCharmRoom;
+                parts.push([
+                    `original interior ${original.originalRoomHex}`,
+                    `spawn ${fmtXYZ(original.spawn.x, original.spawn.y, original.spawn.z)}`,
+                    `${original.blockRunCount} run(s)`,
+                    `${original.blockObjectCount} object(s)`,
+                    'generated architecture',
+                ].join('; '));
+            }
             if (staticDressing.extraBackgrounds && staticDressing.extraBackgrounds.length) {
                 parts.push(`extra bg ${staticDressing.extraBackgrounds.map(value => fmtNamedId(value, KL_BACKGROUND_NAMES)).join(', ')}`);
             }
@@ -2882,7 +2903,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         };
 
         const makeStage84C31ActiveRecord = target => {
-            const pos = KL_STAGE84_C30.disposablePosition;
+            const pos = target.originalCharmRoom && target.originalCharmRoom.spawn
+                ? target.originalCharmRoom.spawn
+                : KL_STAGE84_C30.disposablePosition;
             return [
                 target.sprite,
                 pos.x, pos.y, pos.z,
@@ -3176,6 +3199,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 KL_STAGE84_C31_ENABLED
                     ? `C3.1 disposable charm probe requested: static object record ${KL_STAGE84_C30.disposableRecordIndex} may be reseeded; inventory, charm-order, and completion bytes are still not directly written.`
                     : 'C3.1 disposable charm probe is off.',
+                KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED
+                    ? 'C3.6 original charm-room interiors are enabled: generated topology/architecture is preserved while one deterministic original special-object room supplies the interior block groups and charm XYZ.'
+                    : 'C3.6 original charm-room interiors are off.',
                 KL_STAGE84_C33_ENABLED
                     ? 'C3.3 drop-gated JS-side cauldron acceptance is on: matching carried charm sprites can complete the persistent sector state after a player drop action.'
                     : 'C3.3 JS-side cauldron acceptance is off.',
@@ -4699,10 +4725,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const isStage84C35eArmedSnapshot = snapshot => !!(
             snapshot &&
-            snapshot.role === 'cauldron' &&
             snapshot.physicalRoom === KL_STAGE7_SLIDING_CROSS.centerRoom &&
-            snapshot.playerForm === 'wolf' &&
-            snapshot.bubblesActive
+            snapshot.lives !== null
         );
 
         const isStage84C35eRecentSnapshot = snapshot => !!(
@@ -4726,6 +4750,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const context = makeStage84C35eSnapshot(workRange, sample);
             let entrySnapshot = stage84C35eBubbleRespawnGuard.entrySnapshot;
             let armedEntrySnapshot = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
+            let previousEntrySnapshot = stage84C35eBubbleRespawnGuard.previousEntrySnapshot;
             let pendingDeath = stage84C35eBubbleRespawnGuard.pendingDeath;
             let lastAction = stage84C35eBubbleRespawnGuard.lastAction;
             const justCorrected = !!(sample && sample.stage84C35eAction && sample.stage84C35eAction.corrected);
@@ -4742,68 +4767,51 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 lastAction = 'disabled because Stage 7 sliding is off';
             } else if (justCorrected) {
                 lastAction = stage84C35eBubbleRespawnGuard.lastAction;
-            } else if (context.role === 'cauldron' && context.physicalRoom === KL_STAGE7_SLIDING_CROSS.centerRoom) {
+            } else if (context.physicalRoom === KL_STAGE7_SLIDING_CROSS.centerRoom) {
                 const needsNewEntry = !entrySnapshot ||
                     !sameCoord(entrySnapshot.coord, context.coord) ||
                     entrySnapshot.entryTransitionKey !== context.entryTransitionKey;
-                const preserveLatchedEntry = !!(
-                    armedEntrySnapshot &&
-                    sameCoord(armedEntrySnapshot.coord, context.coord)
-                );
-                if (needsNewEntry && !unresolvedArmedLifeDrop && !preserveLatchedEntry) {
+                if (needsNewEntry && !unresolvedArmedLifeDrop) {
+                    if (entrySnapshot) {
+                        previousEntrySnapshot = {
+                            ...cloneData(entrySnapshot),
+                            frame: context.frame,
+                            sample: context.sample,
+                        };
+                    }
                     entrySnapshot = cloneData(context);
-                    lastAction = `recorded cauldron entry ${context.entrySide || 'unknown side'} at ${fmtLogicalCoord(context.coord)}`;
+                    armedEntrySnapshot = cloneData(context);
+                    lastAction = `recorded room entry ${context.entrySide || 'unknown side'} at ${fmtLogicalCoord(context.coord)}`;
                 } else if (!pendingDeath) {
-                    lastAction = isStage84C35eArmedSnapshot(context)
-                        ? `armed in wolf form at ${fmtLogicalCoord(context.coord)}; entry ${entrySnapshot.entrySide || 'unknown side'}`
-                        : `watching cauldron at ${fmtLogicalCoord(context.coord)}; player ${context.playerForm}`;
+                    if (!armedEntrySnapshot || !sameCoord(armedEntrySnapshot.coord, context.coord)) {
+                        armedEntrySnapshot = cloneData(entrySnapshot || context);
+                    } else if (!unresolvedArmedLifeDrop) {
+                        armedEntrySnapshot = {
+                            ...armedEntrySnapshot,
+                            lives: armedEntrySnapshot.lives === null || context.lives === null
+                                ? context.lives
+                                : Math.max(armedEntrySnapshot.lives, context.lives),
+                            frame: context.frame,
+                            sample: context.sample,
+                        };
+                    }
+                    lastAction = `armed room ${fmtLogicalCoord(context.coord)}; entry ${(entrySnapshot && entrySnapshot.entrySide) || 'unknown side'}; player ${context.playerForm}`;
                 }
-            } else if (context.role !== 'cauldron' && !pendingDeath) {
-                lastAction = `watching; current role ${context.role}`;
+            } else if (!pendingDeath) {
+                lastAction = `watching physical transition from ${fmtLogicalCoord(context.coord)}`;
             }
 
-            if (!justCorrected && isStage84C35eArmedSnapshot(context)) {
-                if (!armedEntrySnapshot) {
-                    const entry = entrySnapshot && sameCoord(entrySnapshot.coord, context.coord)
-                        ? entrySnapshot
-                        : context;
-                    armedEntrySnapshot = {
-                        ...cloneData(entry),
-                        playerForm: 'wolf',
-                        playerFormText: context.playerFormText,
-                        physicalRoom: context.physicalRoom,
-                        bubblesActive: true,
-                        lives: context.lives,
-                        frame: context.frame,
-                        sample: context.sample,
-                    };
-                } else if (
-                    sameCoord(armedEntrySnapshot.coord, context.coord) &&
-                    (
-                        armedEntrySnapshot.lives === null ||
-                        context.lives === null ||
-                        context.lives >= armedEntrySnapshot.lives
-                    )
-                ) {
-                    // Keep entry geometry and the pre-death life baseline fixed.
-                    armedEntrySnapshot = {
-                        ...armedEntrySnapshot,
-                        frame: context.frame,
-                        sample: context.sample,
-                    };
-                }
-            } else if (
-                armedEntrySnapshot &&
-                context.role !== 'cauldron' &&
-                !unresolvedArmedLifeDrop &&
-                frameCompletedCount - armedEntrySnapshot.frame > 12
+            if (
+                previousEntrySnapshot &&
+                Number.isInteger(previousEntrySnapshot.frame) &&
+                frameCompletedCount - previousEntrySnapshot.frame > 180
             ) {
-                armedEntrySnapshot = null;
+                previousEntrySnapshot = null;
             }
 
             if (pendingDeath && frameCompletedCount - pendingDeath.frame > 180) {
                 pendingDeath = null;
-                lastAction = 'expired stale pending bubble-death correction';
+                lastAction = 'expired stale pending death correction';
             }
 
             stage84C35eBubbleRespawnGuard = {
@@ -4811,6 +4819,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 enabled: KL_STAGE84_C35E_REQUESTED && KL_STAGE7_SLIDING_CROSS.enabled,
                 entrySnapshot,
                 armedEntrySnapshot,
+                previousEntrySnapshot,
                 pendingDeath,
                 lastSnapshot: context,
                 lastCoord: cloneData(context.coord),
@@ -4830,9 +4839,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const previous = stage84C35eBubbleRespawnGuard.lastSnapshot;
             const entrySnapshot = stage84C35eBubbleRespawnGuard.entrySnapshot;
             const armedEntrySnapshot = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
+            const previousEntrySnapshot = stage84C35eBubbleRespawnGuard.previousEntrySnapshot;
             const bodyJump = measureStage84C35eBodyJump(previous, context);
             const entryBodyJump = measureStage84C35eBodyJump(entrySnapshot, context);
             const armedBodyJump = measureStage84C35eBodyJump(armedEntrySnapshot, context);
+            const previousEntryBodyJump = measureStage84C35eBodyJump(previousEntrySnapshot, context);
             const lifeDropped = !!(
                 previous &&
                 previous.lives !== null &&
@@ -4890,13 +4901,23 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 context.lives !== null &&
                 context.lives < armedEntrySnapshot.lives
             );
+            const previousEntryLifeDrop = !!(
+                isStage84C35eArmedSnapshot(previousEntrySnapshot) &&
+                Number.isInteger(previousEntrySnapshot.frame) &&
+                frameCompletedCount - previousEntrySnapshot.frame <= 24 &&
+                previousEntrySnapshot.lives !== null &&
+                context.lives !== null &&
+                context.lives < previousEntrySnapshot.lives &&
+                isStage84C35eLikelyRespawnTarget(previousEntrySnapshot, context)
+            );
             const formChangedFromWolf = !!(
                 previous &&
                 previous.playerForm === 'wolf' &&
                 context.playerForm !== 'wolf'
             );
-            const suspiciousRespawnJump = !!(
+            const suspiciousBubbleRespawnJump = !!(
                 previousArmed &&
+                previous.bubblesActive &&
                 formChangedFromWolf &&
                 (
                     wrongPhysicalRoom !== null ||
@@ -4904,46 +4925,55 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     lifeDropped
                 )
             );
-            const deathTrigger = previousArmed && (
-                lifeDropped ||
-                suspiciousRespawnJump
-            ) || entryLifeDroppedAfterShift || latchedEntryLifeDrop;
+            const deathTrigger = previousEntryLifeDrop ||
+                (previousArmed && lifeDropped) ||
+                entryLifeDroppedAfterShift ||
+                latchedEntryLifeDrop ||
+                suspiciousBubbleRespawnJump;
 
             if (deathTrigger) {
-                const trigger = latchedEntryLifeDrop
-                    ? 'latched cauldron life drop'
+                const trigger = previousEntryLifeDrop
+                    ? 'life drop after recent room recenter'
                     : lifeDropped
-                    ? 'life drop'
-                    : entryLifeDroppedAfterShift
-                        ? 'entry life drop after recenter'
-                        : wrongPhysicalRoom !== null
-                        ? 'wolf respawn physical-room change'
-                        : 'wolf respawn body jump';
-                const source = latchedEntryLifeDrop
-                    ? armedEntrySnapshot
+                        ? 'general life drop'
+                        : entryLifeDroppedAfterShift
+                            ? 'entry life drop after recenter'
+                            : latchedEntryLifeDrop
+                                ? 'latched room-entry life drop'
+                                : wrongPhysicalRoom !== null
+                                    ? 'bubble respawn physical-room change'
+                                    : 'bubble respawn body jump';
+                const source = previousEntryLifeDrop
+                    ? previousEntrySnapshot
                     : entryLifeDroppedAfterShift
                         ? entrySnapshot
-                        : previous;
+                        : latchedEntryLifeDrop
+                            ? armedEntrySnapshot
+                            : previous;
                 pendingDeath = {
                     coord: cloneData(source.coord),
-                    entry: cloneData(latchedEntryLifeDrop
-                        ? armedEntrySnapshot
+                    entry: cloneData(previousEntryLifeDrop
+                        ? previousEntrySnapshot
                         : entrySnapshot && sameCoord(entrySnapshot.coord, source.coord)
                             ? entrySnapshot
-                            : source),
+                            : armedEntrySnapshot && sameCoord(armedEntrySnapshot.coord, source.coord)
+                                ? armedEntrySnapshot
+                                : source),
                     previous: source,
                     lifeBefore: source.lives,
                     lifeAfter: context.lives,
                     trigger,
-                    bodyJump: latchedEntryLifeDrop
-                        ? armedBodyJump
-                        : entryLifeDroppedAfterShift
-                            ? entryBodyJump
-                            : bodyJump,
+                    bodyJump: previousEntryLifeDrop
+                        ? previousEntryBodyJump
+                        : latchedEntryLifeDrop
+                            ? armedBodyJump
+                            : entryLifeDroppedAfterShift
+                                ? entryBodyJump
+                                : bodyJump,
                     frame: frameCompletedCount,
                     sample: sampleCount,
                 };
-                lastAction = `bubble death detected in ${fmtLogicalCoord(source.coord)} by ${trigger}`;
+                lastAction = `death detected in ${fmtLogicalCoord(source.coord)} by ${trigger}`;
             }
 
             if (!pendingDeath) {
@@ -4985,10 +5015,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         done: false,
                         lastCompiled: null,
                         lastPatchedSlots: [],
-                        message: `C3.5e detected bubble-death recenter into ${fromText}; restoring cross around ${fmtLogicalCoord(pendingDeath.coord)}.`,
+                        message: `C3.5e detected death recenter into ${fromText}; restoring cross around ${fmtLogicalCoord(pendingDeath.coord)}.`,
                     };
                     renderStage7SlidingRow();
-                    await applyStage7CrossInjection(`C3.5e restored bubble-death center to ${fmtLogicalCoord(pendingDeath.coord)}`);
+                    await applyStage7CrossInjection(`C3.5e restored death center to ${fmtLogicalCoord(pendingDeath.coord)}`);
                 }
 
                 for (const addr of patchAddrs) {
@@ -5007,18 +5037,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     playerForm: context.playerForm,
                     playerFormText: context.playerFormText,
                     physicalRoom: KL_STAGE7_SLIDING_CROSS.centerRoom,
-                    bubblesActive: context.playerForm === 'wolf',
+                    bubblesActive: !!restorePoint.bubblesActive,
                     lives: context.lives,
                     frame: frameCompletedCount,
                     sample: sampleCount,
                 };
-                lastAction = `corrected bubble-death respawn from ${fromText} back to ${fmtLogicalCoord(pendingDeath.coord)} at entry ${restorePoint.entrySide || 'unknown side'}`;
+                lastAction = `corrected death respawn from ${fromText} back to ${fmtLogicalCoord(pendingDeath.coord)} at entry ${restorePoint.entrySide || 'unknown side'}`;
                 stage84C35eBubbleRespawnGuard = {
                     ...stage84C35eBubbleRespawnGuard,
                     enabled: true,
                     entrySnapshot: restoredEntry,
                     pendingDeath: null,
-                    armedEntrySnapshot: context.playerForm === 'wolf' ? restoredEntry : null,
+                    armedEntrySnapshot: restoredEntry,
+                    previousEntrySnapshot: null,
                     corrections: stage84C35eBubbleRespawnGuard.corrections + 1,
                     writes: stage84C35eBubbleRespawnGuard.writes + patchAddrs.length + 2,
                     lastPatchedAddrs: patchAddrs,
@@ -5026,7 +5057,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     lastTrigger: pendingDeath.trigger || 'unknown',
                     lastBodyJump: pendingDeath.bodyJump || bodyJump,
                     lastCoord: cloneData(pendingDeath.coord),
-                    lastRole: 'cauldron',
+                    lastRole: restorePoint.role || 'none',
                     lastPlayerForm: context.playerForm,
                     lastLives: context.lives,
                     lastAction,
@@ -5036,7 +5067,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     ...stage7SlidingCross,
                     center: cloneData(pendingDeath.coord),
                     lastPatchedSlots: patchAddrs,
-                    message: `${stage7SlidingCross.message} C3.5e corrected bubble-death respawn from ${fromText} back to the logical cauldron center.`,
+                    message: `${stage7SlidingCross.message} C3.5e corrected death respawn from ${fromText} back to the same logical room.`,
                 };
                 renderStage7SlidingRow();
                 return {
@@ -5047,7 +5078,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     patchedAddrs: patchAddrs,
                 };
             } catch (err) {
-                lastError = `Failed C3.5e bubble-death respawn correction: ${err}`;
+                lastError = `Failed C3.5e general death respawn correction: ${err}`;
                 stage84C35eBubbleRespawnGuard = {
                     ...stage84C35eBubbleRespawnGuard,
                     enabled: true,
@@ -5069,10 +5100,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const formatStage84C35eRespawnGuard = () => {
             const entry = stage84C35eBubbleRespawnGuard.entrySnapshot;
             const armedEntry = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
+            const previousEntry = stage84C35eBubbleRespawnGuard.previousEntrySnapshot;
             const pending = stage84C35eBubbleRespawnGuard.pendingDeath;
             const entryBody = entry && entry.body ? entry.body : {x: 0, y: 0, z: 0};
             const armedAge = armedEntry && Number.isInteger(armedEntry.frame)
                 ? Math.max(0, frameCompletedCount - armedEntry.frame)
+                : null;
+            const previousEntryAge = previousEntry && Number.isInteger(previousEntry.frame)
+                ? Math.max(0, frameCompletedCount - previousEntry.frame)
                 : null;
             const current = stage84C35eBubbleRespawnGuard.lastSnapshot;
             const currentBody = current && current.body ? current.body : null;
@@ -5085,6 +5120,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `current ${currentBody ? fmtXYZ(currentBody.x, currentBody.y, currentBody.z) : '-'}`,
                 `entry ${entry ? `${fmtLogicalCoord(entry.coord)} ${entry.entrySide || 'unknown side'} ${fmtXYZ(entryBody.x, entryBody.y, entryBody.z)}` : 'none'}`,
                 `armed entry ${armedEntry ? `${fmtLogicalCoord(armedEntry.coord)} ${armedEntry.entrySide || 'unknown side'} lives ${armedEntry.lives === null ? '-' : hexByte(armedEntry.lives)} age ${armedAge}` : 'none'}`,
+                `previous entry ${previousEntry ? `${fmtLogicalCoord(previousEntry.coord)} ${previousEntry.entrySide || 'unknown side'} lives ${previousEntry.lives === null ? '-' : hexByte(previousEntry.lives)} age ${previousEntryAge}` : 'none'}`,
                 `pending ${pending ? `${fmtLogicalCoord(pending.coord)} ${hexByte(pending.lifeBefore)}->${hexByte(pending.lifeAfter)} ${pending.trigger || ''}` : 'none'}`,
                 `trigger ${stage84C35eBubbleRespawnGuard.lastTrigger}`,
                 `jump ${jump ? `dx ${jump.x} dy ${jump.y} dz ${jump.z}` : '-'}`,
@@ -5127,7 +5163,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const formatStage84C31Target = target => {
             if (!target) return 'none';
-            return `${target.role} ${hexByte(target.physicalRoomId)} ${fmtLogicalCoord(target.logicalCoord)} ${target.label}; ${formatQuestCharm(target.questCharm)} -> ${fmtMechanicSprite(target.sprite)}`;
+            const original = target.originalCharmRoom
+                ? `; original interior ${target.originalCharmRoom.originalRoomHex}; spawn ${fmtXYZ(target.originalCharmRoom.spawn.x, target.originalCharmRoom.spawn.y, target.originalCharmRoom.spawn.z)}`
+                : '';
+            return `${target.role} ${hexByte(target.physicalRoomId)} ${fmtLogicalCoord(target.logicalCoord)} ${target.label}; ${formatQuestCharm(target.questCharm)} -> ${fmtMechanicSprite(target.sprite)}${original}`;
         };
 
         const decodeStage84Slot = (bytes, baseAddr) => {
@@ -5436,14 +5475,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                             : stage84C35eBubbleRespawnGuard.enabled
                                 ? 'ok'
                                 : 'muted',
-                probe: 'C3.5e bubble-death respawn guard',
+                probe: 'C3.5e general death respawn guard',
                 address: `${hexWord(KL_STAGE7_SLIDING_CROSS.currentRoomAddr)} / ${hexWord(KL_STAGE84_C30.playerBodyXyzAddr)} / ${hexWord(KL_STAGE84_C30.playerHeadXyzAddr)}`,
                 decode: formatStage84C35eRespawnGuard(),
                 room: formatStage84C35eRespawnRoom(),
                 bytes: formatStage84C35eRespawnBytes(),
                 notes: stage84C35eBubbleRespawnGuard.lastError
                     ? stage84C35eBubbleRespawnGuard.lastError
-                    : 'Enabled by default with Stage 7 sliding; add ?stage84c35e=0 to disable. Detects a wolf-form bubble death in a logical cauldron, suppresses the death-induced physical-neighbour slide, and restores the player to the recorded cauldron entry coordinates.',
+                    : 'Enabled by default with Stage 7 sliding; add ?stage84c35e=0 to disable. Records every logical-room entry, detects a general life loss, suppresses the death-induced physical-neighbour slide, and restores the same logical room at its recorded entrance.',
             });
 
             addRow({
@@ -5549,7 +5588,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             }
 
             stage84C30Status.textContent = [
-                `C3.0/C3.1/C3.2/C3.3/C3.4/C3.5a mechanic anatomy at ${fmtLogicalCoord(currentCoord)} (${currentRoom.questRole || 'none'}).`,
+                `C3.0-C3.6 mechanic diagnostics at ${fmtLogicalCoord(currentCoord)} (${currentRoom.questRole || 'none'}).`,
                 quest.exists ? `Required ${formatQuestCharm(quest.requiredCharm)}.` : 'No quest in current sector.',
                 `Sampling carry state ${hexWord(KL_STAGE84_C30.carryStateStart)}..${hexWord(KL_STAGE84_C30.carryStateEnd - 1)}, ${KL_STAGE84_C30.liveSlots.length} live slots, ${KL_STAGE84_C30.dynamicProbeCount} dynamic records, and ${staticRecordCount} raw static object records (${nonZeroStaticRecordCount} currently non-zero).`,
                 `C3.1 disposable record ${stage84C31DisposableCharm.recordIndex} is ${stage84C31DisposableCharm.requested ? 'requested' : 'off'}; last action: ${stage84C31DisposableCharm.lastAction}.`,
@@ -5915,8 +5954,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
             return {
                 recentered: true,
+                frame: frameCompletedCount,
+                sample: sampleCount,
+                source: sample.source,
                 direction,
                 fromRoom: sample.room0,
+                viaPhysicalRoom: sample.room0,
                 previousCenter,
                 newCenter,
                 patchedSlots,

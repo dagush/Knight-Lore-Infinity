@@ -1,3 +1,9 @@
+import {
+    getOriginalCharmRoomInterior,
+    getOriginalCharmRoomInteriorByRoomId,
+    ORIGINAL_CHARM_ROOM_INTERIOR_COUNT,
+} from './knightlore-original-charm-rooms.js';
+
 const DIRECTIONS = ['north', 'east', 'south', 'west'];
 
 const DIRECTION_DELTAS = {
@@ -20,6 +26,8 @@ const DEFAULT_OPTIONS = {
     questCauldronOriginalVisual: false,
     questCauldronBubbles: false,
     questCauldronBubbleMode: 'disabled',
+    questCharmOriginalRooms: false,
+    questOriginCharmRoomId: 0x74,
 };
 
 const BIOMES = [
@@ -402,6 +410,16 @@ export function createKnightLoreProceduralMap(options = {}) {
             QUEST_CHARM_TYPES,
             hashInts(config.worldSeed, chunkX, chunkY, 0xc4a1)
         );
+        const originalCharmRoom = config.questCharmOriginalRooms
+            ? chunkX === 0 && chunkY === 0
+                ? getOriginalCharmRoomInteriorByRoomId(config.questOriginCharmRoomId) ||
+                    getOriginalCharmRoomInterior(
+                        hashInts(config.worldSeed, chunkX, chunkY, 0xc4f0) % ORIGINAL_CHARM_ROOM_INTERIOR_COUNT
+                    )
+                : getOriginalCharmRoomInterior(
+                    hashInts(config.worldSeed, chunkX, chunkY, 0xc4f0) % ORIGINAL_CHARM_ROOM_INTERIOR_COUNT
+                )
+            : null;
         const cauldronLocal = chooseQuestAnchorCell(cells, chunkX, chunkY, hub, 0xca11, false);
         const charmReference = cauldronLocal;
         let charmLocal = chooseQuestAnchorCell(cells, chunkX, chunkY, charmReference, 0xc4a2, true);
@@ -422,6 +440,7 @@ export function createKnightLoreProceduralMap(options = {}) {
         sector.quest = {
             exists: true,
             requiredCharm: cloneData(requiredCharm),
+            originalCharmRoom,
             cauldron: toGlobalQuestAnchor(chunkX, chunkY, cauldronLocal),
             charm: toGlobalQuestAnchor(chunkX, chunkY, charmLocal),
             difficulty: 1 + (hashInts(config.worldSeed, chunkX, chunkY, 0xd1ff) % 4),
@@ -443,6 +462,9 @@ export function createKnightLoreProceduralMap(options = {}) {
         if (!quest || !quest.exists || role === 'none') return null;
         const pattern = QUEST_DRESSING_PATTERNS[role];
         if (!pattern) return null;
+        const originalCharmRoom = role === 'charm' && quest.originalCharmRoom
+            ? cloneData(quest.originalCharmRoom)
+            : null;
         const originalCauldronVisual = !!(config.questCauldronOriginalVisual && role === 'cauldron');
         const cauldronBubbleMode = config.questCauldronBubbleMode ||
             (config.questCauldronBubbles ? 'global' : 'disabled');
@@ -457,16 +479,26 @@ export function createKnightLoreProceduralMap(options = {}) {
             : 'disabled';
 
         const common = {
-            phase: originalCauldronVisual ? '8.2C-cauldron-visual-probe' : QUEST_DRESSING_PHASE,
+            phase: originalCharmRoom
+                ? '8.4C3.6-original-charm-interior'
+                : originalCauldronVisual
+                    ? '8.2C-cauldron-visual-probe'
+                    : QUEST_DRESSING_PHASE,
             role,
             requiredCharm: quest.requiredCharm ? cloneData(quest.requiredCharm) : null,
-            visual: originalCauldronVisual
+            visual: originalCharmRoom
+                ? `original ${originalCharmRoom.originalRoomHex} interior with generated architecture`
+                : originalCauldronVisual
                 ? 'original cauldron background visual plus safe static room header'
                 : 'safe static colour and block-run marker',
-            gameplayBytes: originalCauldronVisual
+            gameplayBytes: originalCharmRoom
+                ? 'original location block groups only; generated exits, walls, size, colour, and theme remain unchanged'
+                : originalCauldronVisual
                 ? `location header and original cauldron background id only; bubbles ${bubbleDescription}`
                 : 'location header and foreground block bytes only',
-            enginePolicy: originalCauldronVisual
+            enginePolicy: originalCharmRoom
+                ? 'preserve original static/dynamic interior block groups without importing original topology or object identity'
+                : originalCauldronVisual
                 ? 'restores original cauldron visual background only; no original item, wizard, inventory, charm-order, or quest-completion memory touched'
                 : 'no original object, item, cauldron, wizard, inventory, or quest-order memory touched',
             clearancePolicy: originalCauldronVisual
@@ -486,7 +518,9 @@ export function createKnightLoreProceduralMap(options = {}) {
                 selector: pattern.forceSquare ? 0 : null,
                 colour: pattern.colour,
                 blockRuns: (
-                    originalCauldronVisual
+                    originalCharmRoom
+                        ? cloneData(originalCharmRoom.blocks)
+                        : originalCauldronVisual
                         ? []
                         : cloneData(pattern.blockRuns)
                 ),
@@ -496,6 +530,20 @@ export function createKnightLoreProceduralMap(options = {}) {
                         : []
                 ),
                 originalCauldronVisual,
+                originalCharmRoom: originalCharmRoom
+                    ? {
+                        index: originalCharmRoom.index,
+                        originalRoomId: originalCharmRoom.originalRoomId,
+                        originalRoomHex: originalCharmRoom.originalRoomHex,
+                        spawn: cloneData(originalCharmRoom.spawn),
+                        blockRunCount: originalCharmRoom.blocks.length,
+                        blockObjectCount: originalCharmRoom.blocks.reduce(
+                            (total, run) => total + run.positions.length,
+                            0
+                        ),
+                        architecturePolicy: originalCharmRoom.architecturePolicy,
+                    }
+                    : null,
                 originalCauldronBubbles,
                 originalCauldronBubbleMode: cauldronBubbleMode,
                 bubblePolicy: originalCauldronBubbles
@@ -943,11 +991,12 @@ export function createKnightLoreProceduralMap(options = {}) {
         const questBlocks = createQuestDressingBlockRuns(questDressing);
         const blocks = questBlocks || createBlockRuns(x, y, selector, biome, hash);
         const extraBackgrounds = staticDressing ? cloneData(staticDressing.extraBackgrounds || []) : [];
+        const originalCharmRoom = staticDressing && staticDressing.originalCharmRoom;
         const label = questDressing
-            ? `${questDressing.labelPrefix}:${coordKey(x, y)}:${biome.id}`
+            ? `${questDressing.labelPrefix}:${coordKey(x, y)}:${originalCharmRoom ? `${originalCharmRoom.originalRoomHex}:` : ''}${biome.id}`
             : `generated:${biome.id}:${coordKey(x, y)}`;
         const title = questDressing
-            ? `${questDressing.role === 'cauldron' ? 'Quest cauldron' : 'Quest charm'} ${coordKey(x, y)}`
+            ? `${questDressing.role === 'cauldron' ? 'Quest cauldron' : 'Quest charm'} ${coordKey(x, y)}${originalCharmRoom ? ` using ${originalCharmRoom.originalRoomHex} interior` : ''}`
             : `${biome.title} ${coordKey(x, y)}`;
 
         return {
@@ -1003,6 +1052,8 @@ export function createKnightLoreProceduralMap(options = {}) {
             questSectorQuestPercent: config.questSectorQuestPercent,
             questReachabilityMarginChunks,
             questCharmTypes: QUEST_CHARM_TYPES.length,
+            questCharmOriginalRooms: !!config.questCharmOriginalRooms,
+            originalCharmRoomInteriorCount: ORIGINAL_CHARM_ROOM_INTERIOR_COUNT,
             generatedChunks: chunks.size,
             reachabilityChecks: questReachability.size,
         }),

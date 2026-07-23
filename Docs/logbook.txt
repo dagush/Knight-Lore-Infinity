@@ -2831,3 +2831,153 @@ Conclusion:
   path.
 - The duplicate-cauldron pre-arm fallback is not currently needed.
 - Stage C3.5e is empirically complete.
+
+
++============================================================+
+| 2026 07 22 - C3.6 Original Charm-Room Interiors            |
++============================================================+
+
+2026 07 22
+
+Stage 8.4 C3.6 began the controlled reuse of original Knight Lore charm-room
+challenges inside the infinite logical map.
+
+The architectural decision is explicit:
+
+- the generated map keeps complete authority over room existence, cardinal
+  exits, reciprocal connectivity, walls, arches, theme, and physical ids;
+- original room exits and background architecture are never imported;
+- a selected original room contributes only its compact foreground groups,
+  including both ordinary/static blocks and dynamic hazards or moving objects;
+- the original special-object XYZ is reused for the logical charm.
+
+Implementation:
+
+- Added `SRC/runtime/knightlore-original-charm-rooms.js`.
+- The compact catalogue contains all 32 original `special_objs_tbl` candidate
+  rooms and 385 foreground object placements.
+- Each quest sector deterministically selects one template with a hash of
+  `(worldSeed, sectorX, sectorY, 0xC4F0) modulo 32`.
+- The selected foreground groups replace the Phase B four-spike charm marker.
+- C3.1 now seeds the required logical charm at the selected original XYZ when
+  both probes are enabled.
+- Diagnostics report the source room id, spawn XYZ, group/object counts, and
+  `generated architecture` policy.
+
+The proof is opt-in:
+
+    ?stage84c36=1
+    ?stage8originalcharmrooms=1
+
+Add `?stage84c31=1` for the actual disposable charm object. The first build
+selected original interior `0xE8` for logical charm room `(3,0)`, retained the
+generated four exits, and placed the charm at X=0x78, Y=0x88, Z=0xB0.
+
+Static checks completed before manual play:
+
+- all 32 source templates are unique and available;
+- all 385 packed positions decode to legal x/y/z coordinates;
+- extracted compact groups match the saved original-map room block data;
+- deterministic sector probes retained generated exits while changing only
+  charm-room foreground groups and charm XYZ.
+
+This is not yet a gameplay completion claim. Original puzzles were designed
+around their original doors, so a generated entrance may face an object. The
+next manual proof must test entry/exit from every generated side, room decode
+stability, dynamic-object behaviour, and charm pickup. Any failure should be
+reported with both logical coordinate and original source room id.
+
+
++============================================================+
+| 2026 07 22 - General Death Guard And 0x74 Charm Room       |
++============================================================+
+
+2026 07 22
+
+Manual play confirmed that original charm-room interior `0xE8` rendered and
+behaved correctly. However, dying on its hazards reproduced the one-room
+respawn displacement previously attributed to cauldron bubbles.
+
+New conclusion:
+
+- the displacement is a general original death/respawn behaviour interacting
+  with Stage 7 logical recentering;
+- it is not specific to bubbles, cauldrons, wolf form, or quest completion;
+- the previous C3.5e fix was mechanically useful but scoped too narrowly.
+
+C3.5e was generalized:
+
+- every logical-room entry now records its coordinate, role, entry side,
+  body/head XYZ, physical center id, and lives baseline;
+- the immediately previous entry remains latched for 24 frames;
+- a life drop after a death-generated neighbour recenter can therefore recover
+  the real death room even when the decrement appears one or more samples late;
+- correction restores the logical center and five-room cross, rewrites active
+  room ids to `0x88`, and restores body/head XYZ to the recorded entrance;
+- the old wolf/bubble form-change detector remains as a fallback only;
+- diagnostics now use the name `C3.5e general death respawn guard` and expose
+  current, armed, and previous entries.
+
+The starting quest sector was also changed to use original charm-room interior
+`0x74`, which is expected to be easier than `0xE8`:
+
+- logical charm room: `(3,0)`;
+- generated exits: north, east, south, west, unchanged;
+- original interior groups: `0x05` spike block x3, `0x00` block x8, and
+  `0x16` collapsing block x4;
+- charm XYZ: X=0x48, Y=0xB8, Z=0x80.
+
+The `(0,0)` sector override is deterministic. Other sectors continue using the
+existing `(worldSeed, sectorX, sectorY)` template hash.
+
+Required manual proof:
+
+- enter `(3,0)` and confirm the Stage 8 row reports original interior `0x74`;
+- die deliberately on a hazard;
+- confirm the player remains in logical room `(3,0)` at the same entrance;
+- confirm `corrections` increments and trigger reports a general/recent-room
+  life drop;
+- leave and re-enter normally to ensure ordinary transitions are not mistaken
+  for deaths.
+
+
++============================================================+
+| 2026 07 23 - General Death Guard Confirmed                 |
++============================================================+
+
+2026 07 23
+
+The generalized C3.5e death-respawn guard passed its manual charm-room test.
+
+The player died on a hazard in logical charm room `(3,0)`, using imported
+original interior `0x74`. Diagnostics after recovery reported:
+
+- trigger `general life drop`;
+- attempted wrong physical room `0x89`;
+- logical room still `(3,0)`, role `charm`;
+- recorded and armed entry still west;
+- room-id writes at `0x5C10` and `0x5C30`;
+- body/head restoration at `0x5C09..0x5C0B` and `0x5C29..0x5C2B`;
+- corrections 2 and writes 8 after two tested deaths.
+
+The player reappeared in the correct logical room at the correct entrance.
+After leaving and re-entering normally, corrections and writes remained at
+2/8. This confirms that the guard did not mistake ordinary movement for death.
+
+One diagnostic refinement followed from the trace. `previous entry` could show
+the same room as the current entry because the immediate post-recenter action
+did not include the frame/sample metadata present in `lastTransition`. The
+next sample therefore appeared to have a different transition key and archived
+a duplicate entry.
+
+Stage 7 recenter results now include frame, sample, source, and physical-room
+metadata. The immediate and following snapshots therefore share a stable key,
+preserving the real previous-room latch for the intended 24-frame delayed-life-
+loss window.
+
+Conclusion:
+
+- the general death displacement is fixed for the tested charm-room hazard;
+- the earlier cauldron bubble-death path remains covered by the same guard;
+- normal transitions remain unaffected;
+- C3.5e is empirically complete for the currently tested death paths.

@@ -413,6 +413,63 @@ respawn displacement should be handled as a later death/respawn-state probe,
 probably around current-room, entry-side, and transition-state working memory,
 rather than as part of the static bubble-template gate.
 
+Original Charm-Room Interiors
+-----------------------------
+
+Stage 8.4 C3.6 can replace the simple Phase B charm-room marker with an
+interior copied from one of the original game's 32 `special_objs_tbl` rooms.
+This mode is opt-in:
+
+    ?stage84c36=1
+    ?stage8originalcharmrooms=1
+
+The compact catalogue lives in:
+
+    SRC/runtime/knightlore-original-charm-rooms.js
+
+It contains 32 templates and 385 packed foreground objects. The foreground
+groups include both ordinary/static block arrangements and dynamic hazards or
+moving objects. Each template also stores the XYZ position of the original
+special-object record.
+
+The architecture boundary is strict:
+
+- the original template contributes foreground block groups and charm XYZ;
+- generated room existence, cardinal exits, reciprocal connectivity, wall and
+  arch backgrounds, theme, and physical ids remain authoritative;
+- original background ids are not copied because the candidate-room
+  backgrounds are architectural walls, arches, fillers, or high-arch pieces;
+- original room id, exit mask, size selector, colour, and map coordinate are
+  provenance only and do not control the generated room.
+
+Selection is deterministic per quest sector:
+
+    hash(worldSeed, sectorX, sectorY, 0xC4F0) % 32
+
+The starting sector `(0,0)` is an explicit deterministic exception: it uses
+original interior `0x74`, selected as the easier first playable charm-room
+proof. This changes only the template choice for that sector. All other sectors
+continue to use the hash rule above.
+
+Therefore a sector receives the same original interior after revisiting or
+reloading, while repetitions remain expected across the unbounded map. The
+logical label records the selected source, for example:
+
+    quest-charm:3,0:0x74:rock-vaults
+
+With C3.1 enabled, the disposable quest charm uses the selected template's
+original XYZ instead of the generic `(0x80,0x80,0x80)` position. Its sprite
+still comes from the sector's required charm metadata, so the selected room
+challenge and the cauldron/charm identity remain connected.
+
+This combination is mechanically valid but not yet universally proven safe.
+Original puzzles were composed around their original entrances, so a generated
+door can occasionally face a blocking object. Manual testing must therefore
+record the logical coordinate and original template id if an entrance is
+blocked, or if a dynamic group causes a reset or freeze. The correct later fix
+is a deterministic per-template entrance-clearance rule, not importing the
+original exits.
+
 
 Biome / Style Layer
 -------------------
