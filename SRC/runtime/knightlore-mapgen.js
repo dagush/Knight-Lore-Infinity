@@ -27,7 +27,7 @@ const DEFAULT_OPTIONS = {
     questCauldronBubbles: false,
     questCauldronBubbleMode: 'disabled',
     questCharmOriginalRooms: false,
-    questOriginCharmRoomId: 0x74,
+    questOriginCharmRoomId: 0xb4,
 };
 
 const BIOMES = [

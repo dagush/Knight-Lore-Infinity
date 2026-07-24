@@ -1096,6 +1096,94 @@ Manual completion confirmation, 2026 07 23:
 - C3.5e general-death status: empirically completed for the tested hazard and
   bubble paths.
 
+C3.5f - Game-Over Origin Reset
+------------------------------
+
+Goal:
+
+- Distinguish an ordinary death from the original game's final-life game-over
+  path.
+- Start every new game at logical room `(0,0)` in sector `(0,0)`, where the
+  external wizard/NPC will live.
+
+Original engine fact:
+
+- `start_menu` writes `5` to the lives byte.
+- The initial call through `player_dies` consumes one, so normal play begins
+  with the diagnostic value `0x04`.
+- `lose_life` decrements the byte and enters `game_over` only when the signed
+  result is negative. In normal play this is the transition `0x00 -> 0xFF`.
+- Therefore `1 -> 0` is still an ordinary death and must remain under C3.5e.
+
+Runtime policy:
+
+- Watch lives at `0x5BBA`.
+- On `0x00 -> 0xFF`, stop treating physical-room changes as Stage 7 movement.
+- Set the external Stage 7 center to `(0,0)`.
+- Recompile and write the physical five-room cross around that origin while the
+  original game-over screen is active.
+- Reassert `0x88` at `0x5C10`, `0x5C30`, and all four original
+  `start_locations` choices at `0xD1E2..0xD1E5`.
+- Clear C3.5e's ordinary-death entry latches so the later `0xFF -> 0x05/0x04`
+  new-game transition cannot be mistaken for a life loss.
+- Do not write player body/head XYZ: the original new-game initialization owns
+  the fresh spawn.
+- Preserve JS-side quest persistence. Resetting progress on a new game is a
+  separate future policy decision.
+
+Timing fallback:
+
+- The primary path should see `0xFF` for many completed frames while the
+  game-over screen waits for input.
+- If sampling somehow misses that state, a low lives value followed directly
+  by the original `0x04/0x05` refill also queues the origin cross.
+- This fallback is intentionally narrow so collecting a normal extra life does
+  not look like a restart.
+- The fallback is armed only after the runtime has observed active play and a
+  later zero-life state. The pre-game `0x00 -> 0x04` startup sequence therefore
+  is not classified as game over.
+
+Diagnostics:
+
+- Add `C3.5f game-over origin reset`.
+- Show previous/current lives, latch/pending state, trigger, reset/write counts,
+  previous logical center, current center, and patched addresses.
+- Enabled by default with Stage 7; `?stage84c35f=0` is the control switch.
+
+Exit criteria:
+
+- From a non-origin logical room, losing the final life increments C3.5f
+  `resets` exactly once.
+- The next game starts at logical `(0,0)`, physical center `0x88`.
+- C3.5e does not increment its ordinary `corrections` counter for game over.
+- A normal non-final death still restores the same logical room and entrance.
+
+Manual confirmation and record-31 correction, 2026 07 23:
+
+- A final death at logical `(0,-5)` produced the primary trigger
+  `original lives underflow 0x00 -> 0xFF`.
+- Diagnostics showed one reset, six room/start bytes written, previous center
+  `(0,-5)`, and new center `(0,0)`.
+- The next game began at logical `(0,0)` as intended.
+- A disposable charm unexpectedly appeared at origin. Cause:
+  - C3.1 preserves static record 31 while its object is carried;
+  - the active record still stored physical start room `0x88`;
+  - original `init_special_objects` copied the start X/Y/Z/room fields back to
+    current fields and randomized its sprite for the new game;
+  - physical `0x88` now represented logical origin, so the stale record became
+    visible in a non-charm room.
+- C3.5f now forces record 31 to the inactive layout with start/current room
+  `0xFF` before original restart initialization, ignoring the obsolete carried
+  state from the finished game.
+- It performs a second cleanup when lives reach active-play value `0x04`,
+  after `init_special_objects` has randomized the record sprite.
+- Diagnostics expose record-31 write count, cleanup action, and before/after
+  bytes.
+- Origin-reset and record-31 cleanup are empirically complete. The final
+  restart retest showed no charm at origin, two record writes, and the expected
+  post-init conversion from randomized sprite `0x62` to inactive sprite
+  `0x00`, with both room fields remaining `0xFF`.
+
 Exit criteria:
 
 - The animation/display issue is either fixed, externally supplemented, or
@@ -1149,8 +1237,10 @@ First proof:
 - Opt in with `?stage84c36=1` or `?stage8originalcharmrooms=1`.
 - Add `?stage84c31=1` to place the actual disposable charm at the imported XYZ.
 - In sector `(0,0)`, the origin-sector override chooses original interior
-  `0x74` for charm room `(3,0)` while retaining that generated room's four
-  exits. Other sectors keep their deterministic hash selection.
+  `0xB4` for charm room `(3,0)` while retaining that generated room's four
+  exits. Other sectors keep their deterministic hash selection. `0xB4` replaces
+  the successful but slightly harder `0x74` proof room as the easiest initial
+  pickup test.
 - Verify every generated entrance remains usable, the original interior
   decodes without reset/freeze, and the charm can be reached and collected.
 

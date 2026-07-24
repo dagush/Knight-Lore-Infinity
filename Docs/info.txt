@@ -720,9 +720,22 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
              Diagnose this by logical coordinate and source room id; retain our
              exits and add a template-specific clearance rule if needed.
           Starting-sector template:
-             sector (0,0) deliberately uses original room 0x74 instead of the
+             sector (0,0) deliberately uses original room 0xB4 instead of the
              hash-selected 0xE8. Its original charm XYZ is
-             X=0x48, Y=0xB8, Z=0x80. Other sectors remain hash-selected.
+             X=0x78, Y=0x88, Z=0xB0. Other sectors remain hash-selected.
+          Required-charm adjacency sample, 2026 07 23:
+             scan: 257 x 257 = 66,049 sectors;
+             adjacent cardinal pairs: 131,584;
+             equal adjacent requirements: 18,909 = 14.370%;
+             independent seven-charm expectation: 1/7 = 14.286%;
+             horizontal 14.383%, vertical 14.357%;
+             maximum observed straight repeat: 6 sectors;
+             sectors with at least one equal cardinal neighbour: 47.114%,
+             versus independent expectation 46.022%;
+             matching triples: 2.175%, versus expectation 2.041%.
+             Conclusion: adjacent equal requirements are normal deterministic
+             coincidences. There is no meaningful directional/region pattern
+             in this sample and no anti-repeat rule is needed.
        C3.5e general death-respawn revision:
           A normal hazard death in imported charm-room interior 0xE8 reproduced
           the same opposite-room displacement previously seen after bubble
@@ -759,6 +772,62 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
              and viaPhysicalRoom metadata, matching Stage 7 lastTransition.
              This prevents a second snapshot of the same newly entered room
              from replacing the true previous-room latch one frame later.
+       C3.5f game-over origin reset:
+          The original lives byte is 0x5BBA. start_menu writes 5 and the
+          initial player_dies call consumes one, so active play begins at 4.
+          lose_life enters game_over only after signed underflow:
+             ordinary last displayed life: 0x00;
+             game-over signal: 0x00 -> 0xFF.
+          Consequently 0x01 -> 0x00 remains an ordinary C3.5e death.
+          On the signed-underflow signal, the runtime:
+             suppresses normal Stage 7 transition handling;
+             changes the logical center to (0,0);
+             recompiles the physical five-room cross around the origin;
+             rewrites 0x5C10 and 0x5C30 to physical center 0x88;
+             rewrites 0xD1E2..0xD1E5 to four 0x88 start choices;
+             clears C3.5e ordinary-death history;
+             leaves player body/head XYZ to original new-game initialization.
+          A narrow refill fallback accepts a missed signed frame when a low or
+          signed lives value jumps to original startup value 0x04/0x05.
+          The fallback first requires observed active play followed by an
+          observed zero-life state, so initial pre-game 0x00 -> 0x04 startup is
+          not misclassified.
+          JS-side quest persistence is retained; only the active logical map
+          center is reset.
+          Diagnostics row:
+             C3.5f game-over origin reset
+          Disable control:
+             ?stage84c35f=0
+          Status, 2026 07 23:
+             manual final-life test passed from logical (0,-5);
+             trigger original lives underflow 0x00 -> 0xFF;
+             reset count 1 and room/start writes 6;
+             next game began at logical (0,0).
+          Record-31 restart leak:
+             The first successful reset exposed a charm at non-charm origin.
+             C3.1 had preserved static object record 31 while carried, leaving
+             its physical start room as 0x88. During a new game,
+             init_special_objects randomizes every special-object sprite and
+             copies start X/Y/Z/room to current X/Y/Z/room. The stale physical
+             0x88 therefore instantiated at the new logical origin.
+          Correction:
+             before restart initialization, C3.5f ignores old carried state
+             and forces record 31 to:
+                0x00, 0x80,0x80,0x80,0xFF, 0x80,0x80,0x80,0xFF
+             A second cleanup waits for active-play lives 0x04, which occurs
+             after init_special_objects has randomized the sprite. This leaves
+             both start/current rooms inactive and restores sprite 0x00.
+             Diagnostics show the cleanup count, action, and before/after
+             record bytes.
+          Manual cleanup confirmation, 2026 07 23:
+             origin remained charm-free after the next full restart;
+             resets 1; total writes 24; charm-record writes 2;
+             post-init record before:
+                0x62,0x80,0x80,0x80,0xFF,0x80,0x80,0x80,0xFF
+             post-init record after:
+                0x00,0x80,0x80,0x80,0xFF,0x80,0x80,0x80,0xFF
+             current center (0,0); last reset from (0,-5).
+             C3.5f and its record-31 restart cleanup are empirically complete.
 
 wizard: 0x9F and 0x9E -> head
         0x90 ~ 0x95 -> body

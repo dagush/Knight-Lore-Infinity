@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage84-c36-general-death-confirmed-20260723-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage84-c35f-charm-reset-20260723-2';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -68,6 +68,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     })();
     const KL_STAGE84_C35E_REQUESTED = !['0', 'false', 'off', 'disabled', 'no'].includes(
         (KL_URL_PARAMS.get('stage84c35e') || KL_URL_PARAMS.get('stage8c35e') || '1').trim().toLowerCase()
+    );
+    const KL_STAGE84_C35F_REQUESTED = !['0', 'false', 'off', 'disabled', 'no'].includes(
+        (KL_URL_PARAMS.get('stage84c35f') || KL_URL_PARAMS.get('stage8c35f') || '1').trim().toLowerCase()
     );
     const KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED = ['1', 'true', 'on', 'yes'].includes(
         (KL_URL_PARAMS.get('stage84c36') || KL_URL_PARAMS.get('stage8originalcharmrooms') || '').trim().toLowerCase()
@@ -1857,6 +1860,31 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 : 'disabled with ?stage84c35e=0',
             lastError: null,
         };
+        let stage84C35fGameOverOriginReset = {
+            requested: KL_STAGE84_C35F_REQUESTED,
+            enabled: KL_STAGE84_C35F_REQUESTED && KL_STAGE7_SLIDING_CROSS.enabled,
+            previousLives: null,
+            currentLives: null,
+            pendingReset: null,
+            gameOverLatched: false,
+            sawActiveGame: false,
+            zeroAfterActiveGame: false,
+            resets: 0,
+            writes: 0,
+            charmRecordWrites: 0,
+            lastCharmRecordBefore: [],
+            lastCharmRecordAfter: [],
+            lastCharmResetAction: KL_STAGE84_C31_ENABLED
+                ? 'waiting for game-over cleanup'
+                : 'C3.1 disposable charm is not requested',
+            lastPatchedAddrs: [],
+            lastFromCoord: null,
+            lastTrigger: 'none',
+            lastAction: KL_STAGE84_C35F_REQUESTED
+                ? 'armed; waiting for original lives underflow 0x00 -> 0xFF'
+                : 'disabled with ?stage84c35f=0',
+            lastError: null,
+        };
 
         if (logicalMapLoadPromise) {
             logicalMapLoadPromise.finally(() => {
@@ -3025,6 +3053,56 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     lastAction: 'write failed',
                 };
             }
+        };
+
+        const forceStage84C31InactiveForNewGame = async reason => {
+            if (!stage84C31DisposableCharm.requested) {
+                return {
+                    requested: false,
+                    written: false,
+                    bytesWritten: 0,
+                    before: [],
+                    after: [],
+                    action: 'C3.1 disposable charm is not requested',
+                };
+            }
+
+            const desiredBytes = makeStage84C31InactiveRecord();
+            const result = await emu.readMemory(
+                stage84C31DisposableCharm.recordAddr,
+                KL_STAGE84_C30.staticObjectRecordSize
+            );
+            const currentBytes = Array.from(result.data);
+            const written = !sameBytes(currentBytes, desiredBytes);
+            if (written) {
+                await emu.writeMemory(
+                    stage84C31DisposableCharm.recordAddr,
+                    Uint8Array.from(desiredBytes)
+                );
+            }
+            const action = written
+                ? `${reason}; forced disposable record inactive`
+                : `${reason}; disposable record already inactive`;
+            stage84C31DisposableCharm = {
+                ...stage84C31DisposableCharm,
+                enabled: true,
+                target: null,
+                desiredBytes,
+                lastReadback: desiredBytes,
+                carried: false,
+                referencedInLiveSlot: false,
+                writes: stage84C31DisposableCharm.writes + (written ? 1 : 0),
+                lastAction: action,
+                lastError: null,
+            };
+            return {
+                requested: true,
+                written,
+                bytesWritten: written ? KL_STAGE84_C30.staticObjectRecordSize : 0,
+                before: currentBytes,
+                after: desiredBytes,
+                action,
+            };
         };
 
         const updateStage82CBubbleProbe = async (workRange, sample) => {
@@ -4754,6 +4832,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             let pendingDeath = stage84C35eBubbleRespawnGuard.pendingDeath;
             let lastAction = stage84C35eBubbleRespawnGuard.lastAction;
             const justCorrected = !!(sample && sample.stage84C35eAction && sample.stage84C35eAction.corrected);
+            const gameOverActive = context.lives !== null && context.lives >= 0x80;
             const unresolvedArmedLifeDrop = !!(
                 armedEntrySnapshot &&
                 armedEntrySnapshot.lives !== null &&
@@ -4761,7 +4840,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 context.lives < armedEntrySnapshot.lives
             );
 
-            if (!stage84C35eBubbleRespawnGuard.requested) {
+            if (gameOverActive) {
+                entrySnapshot = null;
+                armedEntrySnapshot = null;
+                previousEntrySnapshot = null;
+                pendingDeath = null;
+                lastAction = 'game over delegated to C3.5f; ordinary death latch cleared';
+            } else if (!stage84C35eBubbleRespawnGuard.requested) {
                 lastAction = 'disabled with ?stage84c35e=0';
             } else if (!KL_STAGE7_SLIDING_CROSS.enabled) {
                 lastAction = 'disabled because Stage 7 sliding is off';
@@ -4821,7 +4906,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 armedEntrySnapshot,
                 previousEntrySnapshot,
                 pendingDeath,
-                lastSnapshot: context,
+                lastSnapshot: gameOverActive ? null : context,
                 lastCoord: cloneData(context.coord),
                 lastRole: context.role,
                 lastPlayerForm: context.playerForm,
@@ -4850,6 +4935,24 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 context.lives !== null &&
                 context.lives < previous.lives
             );
+
+            if (context.lives !== null && context.lives >= 0x80) {
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    entrySnapshot: null,
+                    armedEntrySnapshot: null,
+                    previousEntrySnapshot: null,
+                    pendingDeath: null,
+                    lastSnapshot: null,
+                    lastCoord: cloneData(context.coord),
+                    lastRole: context.role,
+                    lastPlayerForm: context.playerForm,
+                    lastLives: context.lives,
+                    lastAction: 'game over delegated to C3.5f; no same-room correction attempted',
+                    lastError: null,
+                };
+                return null;
+            }
 
             if (!stage84C35eBubbleRespawnGuard.requested) {
                 stage84C35eBubbleRespawnGuard = {
@@ -5097,6 +5200,321 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             }
         };
 
+        const clearStage84C35eForGameOver = lives => {
+            stage84C35eBubbleRespawnGuard = {
+                ...stage84C35eBubbleRespawnGuard,
+                entrySnapshot: null,
+                armedEntrySnapshot: null,
+                previousEntrySnapshot: null,
+                pendingDeath: null,
+                lastSnapshot: null,
+                lastCoord: {x: 0, y: 0},
+                lastRole: 'none',
+                lastLives: lives,
+                lastTrigger: 'game over delegated to C3.5f',
+                lastAction: 'game-over origin reset cleared ordinary death history',
+                lastError: null,
+            };
+        };
+
+        const applyStage84C35fGameOverOriginReset = async (workRange, sample) => {
+            const currentLives = readByte(workRange, 0x5bba);
+            const previousLives = stage84C35fGameOverOriginReset.previousLives;
+            const fromCoord = getStage8CurrentCoord();
+            let pendingReset = stage84C35fGameOverOriginReset.pendingReset;
+            let gameOverLatched = stage84C35fGameOverOriginReset.gameOverLatched;
+            let sawActiveGame = stage84C35fGameOverOriginReset.sawActiveGame;
+            let zeroAfterActiveGame = stage84C35fGameOverOriginReset.zeroAfterActiveGame;
+            let lastAction = stage84C35fGameOverOriginReset.lastAction;
+            let lastError = null;
+
+            if (!stage84C35fGameOverOriginReset.requested) {
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: false,
+                    previousLives: currentLives,
+                    currentLives,
+                    lastAction: 'disabled with ?stage84c35f=0',
+                    lastError: null,
+                };
+                return null;
+            }
+
+            if (!KL_STAGE7_SLIDING_CROSS.enabled || typeof emu.writeMemory !== 'function') {
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: false,
+                    previousLives: currentLives,
+                    currentLives,
+                    lastAction: KL_STAGE7_SLIDING_CROSS.enabled
+                        ? 'writeMemory unavailable'
+                        : 'disabled because Stage 7 sliding is off',
+                    lastError: null,
+                };
+                return null;
+            }
+
+            const signedUnderflow = previousLives !== null &&
+                previousLives === 0x00 &&
+                zeroAfterActiveGame &&
+                currentLives === 0xff;
+            const restartedAfterUnderflow = previousLives !== null &&
+                previousLives >= 0x80 &&
+                zeroAfterActiveGame &&
+                currentLives >= 0x04 &&
+                currentLives <= 0x05;
+            const missedUnderflowFallback = previousLives !== null &&
+                previousLives <= 0x01 &&
+                zeroAfterActiveGame &&
+                currentLives >= 0x04 &&
+                currentLives <= 0x05;
+
+            if (!pendingReset && !gameOverLatched && (
+                signedUnderflow ||
+                restartedAfterUnderflow ||
+                missedUnderflowFallback
+            )) {
+                const trigger = signedUnderflow
+                    ? `original lives underflow ${hexByte(previousLives)} -> ${hexByte(currentLives)}`
+                    : restartedAfterUnderflow
+                        ? `new-game refill after signed lives value ${hexByte(previousLives)} -> ${hexByte(currentLives)}`
+                        : `missed-underflow fallback ${hexByte(previousLives)} -> ${hexByte(currentLives)}`;
+                pendingReset = {
+                    trigger,
+                    fromCoord: cloneData(fromCoord),
+                    frame: frameCompletedCount,
+                    sample: sampleCount,
+                };
+                gameOverLatched = true;
+                lastAction = `game over detected by ${trigger}; origin cross queued`;
+            }
+
+            if (!pendingReset && !gameOverLatched) {
+                if (currentLives >= 0x01 && currentLives <= 0x05) {
+                    sawActiveGame = true;
+                    zeroAfterActiveGame = false;
+                    lastAction = `watching active game; lives ${hexByte(currentLives)}`;
+                } else if (currentLives === 0x00 && sawActiveGame) {
+                    zeroAfterActiveGame = true;
+                    lastAction = 'zero-life state observed after active play; waiting for signed underflow';
+                }
+            }
+
+            if (
+                gameOverLatched &&
+                !pendingReset &&
+                currentLives >= 0x01 &&
+                currentLives <= 0x04
+            ) {
+                gameOverLatched = false;
+                sawActiveGame = currentLives >= 0x01 && currentLives <= 0x05;
+                zeroAfterActiveGame = false;
+                let charmReset;
+                try {
+                    charmReset = await forceStage84C31InactiveForNewGame(
+                        'C3.5f post-init cleanup'
+                    );
+                } catch (err) {
+                    lastError = `Failed C3.5f post-init disposable charm cleanup: ${err}`;
+                    gameOverLatched = true;
+                    stage84C35fGameOverOriginReset = {
+                        ...stage84C35fGameOverOriginReset,
+                        enabled: true,
+                        previousLives: currentLives,
+                        currentLives,
+                        gameOverLatched,
+                        sawActiveGame,
+                        zeroAfterActiveGame,
+                        lastAction: 'new game active, but post-init charm cleanup failed',
+                        lastError,
+                    };
+                    return {
+                        suppressGeneralDeath: true,
+                        suppressStage7: false,
+                        released: true,
+                        error: lastError,
+                    };
+                }
+                clearStage84C35eForGameOver(currentLives);
+                lastAction = `new game active with lives ${hexByte(currentLives)}; origin remains pre-armed; ${charmReset.action}`;
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: true,
+                    previousLives: currentLives,
+                    currentLives,
+                    gameOverLatched,
+                    sawActiveGame,
+                    zeroAfterActiveGame,
+                    writes: stage84C35fGameOverOriginReset.writes + charmReset.bytesWritten,
+                    charmRecordWrites: stage84C35fGameOverOriginReset.charmRecordWrites + (charmReset.written ? 1 : 0),
+                    lastCharmRecordBefore: charmReset.before,
+                    lastCharmRecordAfter: charmReset.after,
+                    lastCharmResetAction: charmReset.action,
+                    lastAction,
+                    lastError: null,
+                };
+                return {
+                    suppressGeneralDeath: true,
+                    suppressStage7: false,
+                    released: true,
+                };
+            }
+
+            if (!pendingReset) {
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: true,
+                    previousLives: currentLives,
+                    currentLives,
+                    gameOverLatched,
+                    sawActiveGame,
+                    zeroAfterActiveGame,
+                    lastAction,
+                    lastError: null,
+                };
+                return gameOverLatched || currentLives >= 0x80
+                    ? {suppressGeneralDeath: true, suppressStage7: true}
+                    : null;
+            }
+
+            if (stage7SlidingCross.inFlight) {
+                lastAction = `waiting for active Stage 7 write before resetting ${fmtLogicalCoord(pendingReset.fromCoord)} to origin`;
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: true,
+                    previousLives: currentLives,
+                    currentLives,
+                    pendingReset,
+                    gameOverLatched,
+                    sawActiveGame,
+                    zeroAfterActiveGame,
+                    lastAction,
+                    lastError: null,
+                };
+                return {
+                    suppressGeneralDeath: true,
+                    suppressStage7: true,
+                    pending: true,
+                };
+            }
+
+            try {
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    center: {x: 0, y: 0},
+                    attempted: false,
+                    done: false,
+                    lastCompiled: null,
+                    lastTransition: null,
+                    lastPatchedSlots: [],
+                    message: `C3.5f detected game over at ${fmtLogicalCoord(pendingReset.fromCoord)}; compiling the origin cross before the next game.`,
+                };
+                renderStage7SlidingRow();
+                await applyStage7CrossInjection('C3.5f game-over reset to logical origin (0,0)');
+
+                if (!stage7SlidingCross.done || stage7SlidingCross.lastError) {
+                    lastError = stage7SlidingCross.lastError ||
+                        'Stage 7 origin cross did not finish; retrying on the next completed frame';
+                    stage84C35fGameOverOriginReset = {
+                        ...stage84C35fGameOverOriginReset,
+                        enabled: true,
+                        previousLives: currentLives,
+                        currentLives,
+                        pendingReset,
+                        gameOverLatched,
+                        sawActiveGame,
+                        zeroAfterActiveGame,
+                        lastAction: 'origin cross write incomplete; retry queued',
+                        lastError,
+                    };
+                    return {
+                        suppressGeneralDeath: true,
+                        suppressStage7: true,
+                        pending: true,
+                        error: lastError,
+                    };
+                }
+
+                const charmReset = await forceStage84C31InactiveForNewGame(
+                    'C3.5f pre-init cleanup'
+                );
+                const roomIdAddrs = [
+                    KL_STAGE7_SLIDING_CROSS.currentRoomAddr,
+                    0x5c30,
+                ];
+                for (const addr of roomIdAddrs) {
+                    await emu.writeMemory(addr, Uint8Array.from([KL_STAGE7_SLIDING_CROSS.centerRoom]));
+                }
+                await emu.writeMemory(
+                    KL_STAGE2.startLocationsAddr,
+                    Uint8Array.from(KL_STAGE2.startLocationsPatched)
+                );
+                const patchedAddrs = [
+                    ...roomIdAddrs,
+                    ...KL_STAGE2.startLocationsPatched.map((value, index) => KL_STAGE2.startLocationsAddr + index),
+                ];
+
+                clearStage84C35eForGameOver(currentLives);
+                lastAction = `reset ${fmtLogicalCoord(pendingReset.fromCoord)} to origin; pre-armed physical 0x88 cross and four 0x88 start choices; ${charmReset.action}`;
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: true,
+                    previousLives: currentLives,
+                    currentLives,
+                    pendingReset: null,
+                    gameOverLatched: true,
+                    sawActiveGame,
+                    zeroAfterActiveGame,
+                    resets: stage84C35fGameOverOriginReset.resets + 1,
+                    writes: stage84C35fGameOverOriginReset.writes + patchedAddrs.length + charmReset.bytesWritten,
+                    charmRecordWrites: stage84C35fGameOverOriginReset.charmRecordWrites + (charmReset.written ? 1 : 0),
+                    lastCharmRecordBefore: charmReset.before,
+                    lastCharmRecordAfter: charmReset.after,
+                    lastCharmResetAction: charmReset.action,
+                    lastPatchedAddrs: patchedAddrs,
+                    lastFromCoord: cloneData(pendingReset.fromCoord),
+                    lastTrigger: pendingReset.trigger,
+                    lastAction,
+                    lastError: null,
+                };
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    center: {x: 0, y: 0},
+                    lastPatchedSlots: roomIdAddrs,
+                    message: `${stage7SlidingCross.message} C3.5f pre-armed the next game at logical origin (0,0).`,
+                };
+                renderStage7SlidingRow();
+                return {
+                    reset: true,
+                    suppressGeneralDeath: true,
+                    suppressStage7: true,
+                    coord: {x: 0, y: 0},
+                    trigger: pendingReset.trigger,
+                    patchedAddrs,
+                };
+            } catch (err) {
+                lastError = `Failed C3.5f game-over origin reset: ${err}`;
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: true,
+                    previousLives: currentLives,
+                    currentLives,
+                    pendingReset,
+                    gameOverLatched,
+                    sawActiveGame,
+                    zeroAfterActiveGame,
+                    lastAction: 'origin reset write failed; retry queued',
+                    lastError,
+                };
+                return {
+                    suppressGeneralDeath: true,
+                    suppressStage7: true,
+                    pending: true,
+                    error: lastError,
+                };
+            }
+        };
+
         const formatStage84C35eRespawnGuard = () => {
             const entry = stage84C35eBubbleRespawnGuard.entrySnapshot;
             const armedEntry = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
@@ -5142,6 +5560,45 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             stage84C35eBubbleRespawnGuard.lastPatchedAddrs.length
                 ? `room-id writes ${stage84C35eBubbleRespawnGuard.lastPatchedAddrs.map(hexWord).join(' ')}; body ${hexWord(KL_STAGE84_C30.playerBodyXyzAddr)}..${hexWord(KL_STAGE84_C30.playerBodyXyzAddr + 2)}; head ${hexWord(KL_STAGE84_C30.playerHeadXyzAddr)}..${hexWord(KL_STAGE84_C30.playerHeadXyzAddr + 2)}`
                 : '-'
+        );
+
+        const formatStage84C35fGameOverReset = () => (
+            [
+                `requested ${stage84C35fGameOverOriginReset.requested ? 'yes' : 'no'}`,
+                `enabled ${stage84C35fGameOverOriginReset.enabled ? 'yes' : 'no'}`,
+                `lives previous ${stage84C35fGameOverOriginReset.previousLives === null ? '-' : hexByte(stage84C35fGameOverOriginReset.previousLives)}`,
+                `current ${stage84C35fGameOverOriginReset.currentLives === null ? '-' : hexByte(stage84C35fGameOverOriginReset.currentLives)}`,
+                `latched ${stage84C35fGameOverOriginReset.gameOverLatched ? 'yes' : 'no'}`,
+                `active game seen ${stage84C35fGameOverOriginReset.sawActiveGame ? 'yes' : 'no'}`,
+                `zero-life armed ${stage84C35fGameOverOriginReset.zeroAfterActiveGame ? 'yes' : 'no'}`,
+                `pending ${stage84C35fGameOverOriginReset.pendingReset ? stage84C35fGameOverOriginReset.pendingReset.trigger : 'none'}`,
+                `resets ${stage84C35fGameOverOriginReset.resets}`,
+                `writes ${stage84C35fGameOverOriginReset.writes}`,
+                `charm record writes ${stage84C35fGameOverOriginReset.charmRecordWrites}`,
+                `charm reset ${stage84C35fGameOverOriginReset.lastCharmResetAction}`,
+                `trigger ${stage84C35fGameOverOriginReset.lastTrigger}`,
+                `last action ${stage84C35fGameOverOriginReset.lastAction}`,
+            ].join('; ')
+        );
+
+        const formatStage84C35fGameOverRoom = () => (
+            [
+                `current center ${fmtLogicalCoord(stage7SlidingCross.center)}`,
+                `target origin (0, 0)`,
+                `last reset from ${stage84C35fGameOverOriginReset.lastFromCoord ? fmtLogicalCoord(stage84C35fGameOverOriginReset.lastFromCoord) : '-'}`,
+            ].join('; ')
+        );
+
+        const formatStage84C35fGameOverBytes = () => (
+            [
+                stage84C35fGameOverOriginReset.lastPatchedAddrs.length
+                    ? `room/start writes ${stage84C35fGameOverOriginReset.lastPatchedAddrs.map(hexWord).join(' ')}`
+                    : 'room/start writes -',
+                `location table ${hexWord(KL_STAGE1.locationStart)}..${hexWord(KL_STAGE1.locationEnd - 1)} recompiled for origin cross`,
+                stage84C35fGameOverOriginReset.lastCharmRecordAfter.length
+                    ? `record 31 ${hexWord(stage84C31DisposableCharm.recordAddr)}: ${fmtBytes(stage84C35fGameOverOriginReset.lastCharmRecordBefore, 9)} -> ${fmtBytes(stage84C35fGameOverOriginReset.lastCharmRecordAfter, 9)}`
+                    : 'record 31 cleanup not yet observed',
+            ].join('; ')
         );
 
         const formatStage84RecordRefs = records => {
@@ -5486,6 +5943,26 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             });
 
             addRow({
+                state: stage84C35fGameOverOriginReset.lastError
+                    ? 'bad'
+                    : stage84C35fGameOverOriginReset.pendingReset
+                        ? 'warn'
+                        : stage84C35fGameOverOriginReset.resets
+                            ? 'ok'
+                            : stage84C35fGameOverOriginReset.enabled
+                                ? 'ok'
+                                : 'muted',
+                probe: 'C3.5f game-over origin reset',
+                address: `${hexWord(0x5bba)} / ${hexWord(KL_STAGE7_SLIDING_CROSS.currentRoomAddr)} / ${hexWord(KL_STAGE2.startLocationsAddr)} / ${hexWord(stage84C31DisposableCharm.recordAddr)}`,
+                decode: formatStage84C35fGameOverReset(),
+                room: formatStage84C35fGameOverRoom(),
+                bytes: formatStage84C35fGameOverBytes(),
+                notes: stage84C35fGameOverOriginReset.lastError
+                    ? stage84C35fGameOverOriginReset.lastError
+                    : 'Enabled by default with Stage 7 sliding; add ?stage84c35f=0 to disable. Detects the original signed lives underflow 0x00 -> 0xFF, recompiles the physical cross around logical (0,0), reasserts all four 0x88 start choices, and clears disposable static record 31 before and after original new-game initialization. Player XYZ remains owned by the original restart routine.',
+            });
+
+            addRow({
                 state: stage84C35aTimingProbe.recentSprites.length ? 'ok' : 'muted',
                 probe: 'C3.5a recent sprite trail',
                 address: `${hexWord(KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr)} sprite byte`,
@@ -5598,6 +6075,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `C3.5a timing: ${stage84C35aTimingProbe.lastAction}.`,
                 `C3.5b slowdown: ${stage84C35bSlowdownProbe.lastAction}.`,
                 `C3.5c routine throttle: ${stage84C35cRoutineThrottle.lastAction}.`,
+                `C3.5e death guard: ${stage84C35eBubbleRespawnGuard.lastAction}.`,
+                `C3.5f origin reset: ${stage84C35fGameOverOriginReset.lastAction}.`,
                 `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
             ].join(' ');
 
@@ -6278,24 +6757,34 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
                 if (stage7SlidingCross.enabled) {
                     annotateStage7SampleRoomFields(sample, staticRange);
-                    const respawnAction = await applyStage84C35eBubbleRespawnGuard(workRange, sample);
-                    if (respawnAction && respawnAction.corrected) {
+                    const gameOverAction = await applyStage84C35fGameOverOriginReset(workRange, sample);
+                    if (gameOverAction && gameOverAction.reset) {
                         ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
-                        sample.stage84C35eAction = respawnAction;
+                        sample.stage84C35fAction = gameOverAction;
                         annotateStage7SampleRoomFields(sample, staticRange);
                     }
-                    updateTransition(sample);
-                    stage7Action = await handleStage7SlidingTransition(sample, workRange);
-                    if (stage7Action && stage7Action.recentered) {
-                        ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
-                        sample.stage7Action = stage7Action;
-                        annotateStage7SampleRoomFields(sample, staticRange);
-                        const postRecenterRespawnAction = await applyStage84C35eBubbleRespawnGuard(workRange, sample);
-                        if (postRecenterRespawnAction && postRecenterRespawnAction.corrected) {
+                    if (!gameOverAction || !gameOverAction.suppressGeneralDeath) {
+                        const respawnAction = await applyStage84C35eBubbleRespawnGuard(workRange, sample);
+                        if (respawnAction && respawnAction.corrected) {
+                            ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
+                            sample.stage84C35eAction = respawnAction;
+                            annotateStage7SampleRoomFields(sample, staticRange);
+                        }
+                    }
+                    if (!gameOverAction || !gameOverAction.suppressStage7) {
+                        updateTransition(sample);
+                        stage7Action = await handleStage7SlidingTransition(sample, workRange);
+                        if (stage7Action && stage7Action.recentered) {
                             ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
                             sample.stage7Action = stage7Action;
-                            sample.stage84C35eAction = postRecenterRespawnAction;
                             annotateStage7SampleRoomFields(sample, staticRange);
+                            const postRecenterRespawnAction = await applyStage84C35eBubbleRespawnGuard(workRange, sample);
+                            if (postRecenterRespawnAction && postRecenterRespawnAction.corrected) {
+                                ({workRange, staticRange, itemObjectRange, sample} = await readDiagnosticSnapshot());
+                                sample.stage7Action = stage7Action;
+                                sample.stage84C35eAction = postRecenterRespawnAction;
+                                annotateStage7SampleRoomFields(sample, staticRange);
+                            }
                         }
                     }
                 }

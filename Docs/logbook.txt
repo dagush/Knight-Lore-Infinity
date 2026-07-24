@@ -2981,3 +2981,225 @@ Conclusion:
 - the earlier cauldron bubble-death path remains covered by the same guard;
 - normal transitions remain unaffected;
 - C3.5e is empirically complete for the currently tested death paths.
+
+
++============================================================+
+| 2026 07 23 - Origin Room 0xB4 And Charm Pattern Check      |
++============================================================+
+
+2026 07 23
+
+Two small adjustments prepared the project for the next original-room stage.
+
+First, the deterministic charm-room interior override for quest sector `(0,0)`
+was changed from original room `0x74` to original room `0xB4`. The `0x74`
+version had already passed rendering, pickup, death-recovery, and transition
+tests; `0xB4` is selected simply because its charm is easier to grab during
+repeated startup tests.
+
+For logical charm room `(3,0)`, `0xB4` contributes:
+
+- original charm XYZ X=0x78, Y=0x88, Z=0xB0;
+- ordinary block type `0x00` x8;
+- pushable chest type `0x06` x1;
+- pushable table type `0x07` x2;
+- generated square-room architecture and all four generated exits remain
+  authoritative.
+
+Second, the required-charm sector hash was checked for suspicious adjacency.
+The local observation was:
+
+- sector `(0,0)`: chalice/vase;
+- sector `(0,1)`: chalice/vase;
+- sector `(0,2)`: cup.
+
+A `257 x 257` scan measured 66,049 sectors and 131,584 cardinal adjacent
+pairs. Equal requirements occurred in 18,909 pairs, or 14.370%, almost exactly
+the independent seven-charm expectation of 14.286%. Horizontal and vertical
+results were also balanced at 14.383% and 14.357%.
+
+About 47.114% of sampled sectors had at least one equal cardinal neighbour,
+close to the independent expectation of 46.022%. Matching triples appeared at
+2.175%, close to the expected 2.041%. The longest straight repeat in the sample
+was six sectors.
+
+Conclusion:
+
+- the adjacent chalice sectors are an ordinary deterministic coincidence;
+- local repeats are common enough to be expected, roughly one equal result per
+  seven adjacent pairs;
+- there is no meaningful directional or regional correlation in the measured
+  sample;
+- no anti-repeat rule is added because charm identity is global and nearby
+  cauldrons are allowed to request the same carried charm.
+
+
++============================================================+
+| 2026 07 23 - Game-Over Origin Reset                        |
++============================================================+
+
+2026 07 23
+
+The required-charm adjacency percentages were confirmed to be documented in
+the map-generation algorithm, reverse-engineering notes, and the preceding
+framed logbook entry:
+
+- 18,909 of 131,584 adjacent pairs matched, or 14.370%;
+- the independent seven-charm expectation is 14.286%;
+- horizontal and vertical rates were 14.383% and 14.357%;
+- 47.114% of sectors had at least one matching cardinal neighbour;
+- matching triples occurred at 2.175%;
+- the longest sampled straight repeat was six sectors.
+
+A separate restart rule was then added for the future wizard room at logical
+origin `(0,0)`.
+
+The original disassembly clarified the life-counter sequence:
+
+- `start_menu` initializes lives to 5;
+- the initial `player_dies` path consumes one, so play begins at 4;
+- ordinary deaths continue through lives 3, 2, 1, and 0;
+- game over occurs only when `lose_life` decrements `0x00` to signed value
+  `0xFF`.
+
+This distinction matters because C3.5e must continue to restore the current
+logical room after the ordinary `0x01 -> 0x00` death. New C3.5f instead watches
+for `0x00 -> 0xFF`.
+
+On game over, C3.5f:
+
+- suppresses normal Stage 7 movement handling during the signed-lives state;
+- changes the external center to `(0,0)`;
+- recompiles the physical five-room cross around the origin;
+- rewrites `0x5C10` and `0x5C30` to physical center `0x88`;
+- rewrites all four `start_locations` bytes at `0xD1E2..0xD1E5` to `0x88`;
+- clears C3.5e ordinary-death latches;
+- leaves body/head XYZ to the original new-game initialization.
+
+A narrow refill fallback handles a theoretically missed `0xFF` sample. The
+new diagnostic row reports previous/current lives, latch and pending state,
+trigger, source center, reset count, write count, and patched addresses.
+The fallback is armed only after active play and a later zero-life state have
+both been seen; the first pre-game `0x00 -> 0x04` startup is therefore not
+misclassified.
+
+The reset deliberately preserves JS-side quest state. Whether a wholly new
+game should clear persistent quest progress remains a separate design choice.
+
+Status:
+
+- implementation complete;
+- JavaScript syntax and whitespace checks pass;
+- webpack rebuilt both emulator and worker bundles successfully, with only the
+  existing bundle-size warnings;
+- browser smoke test shows the origin cross at `(0,0)`, the new C3.5f row, no
+  startup false positive, and no console errors;
+- manual final-life proof still required from a non-origin logical room.
+
+
++============================================================+
+| 2026 07 23 - C3.5f Confirmed And Charm Leak Fixed          |
++============================================================+
+
+2026 07 23
+
+The first full manual C3.5f game-over test succeeded.
+
+Before the final sequence, diagnostics at logical `(0,-5)` showed active play,
+lives `0x01`, no pending reset, and reset/write counters at zero. After all
+lives were lost and a new game started, diagnostics showed:
+
+- primary trigger `original lives underflow 0x00 -> 0xFF`;
+- reset count 1;
+- six room/start bytes written;
+- old logical center `(0,-5)`;
+- new logical center `(0,0)`;
+- `0x5C10` and `0x5C30` rewritten to physical `0x88`;
+- `0xD1E2..0xD1E5` rewritten to four physical `0x88` starts;
+- the location table recompiled around logical origin.
+
+The player correctly began the new game at logical room `(0,0)` in sector
+`(0,0)`. This confirms the origin-reset mechanism and primary timing path.
+
+The test also exposed a separate static-object leak: a charm appeared in the
+non-charm origin room.
+
+Cause:
+
+- C3.1 uses original static special-object record 31 at `0x7109..0x7111`;
+- while that object is carried, normal sliding-cross injection deliberately
+  skips rewriting its static record;
+- the ended game could therefore leave record 31's physical start room at
+  `0x88`;
+- original `init_special_objects` randomizes each record's sprite and copies
+  start X/Y/Z/room into current X/Y/Z/room for every new game;
+- after recentering, physical `0x88` represented logical `(0,0)`, so the stale
+  record became a visible charm there.
+
+Correction:
+
+- C3.5f now disregards obsolete carried state from the finished game;
+- before new-game initialization it forces record 31 to inactive sprite `0x00`
+  with both start and current rooms `0xFF`;
+- after the original new-game initialization, detected at active lives `0x04`,
+  it clears the record again so the randomized sprite is also removed;
+- the second pass deliberately does not run at lives `0x05`, because that value
+  is written before the original control menu and before `init_special_objects`;
+- diagnostics now report charm-record writes, cleanup action, and record
+  before/after bytes.
+
+Validation:
+
+- JavaScript syntax and whitespace checks pass;
+- webpack rebuilt emulator and worker bundles successfully, with only existing
+  bundle-size warnings;
+- browser smoke test for build `stage84-c35f-charm-reset-20260723-2` shows
+  record 31 inactive with current/start rooms `0xFF`;
+- the new C3.5f fields begin at zero on an ordinary fresh startup;
+- no browser console errors were reported.
+
+Conclusion:
+
+- C3.5f origin recentering is manually confirmed;
+- ordinary C3.5e death recovery remains separate;
+- the identified charm leak has a targeted record-lifecycle fix;
+- one more final-life restart should confirm origin is now charm-free.
+
+
++============================================================+
+| 2026 07 23 - C3.5f Charm Cleanup Confirmed                 |
++============================================================+
+
+2026 07 23
+
+The final restart retest confirmed that the record-31 lifecycle correction
+fixed the stray charm at logical origin.
+
+After game over and restart, diagnostics reported:
+
+- primary trigger `original lives underflow 0x00 -> 0xFF`;
+- reset count 1;
+- total writes 24;
+- charm-record writes 2;
+- post-init cleanup `forced disposable record inactive`;
+- current logical center `(0,0)`;
+- previous center `(0,-5)`.
+
+The second cleanup observed the original initialization's randomized record:
+
+    before: 0x62 0x80 0x80 0x80 0xFF 0x80 0x80 0x80 0xFF
+    after:  0x00 0x80 0x80 0x80 0xFF 0x80 0x80 0x80 0xFF
+
+This is the expected proof:
+
+- `init_special_objects` randomized the sprite to `0x62`;
+- the pre-init pass had already kept start/current rooms inactive at `0xFF`;
+- the lives-`0x04` post-init pass removed the randomized sprite;
+- no charm appeared in non-charm room `(0,0)`.
+
+Conclusion:
+
+- C3.5f origin recentering is empirically complete;
+- record-31 cleanup across a full game restart is empirically complete;
+- ordinary C3.1 carried-item preservation remains unchanged during normal
+  sliding-window play.

@@ -249,8 +249,8 @@ then define new logical exits and backgrounds that match the authored map.
 
 The built-in procedural provider currently selects original interiors by a
 sector hash, with one authored selection override: quest sector `(0,0)` uses
-original interior `0x74` as the easier first-room proof. This is runtime
-generation policy, not a special JSON syntax.
+original interior `0xB4` as the easiest current first-room proof. This is
+runtime generation policy, not a special JSON syntax.
 
 
 Labels and Uniqueness
@@ -404,6 +404,34 @@ conservative grid clearance for the origin room:
 It is fine to place decorative or blocking content elsewhere in the starting
 room, including around the center, as long as the player has a clear initial
 standing area and can walk to at least one intended exit.
+
+
+Game-Over Origin Policy
+-----------------------
+
+With Stage 7 sliding enabled, the external logical center is reset to `(0,0)`
+when the original lives byte underflows from `0x00` to `0xFF` and enters game
+over. The runtime recompiles the physical cross around the origin and reasserts
+the original startup choices as physical room `0x88`.
+
+This is runtime policy rather than JSON syntax. Authors should therefore:
+
+- provide a valid, traversable room at logical `(0,0)`;
+- apply the starting-room clearance rules above to that room;
+- treat `(0,0)` as the new-game wizard/NPC anchor unless a future runtime
+  configuration explicitly chooses another origin.
+
+The reset changes the active logical coordinate only. Authored map data and
+JS-side persistent quest state are retained. The original game remains
+responsible for fresh player body/head XYZ during its new-game initialization.
+The runtime also distinguishes the pre-game zero lives byte from a real game
+over by requiring prior active play before its refill fallback is armed.
+
+Runtime-injected disposable charm records are not authored JSON content. On
+game over, the runtime clears disposable static record 31 before and after the
+original special-object initialization. This prevents a stale physical start
+room `0x88` from becoming a charm in logical origin `(0,0)`. A JSON room is
+therefore not considered a charm room unless its logical quest role says so.
 
 
 Reciprocal Exit Safety

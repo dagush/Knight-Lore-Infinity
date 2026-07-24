@@ -447,15 +447,36 @@ Selection is deterministic per quest sector:
     hash(worldSeed, sectorX, sectorY, 0xC4F0) % 32
 
 The starting sector `(0,0)` is an explicit deterministic exception: it uses
-original interior `0x74`, selected as the easier first playable charm-room
-proof. This changes only the template choice for that sector. All other sectors
-continue to use the hash rule above.
+original interior `0xB4`, selected as the easiest current first playable
+charm-room proof. This changes only the template choice for that sector. All
+other sectors continue to use the hash rule above.
 
 Therefore a sector receives the same original interior after revisiting or
 reloading, while repetitions remain expected across the unbounded map. The
 logical label records the selected source, for example:
 
-    quest-charm:3,0:0x74:rock-vaults
+    quest-charm:3,0:0xB4:rock-vaults
+
+Required-charm adjacency check, 2026 07 23:
+
+- required charm types are selected independently from seven original charm
+  identities by the sector-coordinate hash;
+- a `257 x 257` scan covered 66,049 sectors and 131,584 horizontal/vertical
+  adjacent pairs;
+- 18,909 pairs requested the same charm, or 14.370%;
+- the independent seven-way expectation is 1/7, or 14.286%;
+- horizontal matches were 14.383% and vertical matches were 14.357%;
+- the longest observed straight repeat was six sectors on either axis;
+- a separate inner-grid measurement found 47.114% of sectors had at least one
+  same-charm cardinal neighbour, close to the independent expectation 46.022%;
+- matching triples occurred at 2.175%, close to the independent expectation
+  1/49 = 2.041%.
+
+Therefore adjacent sectors `(0,0)` and `(0,1)` both requesting the
+chalice/vase is an ordinary deterministic coincidence, not evidence of a
+directional or regional repetition rule. No anti-repeat constraint is applied:
+repeated nearby requests are legal because a carried charm identity is global
+and may be used at any matching cauldron.
 
 With C3.1 enabled, the disposable quest charm uses the selected template's
 original XYZ instead of the generic `(0x80,0x80,0x80)` position. Its sprite
@@ -696,6 +717,33 @@ Important overlay rules:
 - generated rooms do not automatically reopen authored map edges;
 - if a room shape cannot legally host a door direction, that compiled pair is
   closed instead of emitting an invalid rectangular-room door.
+
+Game-over integration:
+
+- ordinary deaths are corrected in place by the C3.5e same-room guard;
+- the original final-life signal is the signed lives-byte transition
+  `0x00 -> 0xFF`, not `0x01 -> 0x00`;
+- C3.5f responds by setting the logical center to `(0,0)` and recompiling the
+  physical cross around the origin before the next game starts;
+- both active room ids and all four original start-location choices are
+  reasserted as physical `0x88`;
+- original new-game code remains responsible for player XYZ;
+- generated-room and quest persistence remain deterministic and are not
+  discarded by this runtime center reset.
+- the missed-underflow refill fallback is armed only after active play and a
+  later zero-life state have both been observed, excluding first startup.
+- C3.1 static object record 31 is forcibly made inactive before restart
+  initialization. This is required even when the old game still marks it as
+  carried: original `init_special_objects` copies every record's physical start
+  room to its current room, and stale start room `0x88` would otherwise appear
+  at the new logical origin.
+- A second record-31 cleanup waits for lives `0x04`, after the original
+  initialization has randomized the record sprite. Both room fields remain
+  `0xFF`; no charm is allowed to appear unless the current Stage 7 cross
+  actually contains a logical charm room.
+- Manual restart confirmation observed two cleanup writes and converted
+  randomized sprite `0x62` to inactive `0x00` while retaining both room fields
+  as `0xFF`. Logical origin `(0,0)` remained charm-free.
 
 
 Measured Behaviour
