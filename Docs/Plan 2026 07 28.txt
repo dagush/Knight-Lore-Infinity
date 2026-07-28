@@ -1,0 +1,622 @@
+Knight Lore Infinity - HTML Logical Navigation Map
+==================================================
+
+Date: 2026 07 28
+
+
+Purpose
+-------
+
+The fourteen-sector completion run is postponed until the player has a usable
+navigation aid. The infinite logical maze is deliberately sparse and can be
+difficult to remember from the original isometric room display alone.
+
+This plan inserts a new intermediate stage before the endurance run:
+
+    Stage 8.4 C3.8A - HTML Logical Navigation Map
+
+The previously planned fourteen-sector completion test becomes:
+
+    Stage 8.4 C3.8B - Fourteen-Sector Completion Endurance Test
+
+This plan refines only the order of future work. Earlier Plan files are not
+modified.
+
+
+Stage 8.4 C3.8A - HTML Logical Navigation Map
+------------------------------------------------
+
+Goal:
+
+- Add a useful top-down logical map to the HTML page, immediately to the right
+  of the JSSpeccy emulator on wide screens.
+- Keep the Spectrum display, Knight Lore renderer, and emulator memory entirely
+  unchanged by the map.
+- Let the player switch between:
+  - visited rooms only;
+  - the complete generated topology inside the current finite map viewport.
+- Show quest progress clearly, including completed charm/cauldron pairs.
+
+
+Strict Meaning Of "All Generated Rooms"
+----------------------------------------
+
+The logical map is infinite, so it is impossible to draw every room in one
+finite HTML panel.
+
+For this stage, "all generated rooms" means:
+
+- all existing logical rooms inside the currently visible map viewport;
+- generated deterministically on demand from the current world seed;
+- including authored logical overrides such as origin `(0,0)`;
+- not merely rooms already present in the runtime's generated-room cache.
+
+The player can pan and zoom the finite viewport to inspect other parts of the
+infinite plane. The map must never claim that its current viewport is the whole
+world.
+
+
+Non-Goals
+---------
+
+- Do not modify the original Knight Lore source or renderer.
+- Do not draw into the Spectrum framebuffer.
+- Do not change room injection, transition timing, or working memory.
+- Do not use Three.js or create a second game renderer.
+- Do not teleport the player by clicking the map.
+- Do not calculate or reveal a recommended route in this first stage.
+- Do not make the HTML map a second owner of room or quest state.
+
+
+Layout
+------
+
+Desktop:
+
+- Put the emulator and navigation map in a two-column HTML layout.
+- Keep the emulator at its current size and aspect ratio.
+- Give the map the remaining practical width, with a stable square or nearly
+  square viewport.
+- Keep the existing Playtest Pokes and diagnostic tables below both columns.
+
+Narrow screens:
+
+- At the responsive breakpoint, move the map below the emulator.
+- Preserve usable map dimensions and ensure controls and labels never overlap.
+
+The map is an unframed tool panel rather than a decorative card. Its compact
+toolbar should contain:
+
+- a two-option segmented mode control:
+  - `Visited`;
+  - `Generated`;
+- zoom-out and zoom-in icon buttons;
+- a center-on-player icon button;
+- an optional follow-player toggle, enabled by default.
+
+Use tooltips for unfamiliar icons. `Visited` should be the default mode so the
+normal experience preserves exploration; `Generated` is an explicit navigation
+and exhaustive-test aid.
+
+
+Rendering Technology
+--------------------
+
+Recommended implementation:
+
+- use one HTML Canvas 2D surface for the room graph;
+- keep controls, status, and legend as normal semantic HTML;
+- account for `devicePixelRatio` so grid lines and markers remain crisp;
+- place all map-specific rendering and interaction logic in:
+
+      SRC/runtime/knightlore-navigation-map.js
+
+Canvas is appropriate because a zoomed-out viewport may contain hundreds or
+thousands of room cells. This remains an HTML diagnostic/navigation view, not a
+replacement Knight Lore renderer.
+
+
+Coordinate And Viewport Rules
+-----------------------------
+
+- Logical east is increasing x.
+- Logical north is increasing y.
+- Draw north upward, so canvas y is the inverse of logical y.
+- Center the initial viewport on logical `(0,0)`.
+- Follow the Stage 7 logical center after every successful recenter.
+- Dragging/panning disables follow-player until Center or Follow is selected.
+- Preserve the user's zoom level while following the player.
+- Clamp zoom-out to a finite maximum number of visible cells, preventing an
+  accidental attempt to generate an enormous part of the infinite map.
+
+Recommended default view:
+
+- approximately 3x3 sectors around the player;
+- 8x8 rooms per sector;
+- enough detail to distinguish individual rooms, corridors, and anchors.
+
+
+Room And Corridor Drawing
+-------------------------
+
+The map must help navigation, not merely show occupied cells.
+
+For each visible logical room:
+
+- draw a stable room cell or node;
+- draw cardinal connector strokes for actual reciprocal exits;
+- leave missing logical rooms empty;
+- never infer a connection from proximity alone;
+- use the same logical topology that Stage 7 compiles into the physical cross.
+
+Recommended visual hierarchy:
+
+- unvisited/generated ordinary room: restrained neutral fill;
+- visited ordinary room: brighter neutral fill;
+- current room/player: high-contrast yellow or white marker and outline;
+- authored origin `(0,0)`: a small distinct origin outline;
+- missing room: background only;
+- corridor/door connection: clear line between adjacent room centers.
+
+Use shape as well as colour for important roles so the map remains readable
+for colour-impaired users and at small zoom levels.
+
+
+Map Modes
+---------
+
+Visited mode:
+
+- Draw only rooms whose real persistent room state has `visited === true`.
+- Draw a corridor only when both endpoint rooms are visible in this mode and
+  the reciprocal exit exists.
+- Always draw the current room.
+- Do not reveal ordinary unvisited rooms, uncompleted quest anchors, or hidden
+  topology.
+- Exception: for every completed sector, reveal both its cauldron and local
+  charm anchor so the completed pair remains visible even if the accepted
+  charm came from another sector and the local charm room was never visited.
+
+Generated mode:
+
+- Draw every existing logical room inside the viewport.
+- Draw all reciprocal corridors inside the viewport.
+- Draw the 8x8 sector boundaries.
+- Mark every visible cauldron and charm anchor.
+- Allow panning to query deterministic topology outside the player's explored
+  area without changing visited or quest state.
+
+
+Quest And Completion Overlay
+----------------------------
+
+Uncompleted quest sector in Generated mode:
+
+- cauldron anchor: red circular marker;
+- charm anchor: blue diamond marker;
+- retain distinct shapes even when colour is unavailable;
+- tooltip includes sector coordinate, required charm, role, and logical room
+  coordinate.
+
+Completed quest sector in both modes:
+
+- use the same success colour for its cauldron and charm markers;
+- recommended success colour: green, with a check or strong outline;
+- tint or outline the completed sector with the same success family;
+- preserve circle versus diamond shapes to distinguish cauldron from charm;
+- show completion details from the existing JS quest state where available.
+
+The map must respect the global charm rule:
+
+- a sector can be completed with a matching charm collected elsewhere;
+- the displayed local charm anchor is the sector's suggested local source, not
+  proof that this exact physical object was delivered;
+- do not draw a false item-origin route or claim a sector-local delivery.
+
+
+Legend And Room Inspection
+--------------------------
+
+Add a compact legend for:
+
+- current room;
+- visited room;
+- generated room;
+- charm anchor;
+- cauldron anchor;
+- completed pair/sector;
+- sector boundary.
+
+Hovering or focusing a visible room should show a concise tooltip containing:
+
+- logical coordinate;
+- sector coordinate and local 8x8 coordinate;
+- room label/source;
+- visited yes/no;
+- room role;
+- required charm when relevant;
+- sector quest status;
+- biome/style when useful.
+
+Clicking a room may pin that tooltip or center the HTML map on that coordinate,
+but must never move or patch the Knight Lore player.
+
+
+State And API Boundary
+----------------------
+
+Current useful state already exists:
+
+- `logicalMap.markVisited(x, y)` is called after a successful Stage 7 center
+  cross injection;
+- room persistent state contains `visited`;
+- quest persistent state contains `cauldronSeen`, `charmSeen`,
+  `charmCollected`, and `completed`;
+- Stage 7 owns the current logical center;
+- the procedural generator owns deterministic room existence and exits.
+
+Important current problem:
+
+- `logicalMap.getRoomAt()` creates room persistent state;
+- `logicalMap.getQuestSectorAt()` creates quest persistent state;
+- using these methods to scan a large viewport would make unvisited map cells
+  look stateful merely because the HTML map inspected them.
+
+Before drawing the map, add read-only inspection APIs that do not mutate
+progress. Recommended surface:
+
+    logicalMap.inspectRoomAt(x, y)
+    logicalMap.peekPersistentState(x, y)
+    logicalMap.getVisitedRoomSnapshot()
+    logicalMap.peekQuestState(sectorX, sectorY)
+    logicalMap.getCompletedQuestSectorSnapshot()
+
+Equivalent names are acceptable, but the behavior must be explicit:
+
+- deterministic room generation/cache population is allowed;
+- inspection must not mark a room visited;
+- inspection must not create room persistence entries;
+- inspection must not create quest-state entries;
+- returned data should be cloned/read-only snapshots so the map cannot mutate
+  gameplay state accidentally.
+
+The navigation-map module should receive these APIs plus a callback for the
+current logical center. It must not import or call low-level emulator memory
+writers.
+
+
+Refresh Policy
+--------------
+
+Do not redraw or regenerate the whole viewport on every emulator frame.
+
+Redraw when one of these changes:
+
+- Stage 7 logical center/recenter generation;
+- map mode;
+- pan or zoom;
+- viewport size;
+- visited-room revision;
+- quest-state revision/completion;
+- loaded logical-map document or world seed.
+
+Use `requestAnimationFrame` to coalesce repeated UI changes. Cache the most
+recent viewport snapshot and clamp the maximum visible coordinate count.
+
+
+Implementation Stages
+---------------------
+
+1. Read-only map inspection API
+   - Separate deterministic inspection from persistent-state creation.
+   - Add visited-room and completed-sector snapshot accessors.
+   - Prove map inspection does not change persistence counters.
+
+2. Layout and empty map shell
+   - Add the desktop two-column emulator/map layout.
+   - Add responsive below-emulator fallback.
+   - Add mode, zoom, center, and follow controls.
+
+3. Visited topology
+   - Draw visited rooms and reciprocal visited corridors.
+   - Add current-player and origin markers.
+   - Follow normal movement and C3.5e same-room death recovery correctly.
+
+4. Generated viewport
+   - Draw all deterministic rooms and corridors in finite bounds.
+   - Add pan/zoom and negative-coordinate handling.
+   - Add 8x8 sector borders.
+
+5. Quest overlay
+   - Draw uncompleted red cauldron and blue charm markers in Generated mode.
+   - Draw completed pair markers and completed-sector styling in both modes.
+   - Add tooltips and legend.
+
+6. Integration and polish
+   - Update only after meaningful state/view changes.
+   - Verify layout, text fit, and canvas sharpness at desktop and narrow sizes.
+   - Document controls and map semantics in the relevant Docs files.
+
+
+Recommended Probes And Tests
+----------------------------
+
+Read-only state probes:
+
+- Record `logicalMap.stats().persistentRooms` and
+  `questPersistentSectors` before opening Generated mode.
+- Pan across several unvisited sectors.
+- Confirm both persistent counts are unchanged.
+- Confirm only actual Stage 7 center rooms become visited.
+
+Topology probes:
+
+- Compare visible exits around `(0,0)` with the Stage 7 cross table.
+- Verify reciprocal corridors at positive and negative sector boundaries.
+- Check sector borders at x/y multiples of 8, especially `-8`, `-1`, `0`,
+  `7`, and `8`.
+- Confirm missing rooms remain blank and no diagonal links are drawn.
+
+Mode probes:
+
+- Start a new session: Visited mode should show only origin/current room.
+- Walk east, east, west: all genuinely visited rooms remain visible.
+- Switch to Generated: surrounding hidden topology and unsolved anchors appear.
+- Switch back to Visited: hidden topology disappears again.
+
+Quest probes:
+
+- Before completion, an unsolved cauldron/charm pair appears only in Generated
+  mode unless its rooms were genuinely visited.
+- Complete one sector with its local charm and verify both markers and sector
+  styling change to the shared success colour.
+- Complete a sector using a matching charm from elsewhere; verify the local
+  pair is still shown as completed without claiming the local charm was used.
+- Reload/restart behavior must match the current JS persistence policy; the
+  map must neither erase nor invent state.
+
+Runtime integration probes:
+
+- C3.5e death recovery must not reveal the transient wrong neighbour room.
+- C3.5f game-over reset should return the current marker to `(0,0)` while
+  retaining whatever visited/completed state the JS layer currently retains.
+- Map pan/zoom and mode changes must perform no emulator-memory writes.
+- Emulator frame rate, controls, bubbles, charm pickup, and room transitions
+  must remain unchanged.
+
+Visual probes:
+
+- Desktop: map is immediately right of the emulator with no overlap.
+- Narrow viewport: map moves below the emulator and remains usable.
+- Long coordinates and tooltip text fit their containers.
+- Current, charm, cauldron, and completed states remain distinguishable by
+  both colour and shape.
+
+
+Risks And Unknowns
+------------------
+
+- Infinite scope:
+  a finite viewport and zoom clamp are mandatory. An unrestricted "show all"
+  operation would eventually freeze the browser.
+- State pollution:
+  the existing getters create persistent records. The read-only API split is
+  required before scanning generated topology.
+- Topology mismatch:
+  the map must use the same reciprocal logical exits that Stage 7 compiles,
+  including authored overrides, rather than a simplified occupancy grid.
+- Negative coordinates:
+  sector borders must use floor division/positive modulo exactly like the
+  generator.
+- Completion semantics:
+  completed sector styling must come from JS quest state, not merely from the
+  original global `objects_put_in_cauldron` count.
+- Visibility semantics:
+  Visited mode intentionally reveals completed pair anchors as an exception;
+  this must be documented so it is not mistaken for a visited-state bug.
+- Performance:
+  large canvas redraws and room generation must be bounded and event-driven.
+- Persistence:
+  this stage must follow the current persistence lifetime. Browser storage or
+  save-file persistence is a separate future decision.
+
+
+Exit Criteria
+-------------
+
+- The map appears to the right of the emulator on desktop and below it on
+  narrow screens.
+- Visited mode shows only actually visited rooms, the current room, and both
+  anchors of completed quest sectors.
+- Generated mode shows every existing room and reciprocal corridor inside the
+  finite viewport, plus 8x8 sector borders and all quest anchors.
+- Uncompleted charm and cauldron rooms are visibly distinct using blue diamond
+  and red circle markers.
+- Completed pairs use matching success styling, and completed sectors are
+  visibly marked in both modes.
+- Panning Generated mode does not change visited-room or quest persistence.
+- Player movement, death recovery, game-over origin reset, charm carrying, and
+  cauldron drops update the map correctly without memory writes from the map.
+- No emulator rendering, timing, controls, or Spectrum display behavior is
+  changed.
+- The map is useful enough to begin C3.8B: the postponed fourteen-sector
+  completion endurance run.
+
+
+Implementation Status - 2026 07 28
+-----------------------------------
+
+C3.8A is implemented in build:
+
+    stage84-c38a-navigation-map-20260728-3
+
+Runtime files:
+
+    SRC/runtime/knightlore-navigation-map.js
+    SRC/runtime/knightlore.js
+    SRC/static/index.html
+
+Implemented read-only logical-map APIs:
+
+    inspectRoomAt(x, y)
+    inspectEffectiveRoomAt(x, y)
+    inspectQuestSectorAt(x, y)
+    inspectQuestRoomInfoAt(x, y)
+    inspectNavigationViewport(bounds)
+    getVisitedRoomSnapshot()
+    getCompletedQuestSectorSnapshot()
+
+The viewport inspection API uses the same reciprocal-exit overlay as Stage 7
+physical compilation. It may populate the deterministic generated-room cache,
+but it does not create persistent room or quest-sector records.
+
+Implemented map behavior:
+
+- Canvas 2D only; no second game renderer and no emulator-memory writes;
+- Visited mode is the default;
+- Generated mode draws every existing room in the bounded viewport;
+- reciprocal east/north corridors are drawn once per pair;
+- 8x8 sector borders use the generator's negative-coordinate convention;
+- red circles identify unsolved cauldrons in Generated mode;
+- blue diamonds identify unsolved charms in Generated mode;
+- completed anchors and completed sectors share green success styling in both
+  modes;
+- the player is a white circular marker and origin has a gold square outline;
+- drag, mouse-wheel zoom, buttons, keyboard pan/zoom, center, and Follow are
+  implemented;
+- room tooltips report label, coordinate, role, charm, and completion;
+- Stage 7 movement, JSON map loads, and C3.3 completion refresh the panel;
+- desktop uses emulator/map columns; narrow layouts stack the map below the
+  proportionally scaled original emulator display.
+
+Automated proof:
+
+- a 525-room viewport spanning 16 sectors was inspected from a fresh logical
+  map;
+- persistent room count stayed 0 -> 0;
+- persistent quest-sector count stayed 0 -> 0;
+- an explicit visit then appeared in the visited snapshot;
+- an explicit completion then appeared in the completed-sector snapshot;
+- webpack compiled the new module successfully;
+- desktop and 390px-wide browser layout probes found no overlap;
+- the narrow page had no horizontal overflow;
+- Generated-mode pan and zoom retained `inspection state stable`;
+- no browser warnings or errors were reported.
+
+Manual gameplay checks still requested:
+
+- walk several rooms and confirm the white marker and visited trail;
+- switch to Generated and inspect red/blue anchors and sector boundaries;
+- drag and zoom without moving the Knight Lore player;
+- complete a sector and confirm both anchors plus its sector turn green;
+- confirm death recovery does not reveal a transient wrong room.
+
+C3.8A should be considered code-complete but awaiting that short manual
+gameplay pass before C3.8B begins.
+
+
+Current Complete Playtest Preset
+--------------------------------
+
+The map must be tested on top of the latest proven gameplay stack, not with
+Stage 7 alone. The canonical URL is now:
+
+    http://127.0.0.1:8000/index.html?playtest=latest
+
+`playtest=latest` enables these previously independent opt-in stages together:
+
+- Stage 7 sliding logical world;
+- Stage 8.2C original cauldron visual;
+- cauldron-gated bubbles;
+- C3.1 disposable collectible charm;
+- C3.3 JS quest-sector acceptance;
+- C3.4 original request-order patch;
+- C3.5c safe routine-level timing throttle;
+- C3.6 original charm-room interiors, including `0xB4` at `(3,0)`;
+- C3.7 distributed ordinary original interiors.
+
+C3.5e same-room death recovery and C3.5f game-over origin reset were already
+enabled by default with Stage 7 and remain active. Infinite lives and partial
+invulnerability remain off because they are user-controlled playtest pokes.
+
+Death-guard refinement, 2026 07 28:
+
+- Infinite lives patches `lose_life` at `0xD13F` with `RET`, so `0x5BBA` does
+  not decrement and cannot be the only general-death signal.
+- C3.5e now latches player dead-state bit 6 at `0x5C15/0x5C35` and the original
+  `0x70..0x77` death-sparkle sequence at `0x5C08/0x5C28`.
+- A later forced physical-neighbour load restores the recorded logical room,
+  entry side, body/head XYZ, and physical center even while lives are frozen.
+- The existing life-drop and delayed previous-entry paths remain active as
+  independent fallbacks.
+- Diagnostics expose `death signal`, its age, and `infinite-lives` when the
+  signal was latched with that poke active.
+
+An explicit individual URL option overrides the preset. For example:
+
+    ?playtest=latest&stage84c37=0
+
+runs the complete stack except distributed ordinary original interiors. The
+older individual URLs remain valid for focused control experiments.
+
+The earlier C3.8A test link using only `?stage7sliding=1` was incomplete. It did
+not delete code or data, but it intentionally left C3.1/C3.3/C3.4/C3.6/C3.7
+off, producing an obsolete-looking charm room, no collectible charm, and no
+distributed original interiors. It must not be used as the current gameplay
+baseline.
+
+
+Startup Static-Table Barrier
+----------------------------
+
+The first `playtest=latest` build exposed a real asynchronous startup race. An
+initial Stage 7 write could report success and then be overwritten by the late
+`.z80` snapshot load. The visible symptom was the unvirtualized original room
+`0x88`, including wizard and cauldron, instead of logical origin `(0,0)`.
+
+Build `stage84-c38a-navigation-map-20260728-3` adds a strict barrier:
+
+- compare every compiled Stage 7 location byte with an emulator readback;
+- keep the emulator paused;
+- require two consecutive valid signatures 75 ms apart;
+- if a mismatch appears, rewrite all four start choices, the complete physical
+  cross, custom wall backgrounds, disposable charm state, and room templates;
+- allow at most three complete repairs;
+- refuse to start execution if the table cannot remain stable.
+
+The reproduced race was caught automatically. Diagnostics reported one repair,
+five signature checks, and `last valid`. Final readback found center `0x88` at
+`0x6251..0x6262`, with the authored origin's five normal backgrounds and eight
+blocks. It no longer found the original entry at `0x67BB`.
+
+The global cauldron background template remains non-zero intentionally so
+logical cauldron anchors can reference it. Logical origin is safe because its
+compiled entry does not contain background id `0x13`; the wizard template is
+zeroed.
+
+
+C3.8B Completion Status - 2026 07 28
+------------------------------------
+
+C3.8B is complete through two complementary manual proofs:
+
+- the navigation map supported a full fourteen-sector route through fourteen
+  matching charm deliveries, proving exploration, carrying, request patching,
+  logical persistence, and original cauldron-counter progression;
+- after repairing the cauldron ending-room invariant, a shortened target-2 run
+  produced the original homing-sparkle animation, completion message, and tune
+  without hanging.
+
+The hang was caused by blockless Phase C cauldron rooms. The original ending
+wipes a fixed first 11 working records and requires later graphic-7 blocks to
+become homing sparkles. All generated cauldron rooms now retain the exact
+original `0x88` eight-block frame, leaving five blocks after that fixed wipe.
+
+The Completion target poke at `0xC25F` remains available for focused regression
+tests, but it is off by default and its displayed/default value is restored to
+the original count 14. Infinite lives and Partial invulnerability also remain
+off by default.
+
+Final integrated build:
+
+    stage84-c38a-navigation-map-20260728-10

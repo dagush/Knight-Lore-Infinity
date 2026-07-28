@@ -3328,3 +3328,414 @@ Status:
 - initial two-room gameplay proof successful;
 - longer multi-sector walking remains the honest final test for moving hazards,
   resets, freezes, black rooms, trapped entries, and transition stability.
+
+
++============================================================+
+| 2026 07 28 - C3.8A HTML Logical Navigation Map             |
++============================================================+
+
+2026 07 28
+
+The postponed fourteen-sector completion run was split into two stages. C3.8A
+adds a navigation aid first; the endurance run is now C3.8B.
+
+A detailed new plan was written in:
+
+    Docs/Plan 2026 07 28.txt
+
+The implemented map is an HTML Canvas 2D tool beside JSSpeccy. It does not
+replace, copy, or modify the original Spectrum renderer, and it never writes
+emulator memory.
+
+The logical-map facade was separated into mutating gameplay access and
+read-only inspection. New APIs can inspect rooms, effective reciprocal exits,
+quest metadata, bounded viewports, visited rooms, and completed sectors without
+inventing progress. Generated-room cache population remains allowed because it
+is deterministic and is not gameplay persistence.
+
+The new standalone module is:
+
+    SRC/runtime/knightlore-navigation-map.js
+
+It implements:
+
+- Visited mode, showing only actual Stage 7 centers/current room plus the
+  documented completed-pair exception;
+- Generated mode, showing every existing deterministic room in the finite
+  pannable viewport;
+- reciprocal corridors and 8x8 sector boundaries;
+- red circular cauldrons and blue diamond charms;
+- green completed pairs and completed-sector backgrounds;
+- white current-player and gold origin markers;
+- drag, zoom, keyboard pan, center, and Follow controls;
+- room tooltips and a compact shape-and-colour legend;
+- event-driven redraws for room transitions, JSON loads, and quest completion.
+
+The desktop page now places the map immediately right of the 640px emulator.
+At narrow widths it moves below the emulator. Testing also revealed that the
+emulator's inner canvas retained a fixed 640px CSS width on mobile; a responsive
+constraint now scales that original display proportionally without touching
+its rendering data or desktop size.
+
+Verification:
+
+- webpack built the emulator and worker bundles successfully, with only the
+  existing bundle-size warnings;
+- a fresh 525-room/16-sector viewport inspection changed persistent room count
+  by 0 and persistent quest-sector count by 0;
+- explicit visit and completion operations still appeared in their snapshots;
+- Generated-mode pan and zoom reported `inspection state stable`;
+- desktop geometry showed non-overlapping 640px emulator and 624px map columns;
+- a 390px browser probe stacked the 374px map below the emulator, preserved the
+  Spectrum canvas aspect ratio, and produced no horizontal page overflow;
+- no browser warnings or errors were observed.
+
+What to inspect manually next:
+
+- walk and compare the white marker/Visited trail with actual rooms;
+- switch to Generated and inspect topology, sector borders, and anchor colours;
+- pan and zoom while confirming the game character does not move;
+- complete one quest and confirm its cauldron, charm, and sector become green;
+- exercise one death recovery and confirm no transient wrong room is revealed.
+
+Status: C3.8A implementation is complete and ready for the short manual
+gameplay pass. C3.8B remains postponed until that pass succeeds.
+
+
++============================================================+
+| 2026 07 28 - Complete Playtest Preset Correction           |
++============================================================+
+
+2026 07 28
+
+The first C3.8A handoff mistakenly linked to:
+
+    ?stage7sliding=1
+
+That URL enables the sliding topology but leaves the later opt-in content and
+quest mechanics disabled. It consequently showed the old generated charm-room
+dressing, no collectible charm, and no distributed original-room interiors.
+No later implementation had actually been removed.
+
+To prevent this configuration mistake from recurring, the runtime now accepts:
+
+    ?playtest=latest
+
+The preset enables the last proven integrated stack:
+
+- Stage 7 sliding world;
+- Stage 8.2C original cauldron visual and cauldron-gated bubbles;
+- C3.1 collectible charm;
+- C3.3 JS acceptance and C3.4 original request-order patch;
+- C3.5c timing throttle;
+- C3.6 original charm-room interiors;
+- C3.7 distributed ordinary original interiors.
+
+C3.5e/C3.5f remain active by their normal Stage 7 defaults. The two playtest
+pokes remain off until the user toggles them.
+
+Explicit individual flags override the preset, preserving every focused
+control experiment. For example, `?playtest=latest&stage84c37=0` disables only
+C3.7.
+
+Browser verification of build `stage84-c38a-navigation-map-20260728-2`
+confirmed:
+
+- sector `(0,0)` still requires the chalice/vase;
+- charm anchor `(3,0)` uses original interior `0xB4`;
+- its original spawn is X/Y/Z `0x78/0x88/0xB0`;
+- its foreground contains eight blocks, one pushable chest, and two pushable
+  tables;
+- C3.1, C3.3, C3.4, C3.5c, C3.6, and C3.7 all report enabled/requested;
+- the C3.7 catalogue contains 71 reusable original interiors;
+- cauldron bubbles report room-gated mode;
+- the navigation map remains active over this complete gameplay configuration.
+
+The canonical current test URL is therefore:
+
+    http://127.0.0.1:8000/index.html?playtest=latest
+
+
++============================================================+
+| 2026 07 28 - Startup Map Overwrite Barrier                 |
++============================================================+
+
+2026 07 28
+
+Testing the complete preset exposed a more serious problem than the earlier
+URL configuration error. Logical origin `(0,0)` visibly loaded the original
+room `0x88`, including wizard and cauldron, trapping the player.
+
+Diagnostics proved that the later gameplay code had not been deleted. Stage 7
+reported a successful cross compilation, but static-table inspection later
+found room `0x88` at its original address `0x67BB` with backgrounds `0x12` and
+`0x13`. The asynchronous `.z80` load had overwritten the injected table after
+the first write.
+
+The startup sequence now has a byte-level stability barrier:
+
+- every compiled location byte is read back from `0x6251`;
+- two consecutive signatures 75 ms apart are required while execution remains
+  paused;
+- a mismatch reasserts all four `0x88` start choices;
+- the whole physical cross and custom wooden backgrounds are rewritten;
+- C3.1 disposable-charm state and wizard/cauldron/bubble templates are
+  reapplied;
+- three failed repair attempts leave the emulator paused with a diagnostic
+  error rather than starting an unsafe game.
+
+The browser test reproduced and repaired the problem automatically:
+
+    Startup signature repair 1
+    Static-table signatures 5
+    repairs 1
+    last valid
+
+Final static readback showed:
+
+- center room `0x88` at injected address `0x6251..0x6262`;
+- selector 0, attribute 6, size 64/64/128;
+- backgrounds `0x00 0x01 0x02 0x03 0x0C`;
+- one type-`0x00` group containing the original eight safe blocks;
+- all five physical cross entries found;
+- start choices `0x88 0x88 0x88 0x88`;
+- wizard background template zeroed;
+- no browser warnings or errors.
+
+The original cauldron template remains restored because actual logical
+cauldron rooms need it. This is safe at origin because the compiled origin room
+does not reference id `0x13`.
+
+Build:
+
+    stage84-c38a-navigation-map-20260728-3
+
+Canonical playtest URL:
+
+    http://127.0.0.1:8000/index.html?playtest=latest
+
+
++============================================================+
+| 2026 07 28 - Death Guard With Frozen Lives                 |
++============================================================+
+
+2026 07 28
+
+A longer playtest found that the same-room death correction could again miss
+the original engine's forced neighbouring-room respawn. The confirmed C3.5e
+implementation was still present and enabled.
+
+The new condition was the optional Infinite lives poke:
+
+- decimal `53567`, hexadecimal `0xD13F`, is the entry of `lose_life`;
+- writing `0xC9` there returns before `0x5BBA` is decremented;
+- the general C3.5e proof had used that decrement to distinguish death from a
+  legitimate cardinal room transition;
+- with lives frozen, Stage 7 could therefore accept the death-generated room
+  id as ordinary movement.
+
+The guard now latches the original game's own pre-respawn death evidence:
+
+- dead-state bit 6 in player records at `0x5C15` and `0x5C35`;
+- death-sparkle sprites `0x70..0x77` at `0x5C08` and `0x5C28`.
+
+After either signal, a physical-neighbour load is restored to the saved logical
+room and real entrance. C3.5e still rewrites `0x5C10`, `0x5C30`, body XYZ, and
+head XYZ, and recompiles the cross if Stage 7 already recentered. The old lives
+decrement, delayed previous-entry, and bubble/form paths remain available.
+
+Diagnostics now show `death signal`, signal age, dead flag/sprite information,
+and `infinite-lives` when applicable. Normal startup reported `death signal
+none`, and the rebuilt integrated page produced no browser errors.
+
+Build:
+
+    stage84-c38a-navigation-map-20260728-4
+
+Manual confirmation requested:
+
+- enable Infinite lives;
+- die once in any non-origin logical room;
+- confirm the player reappears in that same logical room at the same entrance;
+- confirm C3.5e increments `corrections` and reports trigger
+  `original death signal with frozen lives`.
+
+
++============================================================+
+| 2026 07 28 - Full Charm Run And Short Ending Probe         |
++============================================================+
+
+2026 07 28
+
+The first exhaustive dispersed-quest run reached all fourteen required
+deliveries. The player collected and carried charms through fourteen sectors
+and completed fourteen logical cauldrons without room, transition, persistence,
+or request-order failures.
+
+The original counter reached its terminal delivery, but the emulator hung when
+the fourteenth charm was dropped instead of showing the ending. The primary
+hypothesis remains the documented Infinite lives interaction: `0xC9` at
+`0xD13F` returns from `lose_life`, while the original final sequence uses the
+`player_dies/lose_life` route to reach `game_over`. This hypothesis still needs
+a controlled ending test.
+
+A shortened completion poke was added:
+
+- decimal address `49759`, hexadecimal `0xC25F`;
+- this is the immediate operand of `CP 14` in `add_obj_to_cauldron`;
+- accepted range `1..14`, suggested test value `2`;
+- default state Off;
+- original loaded value `0x0E` is read and validated before writing;
+- disabling restores the captured `0x0E` exactly.
+
+The Playtest Pokes table now provides an enable switch and numeric input.
+C3.4 terminal diagnostics and the Infinite lives final-drop warning follow the
+active target rather than assuming fourteen.
+
+Browser memory verification passed:
+
+    0x0E (14) -> 0x03 (3) -> 0x04 (4) -> 0x0E (14)
+
+The active value could be changed without reloading, every write was read back,
+and no browser errors were reported.
+
+Required controlled proof:
+
+- reload/start a fresh game;
+- enable Completion target with value `2`;
+- optionally enable Partial invulnerability;
+- leave Infinite lives off before the second drop;
+- complete two unfinished logical cauldrons and observe whether the original
+  completion animation, message, and tune appear.
+
+Build:
+
+    stage84-c38a-navigation-map-20260728-7
+
+
++============================================================+
+| 2026 07 28 - Original Ending Pass-Through                  |
++============================================================+
+
+2026 07 28
+
+The controlled Completion target `2` poke reached its final drop correctly,
+but the game still hung with Infinite lives disabled. This ruled out route
+length and the fourteen-delivery count, and showed that the Infinite lives
+poke was not the only ending interference.
+
+Static/disassembly review established the original control flow:
+
+- `prepare_final_animation` sets `all_objs_in_cauldron` at `0x5BC3`;
+- the ending deliberately drives `player_dies/lose_life`;
+- signed lives underflow enters `game_over`;
+- `game_over` sees `0x5BC3` and selects the completion message and tune.
+
+Our ordinary-runtime protections overlapped that sequence. C3.5e could treat
+the deliberate deaths as a normal hazard death, while C3.5f could consume the
+underflow and compile logical origin before the original completion branch.
+C3.5c could also leave a cauldron updater throttle instruction installed.
+
+The runtime now treats nonzero `0x5BC3` as an exclusive original-ending state:
+
+- C3.5e discards death latches and writes no room ids or player coordinates;
+- C3.5f suppresses its normal game-over origin reset;
+- Stage 7 ignores ending-generated physical-room changes;
+- C3.5c restores the original motion, graphics, and request-reset bytes;
+- diagnostics report `completion pass-through active` and count its frames.
+
+When the original game clears `0x5BC3` on return to its menu, C3.5f then
+recompiles logical origin `(0,0)` for the next game. The original ending owns
+all memory and timing until that point.
+
+Required manual proof remains a fresh two-drop run with Infinite lives off at
+the final drop. The expected result is the original animation, completion
+message, and tune, with no C3.5e correction and no C3.5f reset during the
+ending.
+
+Build:
+
+    stage84-c38a-navigation-map-20260728-8
+
+
++============================================================+
+| 2026 07 28 - Ending Sparkle Root Cause                     |
++============================================================+
+
+2026 07 28
+
+Further exact disassembly corrected the preceding pass-through hypothesis.
+The shortened two-drop hang was not caused by Infinite lives or by a signed
+lives underflow. The original ending normally bypasses `lose_life` entirely.
+
+`prepare_final_animation` assumes the original cauldron room anatomy:
+
+- start at `special_objs_here_1`;
+- wipe exactly 11 records: one special, seven background, three foreground;
+- scan the remaining working-object table;
+- convert every graphic-7 block to a 131..133 homing sparkle;
+- jump directly to `game_over` when a sparkle reaches the player.
+
+Our Phase C cauldron dressing suppressed the four Phase B marker blocks. No
+block survived beyond the fixed wipe prefix, so no final sparkle was created.
+With `all_objs_in_cauldron` nonzero, player input stayed disabled and the room
+loop continued forever. That was the apparent emulator hang.
+
+Every generated cauldron room now receives the exact original room `0x88`
+eight-block frame. The positions preserve every cardinal entry strip. With the
+original cauldron background expansion, the first three blocks are wiped and
+five remain to become homing ending sparkles.
+
+The completion pass-through from build 8 remains as a defensive ownership
+boundary: C3.5e, C3.5f, Stage 7, and the C3.5c throttle perform no conflicting
+runtime writes while `0x5BC3` is nonzero. C3.5c restores its original code
+bytes. The logical origin is compiled only when the original menu clears the
+completion flag.
+
+The Infinite lives final-drop warning was removed because the final sparkle
+jumps directly to `game_over`. A clean two-drop proof may still leave Infinite
+lives off, but it is no longer an engine requirement.
+
+Static generator verification for sector `(0,0)` confirmed cauldron `(4,4)`:
+
+    selector 0; background 0x13; block type 0x00 x8;
+    zero block positions inside any active cardinal entry strip.
+
+Build:
+
+    stage84-c38a-navigation-map-20260728-9
+
+
++============================================================+
+| 2026 07 28 - Original Ending Confirmed                     |
++============================================================+
+
+2026 07 28
+
+The repaired ending was manually confirmed with the controlled two-delivery
+probe. After the second correct charm was dropped, the original cauldron-room
+final sequence completed successfully instead of remaining in the frozen,
+input-disabled room.
+
+This confirms the ending-sparkle diagnosis and repair:
+
+- generated cauldron rooms contain the original `0x88` eight-block frame;
+- the fixed 11-record wipe leaves blocks available for 131..133 sparkles;
+- the sparkles reach the player and enter the original `game_over` branch;
+- the original completion animation, message, and tune are reachable;
+- completion-time runtime guards do not recenter or rewrite the active ending;
+- the logical origin is reserved for the next game after return to the menu.
+
+Together with the earlier successful fourteen-sector route, the project has now
+proved both halves of C3.8B: the complete dispersed quest journey reaches its
+terminal delivery, and the repaired terminal delivery reaches Knight Lore's
+original ending.
+
+The temporary Completion target value `2` served its diagnostic purpose. Its
+runtime and HTML defaults are restored to `14`; the poke itself remains Off on
+every page load. Infinite lives and Partial invulnerability also retain their
+default-Off behaviour.
+
+Build:
+
+    stage84-c38a-navigation-map-20260728-10

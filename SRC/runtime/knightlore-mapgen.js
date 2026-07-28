@@ -108,17 +108,21 @@ const QUEST_DRESSING_PATTERNS = {
             {
                 type: 0x00,
                 positions: [
-                    {x: 2, y: 2, z: 0},
-                    {x: 5, y: 2, z: 0},
-                    {x: 2, y: 5, z: 0},
-                    {x: 5, y: 5, z: 0},
+                    {x: 2, y: 6, z: 0},
+                    {x: 1, y: 5, z: 0},
+                    {x: 5, y: 6, z: 0},
+                    {x: 6, y: 5, z: 0},
+                    {x: 6, y: 2, z: 0},
+                    {x: 5, y: 1, z: 0},
+                    {x: 1, y: 2, z: 0},
+                    {x: 2, y: 1, z: 0},
                 ],
             },
         ],
         intendedUse: 'local cauldron marker',
         notes: [
-            'static room marker only',
-            'avoid fragile original cauldron mechanics in Phase B',
+            'original 0x88 eight-block frame with clear cardinal entry lanes',
+            'retains blocks after the ending routine wipes its fixed first 11 records',
         ],
     },
     charm: {
@@ -498,17 +502,17 @@ export function createKnightLoreProceduralMap(options = {}) {
             visual: originalCharmRoom
                 ? `original ${originalCharmRoom.originalRoomHex} interior with generated architecture`
                 : originalCauldronVisual
-                ? 'original cauldron background visual plus safe static room header'
+                ? 'original cauldron background visual plus ending-compatible 0x88 block frame'
                 : 'safe static colour and block-run marker',
             gameplayBytes: originalCharmRoom
                 ? 'original location block groups only; generated exits, walls, size, colour, and theme remain unchanged'
                 : originalCauldronVisual
-                ? `location header and original cauldron background id only; bubbles ${bubbleDescription}`
+                ? `location header, original cauldron background id, and original 0x88 eight-block frame; bubbles ${bubbleDescription}`
                 : 'location header and foreground block bytes only',
             enginePolicy: originalCharmRoom
                 ? 'preserve original static/dynamic interior block groups without importing original topology or object identity'
                 : originalCauldronVisual
-                ? 'restores original cauldron visual background only; no original item, wizard, inventory, charm-order, or quest-completion memory touched'
+                ? 'restores original cauldron visual and ending-compatible blocks; no original item, wizard, inventory, charm-order, or quest-completion memory touched'
                 : 'no original object, item, cauldron, wizard, inventory, or quest-order memory touched',
             clearancePolicy: originalCauldronVisual
                 ? 'original cauldron visual occupies the center; only generated quest cauldron anchor rooms receive it, never the logical start room (0,0)'
@@ -526,12 +530,8 @@ export function createKnightLoreProceduralMap(options = {}) {
                 forceSquare: pattern.forceSquare,
                 selector: pattern.forceSquare ? 0 : null,
                 colour: pattern.colour,
-                blockRuns: (
-                    originalCharmRoom
-                        ? cloneData(originalCharmRoom.blocks)
-                        : originalCauldronVisual
-                        ? []
-                        : cloneData(pattern.blockRuns)
+                blockRuns: cloneData(
+                    originalCharmRoom ? originalCharmRoom.blocks : pattern.blockRuns
                 ),
                 extraBackgrounds: (
                     originalCauldronVisual

@@ -415,6 +415,20 @@ original room 0x88 eight-block frame:
 These blocks sit around the room perimeter and do not violate the central
 spawn-clearance rule.
 
+The same eight-block frame is required in every room that will run the original
+cauldron completion mechanic. This is not merely a visual convention. The
+original `prepare_final_animation` wipes a fixed prefix of 11 working records,
+including three foreground blocks, then converts the remaining ordinary block
+sprites into homing ending sparkles. A quest cauldron with fewer/no surviving
+blocks can remain forever in its input-disabled final room.
+
+Therefore, when authoring or overriding a logical quest-cauldron payload:
+
+- retain the eight type-`0x00` positions above;
+- keep the four cardinal entry strips clear;
+- do not replace the block run with an empty decorative room unless the ending
+  mechanic is also replaced deliberately outside the original engine.
+
 Until the exact player collision footprint is fully documented, use this
 conservative grid clearance for the origin room:
 
@@ -432,6 +446,12 @@ With Stage 7 sliding enabled, the external logical center is reset to `(0,0)`
 when the original lives byte underflows from `0x00` to `0xFF` and enters game
 over. The runtime recompiles the physical cross around the origin and reasserts
 the original startup choices as physical room `0x88`.
+
+Completion is the exception. While `all_objs_in_cauldron` at `0x5BC3` is
+nonzero, the original ending owns room and timing state; the death guard,
+sliding recenter, cauldron throttle, and normal origin-reset writes are
+suspended/restored as appropriate. The origin cross is compiled only after the
+original menu clears that completion flag.
 
 This is runtime policy rather than JSON syntax. Authors should therefore:
 

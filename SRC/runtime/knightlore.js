@@ -1,20 +1,36 @@
 import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
+import { createKnightLoreNavigationMap } from './knightlore-navigation-map.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage84-c38-playtest-pokes-20260724-1';
+    let navigationMap = null;
+    const KL_DIAGNOSTICS_BUILD = 'stage84-c38a-navigation-map-20260728-10';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
+    const KL_TRUE_PARAM_VALUES = ['1', 'true', 'on', 'yes', 'enabled'];
+    const KL_CURRENT_PLAYTEST_PRESET = ['latest', 'current', '1'].includes(
+        (KL_URL_PARAMS.get('playtest') || '').trim().toLowerCase()
+    );
+    const getBooleanUrlOption = (names, presetDefault = false) => {
+        for (const name of names) {
+            if (!KL_URL_PARAMS.has(name)) continue;
+            return KL_TRUE_PARAM_VALUES.includes(
+                (KL_URL_PARAMS.get(name) || '').trim().toLowerCase()
+            );
+        }
+        return KL_CURRENT_PLAYTEST_PRESET && presetDefault;
+    };
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
-    const KL_STAGE7_SLIDING_CROSS_ENABLED =
-        KL_URL_PARAMS.get('stage7sliding') === '1' ||
-        KL_URL_PARAMS.get('stage7') === '1';
-    const KL_STAGE82C_CAULDRON_VISUAL_ENABLED =
-        KL_URL_PARAMS.get('stage8c') === '1' ||
-        KL_URL_PARAMS.get('stage82c') === '1';
-    const KL_STAGE82C_BUBBLE_PARAMS = KL_URL_PARAMS.getAll('stage8cbubbles')
-        .map(value => value.trim().toLowerCase())
-        .filter(Boolean);
+    const KL_STAGE7_SLIDING_CROSS_ENABLED = getBooleanUrlOption(['stage7sliding', 'stage7'], true);
+    const KL_STAGE82C_CAULDRON_VISUAL_ENABLED = getBooleanUrlOption(['stage8c', 'stage82c'], true);
+    const KL_STAGE82C_BUBBLE_PARAMS = (() => {
+        const explicit = KL_URL_PARAMS.getAll('stage8cbubbles')
+            .map(value => value.trim().toLowerCase())
+            .filter(Boolean);
+        return explicit.length || !KL_CURRENT_PLAYTEST_PRESET
+            ? explicit
+            : ['cauldron'];
+    })();
     const KL_STAGE82C_BUBBLE_PARAM = KL_STAGE82C_BUBBLE_PARAMS.length
         ? KL_STAGE82C_BUBBLE_PARAMS[KL_STAGE82C_BUBBLE_PARAMS.length - 1]
         : '';
@@ -34,18 +50,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         return 'invalid';
     })();
     const KL_STAGE82C_BUBBLES_ENABLED = KL_STAGE82C_BUBBLE_MODE === 'global';
-    const KL_STAGE84_C31_ENABLED = ['1', 'true', 'on', 'yes'].includes(
-        (KL_URL_PARAMS.get('stage84c31') || KL_URL_PARAMS.get('stage8c31') || '').trim().toLowerCase()
-    );
-    const KL_STAGE84_C33_ENABLED = ['1', 'true', 'on', 'yes'].includes(
-        (KL_URL_PARAMS.get('stage84c33') || KL_URL_PARAMS.get('stage8c33') || '').trim().toLowerCase()
-    );
-    const KL_STAGE84_C34_ENABLED = ['1', 'true', 'on', 'yes'].includes(
-        (KL_URL_PARAMS.get('stage84c34') || KL_URL_PARAMS.get('stage8c34') || '').trim().toLowerCase()
-    );
-    const KL_STAGE84_C35B_ENABLED = ['1', 'true', 'on', 'yes'].includes(
-        (KL_URL_PARAMS.get('stage84c35b') || KL_URL_PARAMS.get('stage8c35b') || '').trim().toLowerCase()
-    );
+    const KL_STAGE84_C31_ENABLED = getBooleanUrlOption(['stage84c31', 'stage8c31'], true);
+    const KL_STAGE84_C33_ENABLED = getBooleanUrlOption(['stage84c33', 'stage8c33'], true);
+    const KL_STAGE84_C34_ENABLED = getBooleanUrlOption(['stage84c34', 'stage8c34'], true);
+    const KL_STAGE84_C35B_ENABLED = getBooleanUrlOption(['stage84c35b', 'stage8c35b']);
     const KL_STAGE84_C35B_HOLD_FRAMES = (() => {
         const raw = KL_URL_PARAMS.get('stage84c35bhold') || KL_URL_PARAMS.get('stage8c35bhold') || '6';
         const parsed = Number.parseInt(String(raw).trim(), 10);
@@ -57,9 +65,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     ].includes(
         (KL_URL_PARAMS.get('stage84c35bbubbles') || KL_URL_PARAMS.get('stage8c35bbubbles') || '').trim().toLowerCase()
     );
-    const KL_STAGE84_C35C_ENABLED = ['1', 'true', 'on', 'yes'].includes(
-        (KL_URL_PARAMS.get('stage84c35c') || KL_URL_PARAMS.get('stage8c35c') || '').trim().toLowerCase()
-    );
+    const KL_STAGE84_C35C_ENABLED = getBooleanUrlOption(['stage84c35c', 'stage8c35c'], true);
     const KL_STAGE84_C35C_PERIOD = (() => {
         const raw = KL_URL_PARAMS.get('stage84c35cperiod') || KL_URL_PARAMS.get('stage8c35cperiod') || '4';
         const parsed = Number.parseInt(String(raw).trim(), 10);
@@ -72,11 +78,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     const KL_STAGE84_C35F_REQUESTED = !['0', 'false', 'off', 'disabled', 'no'].includes(
         (KL_URL_PARAMS.get('stage84c35f') || KL_URL_PARAMS.get('stage8c35f') || '1').trim().toLowerCase()
     );
-    const KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED = ['1', 'true', 'on', 'yes'].includes(
-        (KL_URL_PARAMS.get('stage84c36') || KL_URL_PARAMS.get('stage8originalcharmrooms') || '').trim().toLowerCase()
+    const KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED = getBooleanUrlOption(
+        ['stage84c36', 'stage8originalcharmrooms'],
+        true
     );
-    const KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED = ['1', 'true', 'on', 'yes'].includes(
-        (KL_URL_PARAMS.get('stage84c37') || KL_URL_PARAMS.get('stage8originalinteriors') || '').trim().toLowerCase()
+    const KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED = getBooleanUrlOption(
+        ['stage84c37', 'stage8originalinteriors'],
+        true
     );
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
@@ -487,6 +495,21 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             originalId: 'playtest-poke-invulnerability-original',
             currentId: 'playtest-poke-invulnerability-current',
             statusId: 'playtest-poke-invulnerability-status',
+        },
+        {
+            key: 'completionTarget',
+            label: 'Completion target',
+            addr: 49759,
+            value: 14,
+            min: 1,
+            max: 14,
+            expectedOriginal: 14,
+            inputId: 'playtest-poke-completion-target',
+            valueInputId: 'playtest-poke-completion-target-value',
+            rowId: 'playtest-poke-completion-target-row',
+            originalId: 'playtest-poke-completion-target-original',
+            currentId: 'playtest-poke-completion-target-current',
+            statusId: 'playtest-poke-completion-target-status',
         },
     ];
 
@@ -1009,6 +1032,29 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return questPersistent.get(sector.key);
         };
 
+        const inspectQuestState = sector => cloneData(
+            questPersistent.get(sector.key) || createQuestState(sector)
+        );
+
+        const inspectQuestSectorAt = (x, y) => {
+            const coord = getCoord({x, y});
+            const sector = proceduralMap.getQuestSectorAt(coord.x, coord.y);
+            return {
+                ...cloneData(sector),
+                state: inspectQuestState(sector),
+            };
+        };
+
+        const inspectQuestRoomInfoAt = (x, y) => {
+            const coord = getCoord({x, y});
+            const info = proceduralMap.getQuestRoomInfoAt(coord.x, coord.y);
+            const sector = proceduralMap.getQuestSectorAt(coord.x, coord.y);
+            return {
+                ...cloneData(info),
+                state: inspectQuestState(sector),
+            };
+        };
+
         const getQuestSectorAt = (x, y) => {
             const coord = getCoord({x, y});
             const sector = proceduralMap.getQuestSectorAt(coord.x, coord.y);
@@ -1066,6 +1112,27 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     quest: cloneData(info.quest),
                     state: cloneData(info.state),
                     reachability: cloneData(reachability),
+                    dressing: cloneData(room.questDressing || null),
+                    charmPolicy: 'Charm type is global; the local charm anchor is a suggested source, not an enforced sector-bound item.',
+                },
+            };
+            return room;
+        };
+
+        const attachQuestMetadataReadOnly = room => {
+            const info = inspectQuestRoomInfoAt(room.coord.x, room.coord.y);
+            room.questRole = info.role;
+            room.questSector = cloneData(info.sector);
+            room.questCharm = info.quest.requiredCharm ? cloneData(info.quest.requiredCharm) : null;
+            room.questDressing = cloneData(room.questDressing || info.dressing || null);
+            room.meta = {
+                ...room.meta,
+                quest: {
+                    sector: cloneData(info.sector),
+                    role: info.role,
+                    quest: cloneData(info.quest),
+                    state: cloneData(info.state),
+                    reachability: null,
                     dressing: cloneData(room.questDressing || null),
                     charmPolicy: 'Charm type is global; the local charm anchor is a suggested source, not an enforced sector-bound item.',
                 },
@@ -1136,7 +1203,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             return {changed, state, sector};
         };
 
-        const getRoomAt = (x, y) => {
+        const getNormalizedRoomAt = (x, y) => {
             const coord = getCoord({x, y});
             const key = logicalCoordKey(coord.x, coord.y);
             let definition = authored.get(key);
@@ -1150,9 +1217,84 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 definition = generated.get(key);
             }
 
-            const room = normalizeLogicalRoomDefinition(definition, source);
+            return normalizeLogicalRoomDefinition(definition, source);
+        };
+
+        const inspectRoomAt = (x, y) => {
+            const room = getNormalizedRoomAt(x, y);
+            room.state = persistent.has(room.key)
+                ? cloneData(persistent.get(room.key))
+                : null;
+            return attachQuestMetadataReadOnly(room);
+        };
+
+        const getRoomAt = (x, y) => {
+            const room = getNormalizedRoomAt(x, y);
             room.state = ensurePersistentState(room);
             return attachQuestMetadata(room);
+        };
+
+        const inspectEffectiveRoomAt = (x, y) => {
+            const room = inspectRoomAt(x, y);
+            const reciprocal = createReciprocalExitRoom(room, inspectRoomAt);
+            return {
+                ...reciprocal,
+                room: cloneData(reciprocal.room),
+                adjustments: cloneData(reciprocal.adjustments),
+            };
+        };
+
+        const getVisitedRoomSnapshot = () => Array.from(persistent.values())
+            .filter(state => state.visited)
+            .map(cloneData);
+
+        const getCompletedQuestSectorSnapshot = () => Array.from(questPersistent.values())
+            .filter(state => state.completed)
+            .map(cloneData);
+
+        const inspectNavigationViewport = bounds => {
+            const minX = Math.floor(Number(bounds && bounds.minX));
+            const maxX = Math.ceil(Number(bounds && bounds.maxX));
+            const minY = Math.floor(Number(bounds && bounds.minY));
+            const maxY = Math.ceil(Number(bounds && bounds.maxY));
+            if (![minX, maxX, minY, maxY].every(Number.isFinite) || minX > maxX || minY > maxY) {
+                throw new Error('Navigation viewport bounds must be finite and ordered.');
+            }
+
+            const roomCount = (maxX - minX + 1) * (maxY - minY + 1);
+            if (roomCount > 6000) {
+                throw new Error(`Navigation viewport requests ${roomCount} rooms; maximum is 6000.`);
+            }
+
+            const persistenceBefore = {
+                rooms: persistent.size,
+                questSectors: questPersistent.size,
+            };
+            const rooms = [];
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    rooms.push(inspectEffectiveRoomAt(x, y).room);
+                }
+            }
+
+            const sectors = [];
+            const sectorSize = proceduralMap.getQuestSectorAt(minX, minY).sectorSize;
+            for (let sectorY = Math.floor(minY / sectorSize); sectorY <= Math.floor(maxY / sectorSize); sectorY++) {
+                for (let sectorX = Math.floor(minX / sectorSize); sectorX <= Math.floor(maxX / sectorSize); sectorX++) {
+                    sectors.push(inspectQuestSectorAt(sectorX * sectorSize, sectorY * sectorSize));
+                }
+            }
+
+            return {
+                bounds: {minX, maxX, minY, maxY},
+                rooms,
+                sectors,
+                persistenceBefore,
+                persistenceAfter: {
+                    rooms: persistent.size,
+                    questSectors: questPersistent.size,
+                },
+            };
         };
 
         const loadAuthoredRooms = rooms => {
@@ -1268,6 +1410,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         return {
             getRoomAt,
             getRoomByLabel,
+            inspectRoomAt,
+            inspectEffectiveRoomAt,
+            inspectQuestSectorAt,
+            inspectQuestRoomInfoAt,
+            inspectNavigationViewport,
+            getVisitedRoomSnapshot,
+            getCompletedQuestSectorSnapshot,
             getQuestSectorAt,
             getQuestRoomInfoAt,
             getQuestReachabilityAt,
@@ -1292,7 +1441,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 authoredRooms: authored.size,
                 generatedRooms: generated.size,
                 persistentRooms: persistent.size,
+                visitedRooms: getVisitedRoomSnapshot().length,
                 questPersistentSectors: questPersistent.size,
+                completedQuestSectors: getCompletedQuestSectorSnapshot().length,
                 labels: labels.size,
                 procedural: proceduralMap.stats(),
             }),
@@ -1620,6 +1771,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 original: document.getElementById(definition.originalId),
                 current: document.getElementById(definition.currentId),
                 status: document.getElementById(definition.statusId),
+                valueInput: definition.valueInputId
+                    ? document.getElementById(definition.valueInputId)
+                    : null,
             },
         ]));
         const crossTbody = document.getElementById('stage2-cross-body');
@@ -1698,6 +1852,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             lastCompiled: null,
             lastTransition: null,
             lastPatchedSlots: [],
+            signatureChecks: 0,
+            signatureRepairs: 0,
+            lastSignatureValid: null,
+            lastSignatureMismatch: null,
             message: KL_STAGE7_SLIDING_CROSS.enabled
                 ? 'Enabled by ?stage7sliding=1; waiting to inject the first five-room physical cross.'
                 : 'Disabled; add ?stage7sliding=1 to run the four-direction sliding cross proof.',
@@ -1888,6 +2046,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             entrySnapshot: null,
             armedEntrySnapshot: null,
             previousEntrySnapshot: null,
+            deathSignalSnapshot: null,
             pendingDeath: null,
             lastSnapshot: null,
             corrections: 0,
@@ -1914,6 +2073,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             gameOverLatched: false,
             sawActiveGame: false,
             zeroAfterActiveGame: false,
+            completionSequenceActive: false,
+            completionFromCoord: null,
+            completionPasses: 0,
             resets: 0,
             writes: 0,
             charmRecordWrites: 0,
@@ -1934,6 +2096,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             definition.key,
             {
                 requested: false,
+                value: definition.value,
                 original: null,
                 current: null,
                 writes: 0,
@@ -1944,6 +2107,20 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             },
         ]));
         let playtestPokeSyncPromise = null;
+
+        const getPlaytestCompletionTarget = () => {
+            const state = playtestPokes.completionTarget;
+            return state && state.requested
+                ? state.value
+                : KL_STAGE84_C30.objectsRequiredLength;
+        };
+
+        if (navigationMap) navigationMap.destroy();
+        navigationMap = createKnightLoreNavigationMap({
+            root: document.getElementById('knight-lore-navigation-map'),
+            logicalMap,
+        });
+        if (navigationMap) navigationMap.setCurrentCoord(stage7SlidingCross.center);
 
         if (logicalMapLoadPromise) {
             logicalMapLoadPromise.finally(() => {
@@ -1958,6 +2135,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 };
                 renderStage7SlidingRow();
                 renderStage4LogicalMap();
+                if (navigationMap) navigationMap.refresh('logical-map-loaded');
             });
         }
 
@@ -2093,16 +2271,16 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const renderPlaytestPokes = () => {
             const progress = stage84C34RequestOrderPatch.objectsPutInCauldron;
-            const infiniteLives = playtestPokes.infiniteLives;
+            const completionTarget = getPlaytestCompletionTarget();
             const enabledCount = KL_PLAYTEST_POKES.filter(definition => (
                 playtestPokes[definition.key].requested
             )).length;
-            const finalDropWarning = infiniteLives.requested && progress >= 13;
+            const completionReady = progress >= completionTarget;
 
             if (playtestPokesStatus) {
-                playtestPokesStatus.textContent = finalDropWarning
-                    ? `Original cauldron progress ${progress}/14. Disable Infinite lives before the fourteenth drop: its RET poke blocks the original lose_life path used to reach the ending.`
-                    : `Original cauldron progress ${progress}/14. ${enabledCount ? `${enabledCount} poke(s) enabled.` : 'Both pokes are off.'} Original bytes are captured before writing and restored exactly when switched off. Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`;
+                playtestPokesStatus.textContent = completionReady
+                    ? `Original cauldron progress ${progress}/${completionTarget}. Completion target reached; the original 0x5BC3 final-animation flag should now own execution.`
+                    : `Original cauldron progress ${progress}/${completionTarget}. ${enabledCount ? `${enabledCount} poke(s) enabled.` : 'All playtest pokes are off.'} Original bytes are captured before writing and restored exactly when switched off. Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`;
             }
 
             for (const definition of KL_PLAYTEST_POKES) {
@@ -2116,6 +2294,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     const label = ui.input.nextElementSibling;
                     if (label) label.textContent = state.requested ? 'On' : 'Off';
                 }
+                if (ui.valueInput) {
+                    if (document.activeElement !== ui.valueInput) {
+                        ui.valueInput.value = String(state.value);
+                    }
+                    ui.valueInput.disabled = false;
+                }
                 if (ui.original) {
                     ui.original.textContent = state.original === null ? '-' : fmtByte(state.original);
                 }
@@ -2126,14 +2310,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     ui.status.textContent = state.lastError || state.lastAction;
                 }
                 if (ui.row) {
-                    const finalDropRisk = definition.key === 'infiniteLives' && finalDropWarning;
                     ui.row.className = state.lastError
                         ? 'state-bad'
-                        : finalDropRisk
-                            ? 'state-warn'
-                            : state.requested
-                                ? 'state-ok'
-                                : 'state-muted';
+                        : state.requested
+                            ? 'state-ok'
+                            : 'state-muted';
                 }
             }
         };
@@ -2154,6 +2335,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
                 for (const definition of KL_PLAYTEST_POKES) {
                     const state = playtestPokes[definition.key];
+                    const desiredValue = state.value;
                     state.inFlight = true;
                     state.lastError = null;
                     renderPlaytestPokes();
@@ -2164,9 +2346,18 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         state.current = current;
 
                         if (state.original === null) {
-                            if (current === definition.value) {
+                            if (
+                                Number.isInteger(definition.expectedOriginal) &&
+                                current !== definition.expectedOriginal
+                            ) {
                                 state.requested = false;
-                                state.lastError = `Cannot capture the original byte: ${hexWord(definition.addr)} already contains ${fmtByte(definition.value)}. Reload with the poke off.`;
+                                state.lastError = `Cannot capture the expected original byte: ${hexWord(definition.addr)} contains ${fmtByte(current)}, expected ${fmtByte(definition.expectedOriginal)}. Reload with the poke off.`;
+                                state.lastAction = 'original-byte validation refused';
+                                continue;
+                            }
+                            if (!Number.isInteger(definition.expectedOriginal) && current === desiredValue) {
+                                state.requested = false;
+                                state.lastError = `Cannot capture the original byte: ${hexWord(definition.addr)} already contains ${fmtByte(desiredValue)}. Reload with the poke off.`;
                                 state.lastAction = 'original-byte capture refused';
                                 continue;
                             }
@@ -2175,20 +2366,20 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         }
 
                         if (state.requested) {
-                            if (current !== definition.value) {
-                                await emu.writeMemory(definition.addr, Uint8Array.from([definition.value]));
+                            if (current !== desiredValue) {
+                                await emu.writeMemory(definition.addr, Uint8Array.from([desiredValue]));
                                 const verify = await emu.readMemory(definition.addr, 1);
                                 current = verify.data[0];
                                 state.current = current;
-                                if (current !== definition.value) {
+                                if (current !== desiredValue) {
                                     throw new Error(`write verification returned ${fmtByte(current)}`);
                                 }
                                 state.writes++;
-                                state.lastAction = `${reason}: wrote ${fmtByte(definition.value)}; writes ${state.writes}`;
+                                state.lastAction = `${reason}: wrote ${fmtByte(desiredValue)}; writes ${state.writes}`;
                             } else {
-                                state.lastAction = `active; ${fmtByte(definition.value)} verified; writes ${state.writes}`;
+                                state.lastAction = `active; ${fmtByte(desiredValue)} verified; writes ${state.writes}`;
                             }
-                        } else if (current === definition.value) {
+                        } else if (current === desiredValue) {
                             await emu.writeMemory(definition.addr, Uint8Array.from([state.original]));
                             const verify = await emu.readMemory(definition.addr, 1);
                             current = verify.data[0];
@@ -2234,6 +2425,25 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     renderPlaytestPokes();
                 });
             });
+            if (ui.valueInput) {
+                ui.valueInput.addEventListener('input', () => {
+                    const state = playtestPokes[definition.key];
+                    const parsed = Number.parseInt(ui.valueInput.value, 10);
+                    if (!Number.isFinite(parsed)) return;
+                    state.value = Math.max(definition.min, Math.min(definition.max, parsed));
+                    state.lastError = null;
+                    state.lastAction = state.requested
+                        ? `changing ${definition.label.toLowerCase()} to ${state.value}`
+                        : `${definition.label} set to ${state.value}; switch remains off`;
+                    renderPlaytestPokes();
+                    if (state.requested) {
+                        syncPlaytestPokes('value change').catch(err => {
+                            state.lastError = `Value change failed: ${err.message || err}`;
+                            renderPlaytestPokes();
+                        });
+                    }
+                });
+            }
         }
         renderPlaytestPokes();
 
@@ -2350,6 +2560,21 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const capacity = KL_STAGE1.locationEnd - KL_STAGE1.locationStart;
             await emu.writeMemory(KL_STAGE1.locationStart, new Uint8Array(capacity));
             await emu.writeMemory(KL_STAGE1.locationStart, Uint8Array.from(compiled.bytes));
+        };
+
+        const verifyCompiledLocationTable = async compiled => {
+            if (!compiled || !Array.isArray(compiled.bytes) || !compiled.bytes.length) {
+                return {valid: false, mismatchIndex: null, expected: null, actual: null};
+            }
+            const result = await emu.readMemory(KL_STAGE1.locationStart, compiled.bytes.length);
+            const actual = Array.from(result.data);
+            const mismatchIndex = compiled.bytes.findIndex((value, index) => actual[index] !== value);
+            return {
+                valid: mismatchIndex === -1,
+                mismatchIndex: mismatchIndex === -1 ? null : mismatchIndex,
+                expected: mismatchIndex === -1 ? null : compiled.bytes[mismatchIndex],
+                actual: mismatchIndex === -1 ? null : actual[mismatchIndex],
+            };
         };
 
         const writeStage7CustomBackgrounds = async () => {
@@ -3963,6 +4188,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 action = result.changed
                     ? `completed sector (${currentSector.sectorX}, ${currentSector.sectorY}) with ${fmtMechanicSprite(carriedSprite)} after ${dropSignal}`
                     : `matching charm observed; sector (${currentSector.sectorX}, ${currentSector.sectorY}) was already complete`;
+                if (result.changed && navigationMap) navigationMap.refresh('quest-completed');
             }
 
             stage84C33CauldronAcceptance = {
@@ -4096,6 +4322,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 decodeStage84CarryState(workRange),
                 'objects_put_in_cauldron'
             );
+            const completionTarget = getPlaytestCompletionTarget();
             let tableBytes = stage84C34RequestOrderPatch.tableBytes;
             let lastAction = stage84C34RequestOrderPatch.lastAction;
             let lastError = null;
@@ -4178,8 +4405,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 return;
             }
 
-            if (objectsPutInCauldron === KL_STAGE84_C30.objectsRequiredLength) {
-                lastAction = 'all 14 original cauldron deliveries accepted; completion flag/final animation should now be active';
+            if (objectsPutInCauldron === completionTarget) {
+                lastAction = `all ${completionTarget} configured cauldron deliveries accepted; completion flag/final animation should now be active`;
                 setState({enabled: true});
                 return;
             }
@@ -4756,6 +4983,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const room = logicalMap.getRoomAt(coord.x, coord.y);
             const role = room.questRole || 'none';
             const playerForm = decodeStage84PlayerForm(workRange);
+            const completionActive = readByte(workRange, 0x5bc3) !== 0;
             const observedSprite = stage84C35aTimingProbe.currentSprite;
             let currentMotionCall = stage84C35cRoutineThrottle.currentMotionCall;
             let currentGraphicCall = stage84C35cRoutineThrottle.currentGraphicCall;
@@ -4859,6 +5087,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             };
 
             try {
+                if (completionActive) {
+                    await restoreOriginal('restored original updater for the original completion sequence');
+                    setState({enabled: true, cycle: 0});
+                    return;
+                }
+
                 if (role !== 'cauldron') {
                     await restoreOriginal(`restored original updater; current role ${role}`);
                     setState({enabled: true});
@@ -4976,7 +5210,20 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const role = room.questRole || 'none';
             const playerForm = decodeStage84PlayerForm(workRange);
             const lives = readByte(workRange, 0x5bba);
+            const completionActive = readByte(workRange, 0x5bc3) !== 0;
             const liveSprite = readByte(workRange, KL_STAGE82C_ORIGINAL_CAULDRON.liveBubbleSlotAddr);
+            const bodySprite = readByte(workRange, 0x5c08);
+            const headSprite = readByte(workRange, 0x5c28);
+            const bodyState = readByte(workRange, 0x5c15);
+            const headState = readByte(workRange, 0x5c35);
+            const deathFlag = !!(
+                ((bodyState || 0) & 0x40) ||
+                ((headState || 0) & 0x40)
+            );
+            const deathSparkles = !!(
+                (bodySprite >= 0x70 && bodySprite <= 0x77) ||
+                (headSprite >= 0x70 && headSprite <= 0x77)
+            );
             const transition = sample && sample.stage7Action && sample.stage7Action.recentered
                 ? sample.stage7Action
                 : stage7SlidingCross.lastTransition;
@@ -4999,7 +5246,15 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 playerForm: playerForm.kind,
                 playerFormText: playerForm.text,
                 lives: Number.isInteger(lives) ? lives : null,
+                completionActive,
                 liveSprite: Number.isInteger(liveSprite) ? liveSprite : null,
+                bodySprite: Number.isInteger(bodySprite) ? bodySprite : null,
+                headSprite: Number.isInteger(headSprite) ? headSprite : null,
+                bodyState: Number.isInteger(bodyState) ? bodyState : null,
+                headState: Number.isInteger(headState) ? headState : null,
+                deathFlag,
+                deathSparkles,
+                deathSignal: deathFlag || deathSparkles,
                 bubblesActive: !!(
                     KL_STAGE82C_CAULDRON_VISUAL_ENABLED &&
                     ['global', 'cauldron'].includes(KL_STAGE82C_BUBBLE_MODE) &&
@@ -5027,6 +5282,32 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             frameCompletedCount - snapshot.frame <= 180
         );
 
+        const makeStage84C35eDeathSignalSnapshot = (context, entrySnapshot, armedEntrySnapshot) => {
+            const source = entrySnapshot && sameCoord(entrySnapshot.coord, context.coord)
+                ? entrySnapshot
+                : armedEntrySnapshot && sameCoord(armedEntrySnapshot.coord, context.coord)
+                    ? armedEntrySnapshot
+                    : context;
+            const infiniteLives = playtestPokes.infiniteLives;
+            return {
+                ...cloneData(source),
+                deathFlag: context.deathFlag,
+                deathSparkles: context.deathSparkles,
+                signalBodySprite: context.bodySprite,
+                signalHeadSprite: context.headSprite,
+                signalBodyState: context.bodyState,
+                signalHeadState: context.headState,
+                infiniteLivesActive: !!(
+                    infiniteLives &&
+                    (infiniteLives.requested || infiniteLives.current === 0xc9)
+                ),
+                signalFrame: context.frame,
+                signalSample: context.sample,
+                frame: context.frame,
+                sample: context.sample,
+            };
+        };
+
         const isStage84C35eLikelyRespawnTarget = (entrySnapshot, context) => {
             if (!entrySnapshot || !context || sameCoord(entrySnapshot.coord, context.coord)) return false;
             if (!entrySnapshot.entryDirection) return true;
@@ -5043,6 +5324,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             let entrySnapshot = stage84C35eBubbleRespawnGuard.entrySnapshot;
             let armedEntrySnapshot = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
             let previousEntrySnapshot = stage84C35eBubbleRespawnGuard.previousEntrySnapshot;
+            let deathSignalSnapshot = stage84C35eBubbleRespawnGuard.deathSignalSnapshot;
             let pendingDeath = stage84C35eBubbleRespawnGuard.pendingDeath;
             let lastAction = stage84C35eBubbleRespawnGuard.lastAction;
             const justCorrected = !!(sample && sample.stage84C35eAction && sample.stage84C35eAction.corrected);
@@ -5054,10 +5336,18 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 context.lives < armedEntrySnapshot.lives
             );
 
-            if (gameOverActive) {
+            if (context.completionActive) {
                 entrySnapshot = null;
                 armedEntrySnapshot = null;
                 previousEntrySnapshot = null;
+                deathSignalSnapshot = null;
+                pendingDeath = null;
+                lastAction = 'original completion sequence active; ordinary death recovery suspended';
+            } else if (gameOverActive) {
+                entrySnapshot = null;
+                armedEntrySnapshot = null;
+                previousEntrySnapshot = null;
+                deathSignalSnapshot = null;
                 pendingDeath = null;
                 lastAction = 'game over delegated to C3.5f; ordinary death latch cleared';
             } else if (!stage84C35eBubbleRespawnGuard.requested) {
@@ -5067,6 +5357,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             } else if (justCorrected) {
                 lastAction = stage84C35eBubbleRespawnGuard.lastAction;
             } else if (context.physicalRoom === KL_STAGE7_SLIDING_CROSS.centerRoom) {
+                if (context.deathSignal && !deathSignalSnapshot) {
+                    deathSignalSnapshot = makeStage84C35eDeathSignalSnapshot(
+                        context,
+                        entrySnapshot,
+                        armedEntrySnapshot
+                    );
+                    lastAction = `latched original death signal in ${fmtLogicalCoord(deathSignalSnapshot.coord)}${deathSignalSnapshot.infiniteLivesActive ? '; infinite lives active' : ''}`;
+                }
                 const needsNewEntry = !entrySnapshot ||
                     !sameCoord(entrySnapshot.coord, context.coord) ||
                     entrySnapshot.entryTransitionKey !== context.entryTransitionKey;
@@ -5080,7 +5378,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     }
                     entrySnapshot = cloneData(context);
                     armedEntrySnapshot = cloneData(context);
-                    lastAction = `recorded room entry ${context.entrySide || 'unknown side'} at ${fmtLogicalCoord(context.coord)}`;
+                    if (!context.deathSignal) {
+                        lastAction = `recorded room entry ${context.entrySide || 'unknown side'} at ${fmtLogicalCoord(context.coord)}`;
+                    }
                 } else if (!pendingDeath) {
                     if (!armedEntrySnapshot || !sameCoord(armedEntrySnapshot.coord, context.coord)) {
                         armedEntrySnapshot = cloneData(entrySnapshot || context);
@@ -5094,7 +5394,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                             sample: context.sample,
                         };
                     }
-                    lastAction = `armed room ${fmtLogicalCoord(context.coord)}; entry ${(entrySnapshot && entrySnapshot.entrySide) || 'unknown side'}; player ${context.playerForm}`;
+                    if (!context.deathSignal) {
+                        lastAction = `armed room ${fmtLogicalCoord(context.coord)}; entry ${(entrySnapshot && entrySnapshot.entrySide) || 'unknown side'}; player ${context.playerForm}`;
+                    }
                 }
             } else if (!pendingDeath) {
                 lastAction = `watching physical transition from ${fmtLogicalCoord(context.coord)}`;
@@ -5113,12 +5415,22 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 lastAction = 'expired stale pending death correction';
             }
 
+            if (
+                deathSignalSnapshot &&
+                Number.isInteger(deathSignalSnapshot.signalFrame) &&
+                frameCompletedCount - deathSignalSnapshot.signalFrame > 300
+            ) {
+                deathSignalSnapshot = null;
+                lastAction = 'expired stale original death signal';
+            }
+
             stage84C35eBubbleRespawnGuard = {
                 ...stage84C35eBubbleRespawnGuard,
                 enabled: KL_STAGE84_C35E_REQUESTED && KL_STAGE7_SLIDING_CROSS.enabled,
                 entrySnapshot,
                 armedEntrySnapshot,
                 previousEntrySnapshot,
+                deathSignalSnapshot,
                 pendingDeath,
                 lastSnapshot: gameOverActive ? null : context,
                 lastCoord: cloneData(context.coord),
@@ -5139,6 +5451,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const entrySnapshot = stage84C35eBubbleRespawnGuard.entrySnapshot;
             const armedEntrySnapshot = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
             const previousEntrySnapshot = stage84C35eBubbleRespawnGuard.previousEntrySnapshot;
+            const latchedDeathSignal = stage84C35eBubbleRespawnGuard.deathSignalSnapshot;
             const bodyJump = measureStage84C35eBodyJump(previous, context);
             const entryBodyJump = measureStage84C35eBodyJump(entrySnapshot, context);
             const armedBodyJump = measureStage84C35eBodyJump(armedEntrySnapshot, context);
@@ -5150,12 +5463,33 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 context.lives < previous.lives
             );
 
+            if (context.completionActive) {
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    entrySnapshot: null,
+                    armedEntrySnapshot: null,
+                    previousEntrySnapshot: null,
+                    deathSignalSnapshot: null,
+                    pendingDeath: null,
+                    lastSnapshot: context,
+                    lastCoord: cloneData(context.coord),
+                    lastRole: context.role,
+                    lastPlayerForm: context.playerForm,
+                    lastLives: context.lives,
+                    lastTrigger: 'original completion pass-through',
+                    lastAction: 'original completion sequence active; C3.5e writes suppressed',
+                    lastError: null,
+                };
+                return null;
+            }
+
             if (context.lives !== null && context.lives >= 0x80) {
                 stage84C35eBubbleRespawnGuard = {
                     ...stage84C35eBubbleRespawnGuard,
                     entrySnapshot: null,
                     armedEntrySnapshot: null,
                     previousEntrySnapshot: null,
+                    deathSignalSnapshot: null,
                     pendingDeath: null,
                     lastSnapshot: null,
                     lastCoord: cloneData(context.coord),
@@ -5201,6 +5535,22 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const wrongPhysicalRoom = sample.room0 !== KL_STAGE7_SLIDING_CROSS.centerRoom
                 ? sample.room0
                 : null;
+            const inlineDeathSignal = context.deathSignal
+                ? makeStage84C35eDeathSignalSnapshot(context, entrySnapshot, armedEntrySnapshot)
+                : null;
+            const deathSignalSnapshot = latchedDeathSignal || inlineDeathSignal;
+            const deathSignalRecent = !!(
+                deathSignalSnapshot &&
+                Number.isInteger(deathSignalSnapshot.signalFrame) &&
+                frameCompletedCount - deathSignalSnapshot.signalFrame <= 300
+            );
+            const deathSignalRoomShift = !!(
+                deathSignalRecent &&
+                (
+                    wrongPhysicalRoom !== null ||
+                    !sameCoord(deathSignalSnapshot.coord, context.coord)
+                )
+            );
             const previousArmed = isStage84C35eArmedSnapshot(previous);
             const entryArmed = isStage84C35eArmedSnapshot(entrySnapshot) &&
                 isStage84C35eRecentSnapshot(entrySnapshot);
@@ -5242,14 +5592,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     lifeDropped
                 )
             );
-            const deathTrigger = previousEntryLifeDrop ||
+            const deathTrigger = deathSignalRoomShift ||
+                previousEntryLifeDrop ||
                 (previousArmed && lifeDropped) ||
                 entryLifeDroppedAfterShift ||
                 latchedEntryLifeDrop ||
                 suspiciousBubbleRespawnJump;
 
             if (deathTrigger) {
-                const trigger = previousEntryLifeDrop
+                const trigger = deathSignalRoomShift
+                    ? deathSignalSnapshot.infiniteLivesActive
+                        ? 'original death signal with frozen lives'
+                        : 'original death signal room shift'
+                    : previousEntryLifeDrop
                     ? 'life drop after recent room recenter'
                     : lifeDropped
                         ? 'general life drop'
@@ -5260,7 +5615,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                                 : wrongPhysicalRoom !== null
                                     ? 'bubble respawn physical-room change'
                                     : 'bubble respawn body jump';
-                const source = previousEntryLifeDrop
+                const source = deathSignalRoomShift
+                    ? deathSignalSnapshot
+                    : previousEntryLifeDrop
                     ? previousEntrySnapshot
                     : entryLifeDroppedAfterShift
                         ? entrySnapshot
@@ -5280,7 +5637,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     lifeBefore: source.lives,
                     lifeAfter: context.lives,
                     trigger,
-                    bodyJump: previousEntryLifeDrop
+                    bodyJump: deathSignalRoomShift
+                        ? measureStage84C35eBodyJump(deathSignalSnapshot, context)
+                        : previousEntryLifeDrop
                         ? previousEntryBodyJump
                         : latchedEntryLifeDrop
                             ? armedBodyJump
@@ -5367,6 +5726,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     pendingDeath: null,
                     armedEntrySnapshot: restoredEntry,
                     previousEntrySnapshot: null,
+                    deathSignalSnapshot: null,
                     corrections: stage84C35eBubbleRespawnGuard.corrections + 1,
                     writes: stage84C35eBubbleRespawnGuard.writes + patchAddrs.length + 2,
                     lastPatchedAddrs: patchAddrs,
@@ -5420,6 +5780,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 entrySnapshot: null,
                 armedEntrySnapshot: null,
                 previousEntrySnapshot: null,
+                deathSignalSnapshot: null,
                 pendingDeath: null,
                 lastSnapshot: null,
                 lastCoord: {x: 0, y: 0},
@@ -5433,14 +5794,70 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
         const applyStage84C35fGameOverOriginReset = async (workRange, sample) => {
             const currentLives = readByte(workRange, 0x5bba);
+            const completionFlag = readByte(workRange, 0x5bc3) || 0;
             const previousLives = stage84C35fGameOverOriginReset.previousLives;
             const fromCoord = getStage8CurrentCoord();
             let pendingReset = stage84C35fGameOverOriginReset.pendingReset;
             let gameOverLatched = stage84C35fGameOverOriginReset.gameOverLatched;
             let sawActiveGame = stage84C35fGameOverOriginReset.sawActiveGame;
             let zeroAfterActiveGame = stage84C35fGameOverOriginReset.zeroAfterActiveGame;
+            let completionSequenceActive = stage84C35fGameOverOriginReset.completionSequenceActive;
+            let completionFromCoord = stage84C35fGameOverOriginReset.completionFromCoord;
             let lastAction = stage84C35fGameOverOriginReset.lastAction;
             let lastError = null;
+
+            if (completionFlag !== 0) {
+                completionSequenceActive = true;
+                completionFromCoord = completionFromCoord || cloneData(fromCoord);
+                clearStage84C35eForGameOver(currentLives);
+                stage84C35eBubbleRespawnGuard = {
+                    ...stage84C35eBubbleRespawnGuard,
+                    lastTrigger: 'original completion pass-through',
+                    lastCoord: cloneData(fromCoord),
+                    lastRole: logicalMap.getRoomAt(fromCoord.x, fromCoord.y).questRole || 'none',
+                    lastAction: 'original completion sequence active; death and origin-reset writes suppressed',
+                };
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    enabled: true,
+                    previousLives: currentLives,
+                    currentLives,
+                    pendingReset: null,
+                    gameOverLatched: false,
+                    sawActiveGame: false,
+                    zeroAfterActiveGame: false,
+                    completionSequenceActive,
+                    completionFromCoord,
+                    completionPasses: stage84C35fGameOverOriginReset.completionPasses + 1,
+                    lastTrigger: 'original all_objs_in_cauldron flag',
+                    lastAction: `completion pass-through active at ${fmtLogicalCoord(fromCoord)}; all runtime death/recenter writes suppressed`,
+                    lastError: null,
+                };
+                return {
+                    suppressGeneralDeath: true,
+                    suppressStage7: true,
+                    completion: true,
+                };
+            }
+
+            if (completionSequenceActive && !pendingReset) {
+                const completedAt = completionFromCoord || cloneData(fromCoord);
+                pendingReset = {
+                    trigger: 'original completion sequence returned to menu',
+                    fromCoord: cloneData(completedAt),
+                    frame: frameCompletedCount,
+                    sample: sampleCount,
+                };
+                gameOverLatched = true;
+                completionSequenceActive = false;
+                completionFromCoord = null;
+                stage84C35fGameOverOriginReset = {
+                    ...stage84C35fGameOverOriginReset,
+                    completionSequenceActive: false,
+                    completionFromCoord: null,
+                };
+                lastAction = 'original completion flag cleared; origin cross queued for the next game';
+            }
 
             if (!stage84C35fGameOverOriginReset.requested) {
                 stage84C35fGameOverOriginReset = {
@@ -5733,6 +6150,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const entry = stage84C35eBubbleRespawnGuard.entrySnapshot;
             const armedEntry = stage84C35eBubbleRespawnGuard.armedEntrySnapshot;
             const previousEntry = stage84C35eBubbleRespawnGuard.previousEntrySnapshot;
+            const deathSignal = stage84C35eBubbleRespawnGuard.deathSignalSnapshot;
             const pending = stage84C35eBubbleRespawnGuard.pendingDeath;
             const entryBody = entry && entry.body ? entry.body : {x: 0, y: 0, z: 0};
             const armedAge = armedEntry && Number.isInteger(armedEntry.frame)
@@ -5740,6 +6158,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 : null;
             const previousEntryAge = previousEntry && Number.isInteger(previousEntry.frame)
                 ? Math.max(0, frameCompletedCount - previousEntry.frame)
+                : null;
+            const deathSignalAge = deathSignal && Number.isInteger(deathSignal.signalFrame)
+                ? Math.max(0, frameCompletedCount - deathSignal.signalFrame)
                 : null;
             const current = stage84C35eBubbleRespawnGuard.lastSnapshot;
             const currentBody = current && current.body ? current.body : null;
@@ -5753,6 +6174,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `entry ${entry ? `${fmtLogicalCoord(entry.coord)} ${entry.entrySide || 'unknown side'} ${fmtXYZ(entryBody.x, entryBody.y, entryBody.z)}` : 'none'}`,
                 `armed entry ${armedEntry ? `${fmtLogicalCoord(armedEntry.coord)} ${armedEntry.entrySide || 'unknown side'} lives ${armedEntry.lives === null ? '-' : hexByte(armedEntry.lives)} age ${armedAge}` : 'none'}`,
                 `previous entry ${previousEntry ? `${fmtLogicalCoord(previousEntry.coord)} ${previousEntry.entrySide || 'unknown side'} lives ${previousEntry.lives === null ? '-' : hexByte(previousEntry.lives)} age ${previousEntryAge}` : 'none'}`,
+                `death signal ${deathSignal ? `${fmtLogicalCoord(deathSignal.coord)} ${deathSignal.deathFlag ? 'flag' : 'sparkles'} body ${hexByte(deathSignal.signalBodySprite || 0)} state ${hexByte(deathSignal.signalBodyState || 0)} age ${deathSignalAge}${deathSignal.infiniteLivesActive ? ' infinite-lives' : ''}` : 'none'}`,
                 `pending ${pending ? `${fmtLogicalCoord(pending.coord)} ${hexByte(pending.lifeBefore)}->${hexByte(pending.lifeAfter)} ${pending.trigger || ''}` : 'none'}`,
                 `trigger ${stage84C35eBubbleRespawnGuard.lastTrigger}`,
                 `jump ${jump ? `dx ${jump.x} dy ${jump.y} dz ${jump.z}` : '-'}`,
@@ -5785,6 +6207,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `latched ${stage84C35fGameOverOriginReset.gameOverLatched ? 'yes' : 'no'}`,
                 `active game seen ${stage84C35fGameOverOriginReset.sawActiveGame ? 'yes' : 'no'}`,
                 `zero-life armed ${stage84C35fGameOverOriginReset.zeroAfterActiveGame ? 'yes' : 'no'}`,
+                `completion pass-through ${stage84C35fGameOverOriginReset.completionSequenceActive ? 'active' : 'no'}`,
+                `completion frames ${stage84C35fGameOverOriginReset.completionPasses}`,
                 `pending ${stage84C35fGameOverOriginReset.pendingReset ? stage84C35fGameOverOriginReset.pendingReset.trigger : 'none'}`,
                 `resets ${stage84C35fGameOverOriginReset.resets}`,
                 `writes ${stage84C35fGameOverOriginReset.writes}`,
@@ -6077,7 +6501,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             addRow({
                 state: stage84C34RequestOrderPatch.lastError
                     ? 'bad'
-                    : stage84C34RequestOrderPatch.objectsPutInCauldron === KL_STAGE84_C30.objectsRequiredLength
+                    : stage84C34RequestOrderPatch.objectsPutInCauldron === getPlaytestCompletionTarget()
                         ? 'ok'
                         : stage84C34RequestOrderPatch.requested
                             ? logicalCauldron ? 'warn' : 'muted'
@@ -6155,7 +6579,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 bytes: formatStage84C35eRespawnBytes(),
                 notes: stage84C35eBubbleRespawnGuard.lastError
                     ? stage84C35eBubbleRespawnGuard.lastError
-                    : 'Enabled by default with Stage 7 sliding; add ?stage84c35e=0 to disable. Records every logical-room entry, detects a general life loss, suppresses the death-induced physical-neighbour slide, and restores the same logical room at its recorded entrance.',
+                    : 'Enabled by default with Stage 7 sliding; add ?stage84c35e=0 to disable. Records every logical-room entry and the original dead flag/death-sparkle sequence, suppresses the death-induced physical-neighbour slide even when Infinite lives freezes the lives byte, and restores the same logical room at its recorded entrance.',
             });
 
             addRow({
@@ -6512,12 +6936,15 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const patched = stage7SlidingCross.lastPatchedSlots.length
                 ? ` Patched ${stage7SlidingCross.lastPatchedSlots.length} slot room byte(s): ${stage7SlidingCross.lastPatchedSlots.map(hexWord).join(' ')}.`
                 : ' No working-memory slot patch has been needed yet.';
+            const signature = stage7SlidingCross.signatureChecks
+                ? ` Static-table signatures ${stage7SlidingCross.signatureChecks}; repairs ${stage7SlidingCross.signatureRepairs}; last ${stage7SlidingCross.lastSignatureValid ? 'valid' : 'INVALID'}.`
+                : ' Static-table signature has not been checked yet.';
             const state = stage7SlidingCross.done ? 'ok' : 'warn';
 
             setRow(
                 'stage7Sliding',
                 `Center ${fmtLogicalCoord(stage7SlidingCross.center)}; gen ${stage7SlidingCross.generation}`,
-                `${stage7SlidingCross.message} ${formatStage7Mapping(stage7SlidingCross.lastCompiled)} ${formatStage7ReciprocalAdjustments(stage7SlidingCross.lastCompiled)}${transition}${patched}`,
+                `${stage7SlidingCross.message} ${formatStage7Mapping(stage7SlidingCross.lastCompiled)} ${formatStage7ReciprocalAdjustments(stage7SlidingCross.lastCompiled)}${transition}${patched}${signature}`,
                 state
             );
         };
@@ -6564,6 +6991,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 await writeCompiledLocationTable(compiled);
                 await writeStage7CustomBackgrounds();
                 await applyStage84C31DisposableCharm(compiled);
+                const signature = await verifyCompiledLocationTable(compiled);
+                if (!signature.valid) {
+                    throw new Error(
+                        `Stage 7 location-table signature mismatch at +${signature.mismatchIndex}: expected ${hexByte(signature.expected)}, read ${hexByte(signature.actual)}.`
+                    );
+                }
                 logicalMap.markVisited(stage7SlidingCross.center.x, stage7SlidingCross.center.y);
                 stage7SlidingCross = {
                     ...stage7SlidingCross,
@@ -6571,9 +7004,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     inFlight: false,
                     lastError: null,
                     lastCompiled: compiled,
+                    signatureChecks: stage7SlidingCross.signatureChecks + 1,
+                    lastSignatureValid: true,
+                    lastSignatureMismatch: null,
                     generation: stage7SlidingCross.generation + 1,
                     message: `${reason}; erased ${hexWord(KL_STAGE1.locationStart)}..${hexWord(KL_STAGE1.locationEnd - 1)}, wrote ${compiled.bytes.length}/${compiled.capacity} room bytes, and installed custom tree-wall backgrounds at ${hexWord(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize2Addr)} and ${hexWord(KL_STAGE7_CUSTOM_BACKGROUNDS.treeWallSize3Addr)}.`,
                 };
+                if (navigationMap) navigationMap.setCurrentCoord(stage7SlidingCross.center);
             } catch (err) {
                 const errorText = String(err);
                 const canRetry = errorText.includes('Core is not ready');
@@ -6591,6 +7028,58 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 };
             }
             renderStage7SlidingRow();
+        };
+
+        const stabilizeStage7Startup = async () => {
+            if (!stage7SlidingCross.enabled) return true;
+
+            let consecutiveValid = 0;
+            let repairs = 0;
+            for (let check = 0; check < 8; check++) {
+                await new Promise(resolve => window.setTimeout(resolve, 75));
+                const signature = await verifyCompiledLocationTable(stage7SlidingCross.lastCompiled);
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    signatureChecks: stage7SlidingCross.signatureChecks + 1,
+                    lastSignatureValid: signature.valid,
+                    lastSignatureMismatch: signature.valid ? null : signature,
+                };
+
+                if (signature.valid) {
+                    consecutiveValid++;
+                    renderStage7SlidingRow();
+                    if (consecutiveValid >= 2) return true;
+                    continue;
+                }
+
+                consecutiveValid = 0;
+                if (repairs >= 3) break;
+                repairs++;
+                stage7SlidingCross = {
+                    ...stage7SlidingCross,
+                    attempted: false,
+                    done: false,
+                    inFlight: false,
+                    lastError: null,
+                    signatureRepairs: stage7SlidingCross.signatureRepairs + 1,
+                    message: `Startup signature was overwritten at +${signature.mismatchIndex}; repairing the complete physical cross before execution.`,
+                };
+                stage2StartPoke = {...stage2StartPoke, attempted: false, done: false};
+                stage2RoomCleanPatch = {...stage2RoomCleanPatch, attempted: false, done: false};
+                await applyStage2StartRoomPoke();
+                await applyStage7CrossInjection(`Startup signature repair ${repairs}`);
+                await applyStage2RoomCleanPatch();
+            }
+
+            stage7SlidingCross = {
+                ...stage7SlidingCross,
+                done: false,
+                lastError: stage7SlidingCross.lastSignatureMismatch
+                    ? `Stage 7 startup table would not remain stable; last mismatch at +${stage7SlidingCross.lastSignatureMismatch.mismatchIndex}. Execution remains paused to prevent loading original room 0x88.`
+                    : 'Stage 7 startup table could not be verified. Execution remains paused.',
+            };
+            renderStage7SlidingRow();
+            return false;
         };
 
         const patchStage7WorkingRoomIds = async (workRange, fromRoom) => {
@@ -7226,6 +7715,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     await logicalMapLoadPromise.catch(() => null);
                 }
                 await sample('startup-prime');
+                if (stage7SlidingCross.enabled) {
+                    await stabilizeStage7Startup();
+                }
             } finally {
                 startupPrimePending = false;
             }
@@ -7283,6 +7775,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         getQuestSector: logicalMap.getQuestSectorAt,
         getQuestRoomInfo: logicalMap.getQuestRoomInfoAt,
         getQuestReachability: logicalMap.getQuestReachabilityAt,
+        get navigationMap() {
+            return navigationMap;
+        },
         compileLogicalRoom: logicalMap.compileRoom,
         loadLogicalMapDocument,
         loadLogicalMapFromUrl,

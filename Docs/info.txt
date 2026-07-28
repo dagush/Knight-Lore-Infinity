@@ -803,10 +803,9 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
              plays game_complete_tune.
           Consequence for the dispersed map:
              with C3.1, C3.3, and C3.4 enabled, fourteen successful drops at
-             fourteen distinct, unfinished logical cauldrons are expected to
-             reach the original ending. Only the first original counter
-             increment has been proven manually so far; the fourteen-sector
-             run is the definitive integration test.
+             fourteen distinct, unfinished logical cauldrons reach the original
+             final-animation trigger. A full fourteen-sector run proved the
+             route, carrying, request patch, and counter integration.
           Playtest Pokes table:
              both controls start off on every page load;
              original bytes are read from the loaded snapshot before writing;
@@ -824,17 +823,94 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
              poke value decimal 201 = 0xC9 (RET);
              loaded-snapshot original observed 2026 07 24: 0xDD;
              browser test: 0xDD -> 0xC9 -> 0xDD.
-          Critical completion caveat:
-             0xD13F is the entry of lose_life. The final animation eventually
-             uses the same player_dies/lose_life path to reach game_over, so an
-             active RET there may suppress the completion screen.
-             Disable Infinite lives before dropping charm 14. Partial
-             invulnerability may remain enabled.
-             The Playtest Pokes status warns at original progress 13/14.
+          Infinite-lives completion correction:
+             0xD13F is the entry of lose_life, but the normal original ending
+             does not use it. Final sparkle updater upd_131_to_133 jumps
+             directly to game_over when a sparkle reaches the player.
+             Infinite lives may remain enabled for the ending, although leaving
+             it off is still useful for a minimally patched proof. The old
+             final-drop warning was removed.
+          C3.5e interaction, 2026 07 28:
+             The RET poke also prevents the lives byte from decrementing on an
+             ordinary death. The first general C3.5e guard used that decrement
+             as its primary proof that an apparent physical-room transition
+             was death-generated, so same-room recovery could be missed while
+             Infinite lives was enabled.
+             C3.5e now additionally latches the original engine death state:
+                bit 6 at player state bytes 0x5C15/0x5C35;
+                death-sparkle sprites 0x70..0x77 at 0x5C08/0x5C28.
+             A following physical-neighbour load is therefore corrected back
+             to the recorded logical room and entrance even when 0x5BBA stays
+             unchanged. The lives-decrement trigger remains as an independent
+             fallback when Infinite lives is off.
           C3.4 terminal diagnostics:
              objects_put_in_cauldron == 14 is now reported as accepted
              completion/final-animation state, not as an out-of-range request
              slot error.
+          Full-run result and shortened completion probe, 2026 07 28:
+             A manual run successfully collected and delivered fourteen
+             charms across fourteen logical sectors. Room sliding, original
+             interiors, carrying, cauldron request patching, quest persistence,
+             and the original objects_put_in_cauldron counter all survived the
+             complete route. The emulator hung after the fourteenth drop
+             instead of showing the completion screen.
+             Infinite lives was initially suspected, but the shortened probe
+             and exact ending disassembly later disproved that hypothesis.
+             Address 0xC25F (decimal 49759) is the immediate operand of the
+             `CP 14` instruction in add_obj_to_cauldron. A configurable,
+             default-off Completion target control now permits values 1..14.
+             The temporary diagnostic value 2 was used for the shortened proof;
+             the normal UI default is restored to 14.
+             The runtime reads and validates the original value 14 before
+             writing, verifies/reasserts the selected target while enabled,
+             and restores 14 when disabled. C3.4 terminal diagnostics and the
+             completion diagnostics use the active target.
+             For a two-drop ending test:
+                begin a fresh game with Completion target enabled at 2;
+                Partial invulnerability may be enabled;
+                Infinite lives may be left off for the cleanest proof;
+                deliver two matching charms to two unfinished cauldrons;
+                expect the original final animation, completion text, and tune.
+          Shortened-probe result and ending-room invariant, 2026 07 28:
+             The value-2 poke worked and the second correct drop set the final
+             state, but the game still hung with Infinite lives disabled. This
+             rules out fourteen deliveries or route duration as the cause and
+             disproves Infinite lives and delivery count as the root cause.
+             prepare_final_animation starts at special_objs_here_1, wipes a
+             fixed 11 records (one special, seven background, three foreground),
+             then converts every remaining graphic-7 block into a homing
+             sparkle (131..133). A sparkle within six units of the player jumps
+             directly to game_over, which sees 0x5BC3 and displays the ending.
+             The Phase C cauldron dressing had suppressed the Phase B blocks.
+             Therefore all room objects were inside the fixed wipe prefix, no
+             block became a homing sparkle, input remained disabled by 0x5BC3,
+             and the onscreen loop continued forever. This was the hang.
+             Every generated cauldron room now uses the exact original 0x88
+             eight-block frame. Its cardinal entry strips remain clear. With
+             the original cauldron expansion, the fixed wipe consumes the first
+             three blocks and leaves five to become ending sparkles.
+             Runtime rule while 0x5BC3 is nonzero:
+                C3.5e clears ordinary-death latches and performs no writes;
+                C3.5f does not perform a normal game-over origin reset;
+                Stage 7 does not interpret ending-generated room changes;
+                C3.5c restores all original bubble/request updater bytes.
+             C3.5f counts pass-through frames for diagnostics. Only after the
+             original game clears 0x5BC3 on return to its menu does the runtime
+             compile logical origin (0,0) for the next game.
+             Manual proof with Completion target 2, confirmed 2026 07 28:
+                verify the cauldron room reports 0x00 block: 8 before the drop;
+                all_objs_in_cauldron becomes 0x01;
+                several room blocks become homing sparkles;
+                C3.5e reports completion writes suppressed;
+                C3.5f reports completion pass-through active and increasing;
+                no C3.5e correction or C3.5f origin reset occurs during ending;
+                original completion animation, text, and tune appear;
+                origin reset occurs only after the ending returns to the menu.
+             Result: successful. The second drop produced the original ending
+             instead of the input-disabled hang. Together with the completed
+             fourteen-sector route, this confirms the full dispersed quest path
+             and the repaired original completion mechanism. Completion target
+             remains off by default and now displays 14 when the page loads.
        C3.5e general death-respawn revision:
           A normal hazard death in imported charm-room interior 0xE8 reproduced
           the same opposite-room displacement previously seen after bubble
@@ -940,6 +1016,48 @@ guard: 0x90~0x95 is the lower part of the back of the guard and
 0x10~0x15 legs ????
 0x16 gargoyle
 0xB4~0xB5 fire
+
+
+Current Integrated Playtest URL (2026 07 28)
+---------------------------------------------
+
+Use:
+
+    http://127.0.0.1:8000/index.html?playtest=latest
+
+The `playtest=latest` preset enables the current proven stack: Stage 7 sliding,
+original cauldron visual with cauldron-gated bubbles, C3.1 collectible charm,
+C3.3 acceptance, C3.4 request-order patch, C3.5c timing throttle, C3.6 original
+charm-room interiors, and C3.7 distributed ordinary original interiors.
+
+It deliberately does not enable infinite lives or partial invulnerability;
+those remain player-controlled HTML toggles.
+
+Any explicit individual flag overrides its preset value. This preserves all
+focused diagnostic/control URLs. Example:
+
+    ?playtest=latest&stage84c36=0
+
+The obsolete minimal URL `?stage7sliding=1` runs only the sliding topology and
+therefore has no C3.1 collectible charm, no C3.6 `0xB4` charm-room interior,
+and no C3.7 distributed original interiors.
+
+Startup signature barrier, 2026 07 28:
+
+- A late `.z80` load was observed overwriting an apparently successful Stage 7
+  write, restoring original room `0x88` at `0x67BB` with wizard/cauldron ids.
+- Before starting execution, the runtime now reads back every compiled
+  location-table byte and requires two consecutive valid checks 75 ms apart.
+- A mismatch triggers a complete reapplication of start choices, physical
+  cross, custom backgrounds, disposable charm state, and room templates.
+- Three failed repairs leave execution paused instead of allowing an unsafe
+  original room to load.
+- Diagnostics expose signature checks, repairs, and last validity.
+- Confirmed repaired readback: center `0x88` at `0x6251..0x6262`, backgrounds
+  `0x00 0x01 0x02 0x03 0x0C`, and eight type-`0x00` blocks.
+- Background template `0x13` remains restored globally for actual logical
+  cauldron anchors, but origin does not reference it. Wizard template `0x12`
+  remains zeroed.
 0x07 is a regular block,
 0x52 is a ghost (mark this for possible later usage), and
 0x54 is a table,

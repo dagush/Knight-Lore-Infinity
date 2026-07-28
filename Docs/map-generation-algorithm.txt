@@ -270,7 +270,7 @@ fields that the project already controls:
 - selector is forced to 0, producing a square room for the first safe visual
   proof;
 - colour/attribute is overridden deterministically;
-- foreground block runs are replaced with a fixed four-corner marker pattern;
+- foreground block runs are replaced with a fixed entry-safe marker pattern;
 - normal generated wall/arch backgrounds are still used for the final exits.
 
 The first Phase B patterns are:
@@ -278,7 +278,8 @@ The first Phase B patterns are:
 - cauldron room:
   - colour 1;
   - ordinary block type `0x00`;
-  - block positions `(2,2,0)`, `(5,2,0)`, `(2,5,0)`, `(5,5,0)`;
+  - the original room `0x88` eight-block frame at `(2,6,0)`, `(1,5,0)`,
+    `(5,6,0)`, `(6,5,0)`, `(6,2,0)`, `(5,1,0)`, `(1,2,0)`, `(2,1,0)`;
 - charm room:
   - colour 5;
   - spike block type `0x05`;
@@ -327,10 +328,24 @@ and makes generated quest cauldron anchor rooms append background id `0x13`:
   background;
 - the original cauldron background bytes at `0x6FBF..0x6FCF` are restored;
 - generated quest cauldron rooms are forced to selector 0 and a calm colour;
-- the Phase B four-corner block marker is suppressed for those rooms;
+- the cauldron keeps the original room `0x88` eight-block frame;
 - the generated room still uses the normal wall/arch compiler for exits;
 - no item slot, charm-order byte, inventory byte, wizard state, or original
   cauldron completion state is touched.
+
+The eight blocks are an original-engine ending invariant, not decoration only.
+`prepare_final_animation` wipes a fixed prefix of 11 working records, including
+the first three foreground objects, and converts every remaining graphic-7
+block to a homing final sparkle. A blockless/four-block Phase C cauldron can
+leave no object after that prefix, producing an endless input-disabled room.
+With the original cauldron background expansion and eight-block frame, five
+blocks remain to drive the original `game_over` completion branch. The frame
+also leaves every generated cardinal entry strip clear.
+
+Manual confirmation on 2026 07 28 used the temporary Completion target value 2.
+The second correct delivery produced the homing-sparkle sequence and original
+completion instead of hanging. The runtime control was then returned to its
+normal default value 14 and remains switched off on page load.
 
 The original cauldron visual is two background records:
 
@@ -856,6 +871,55 @@ The generator should keep these invariants:
 
 These invariants are checked with ad hoc Node probes during development and
 should eventually become automated tests.
+
+
+Read-Only Navigation Viewport
+-----------------------------
+
+Stage 8.4 C3.8A adds an HTML navigation map over the same deterministic world.
+The visualization does not maintain a second topology. It asks the logical-map
+facade for a finite viewport and receives rooms after the same reciprocal-exit
+overlay used by Stage 7 compilation.
+
+The distinction between generation and persistence is strict:
+
+- inspecting a coordinate may generate and cache its deterministic room;
+- inspection does not create a persistent room-state record;
+- inspection does not create a persistent quest-sector-state record;
+- only `markVisited()` records an actual Stage 7 logical center visit;
+- only the quest mechanics mark a sector completed;
+- map pan, zoom, mode changes, and tooltips perform no emulator-memory writes.
+
+The public read-only surface is:
+
+    inspectRoomAt(x, y)
+    inspectEffectiveRoomAt(x, y)
+    inspectQuestSectorAt(x, y)
+    inspectQuestRoomInfoAt(x, y)
+    inspectNavigationViewport({minX, maxX, minY, maxY})
+    getVisitedRoomSnapshot()
+    getCompletedQuestSectorSnapshot()
+
+`inspectNavigationViewport` rejects more than 6000 coordinate cells in one
+request. This is a rendering/performance boundary, not a world boundary. The
+world remains infinite; Generated map mode means every deterministic room in
+the current finite viewport.
+
+A fresh-map probe inspected 525 cells across 16 sectors and observed persistent
+room and quest-sector counts remain 0 before and after. This is the required
+non-mutating invariant for arbitrary navigation-map exploration.
+
+For integrated navigation-map playtests, use:
+
+    ?playtest=latest
+
+This preset enables C3.6 original charm-room interiors and C3.7 distributed
+ordinary original interiors together with the proven charm/cauldron mechanics.
+Using only `?stage7sliding=1` selects the procedural topology proof without
+those later content stages and is not representative of the current game.
+
+Explicit flags override the preset, so focused generator controls remain
+possible, for example `?playtest=latest&stage84c37=0`.
 
 
 Known Limits and Future Work

@@ -281,8 +281,8 @@ Possible visual implementations:
     rectangular room.
   - Use only the compact location-entry fields already proven by Stage 7:
     header colour/attribute and foreground block runs.
-  - Cauldron marker: low-hazard colour plus ordinary block type `0x00` in a
-    clear, symmetric four-corner pattern.
+  - Cauldron marker: low-hazard colour plus ordinary block type `0x00` in the
+    original room `0x88` entry-safe eight-block frame.
   - Charm marker: stronger colour plus spike block type `0x05` in the same
     entry-lane-safe pattern.
   - Keep x=3..4 and y=3..4 central entry lanes clear so any actual player
@@ -297,8 +297,8 @@ Possible visual implementations:
       the bytes by read-only snapshot probes.
     - Append background id 0x13 only to generated quest cauldron anchor rooms.
     - Force those rooms to selector 0 and a calm colour for the first proof.
-    - Suppress the Phase B four-corner marker in cauldron rooms when the
-      original visual is active.
+    - Retain the original room `0x88` eight-block frame when the original visual
+      is active. The ending requires blocks beyond its fixed 11-record wipe.
     - Keep original item slots, charm-order bytes, inventory bytes, wizard
       state, and cauldron-completion state untouched.
   - C2: bubble template probe.
@@ -1400,8 +1400,12 @@ Original completion path:
 - That routine sets `all_objs_in_cauldron` at `0x5BC3`, starts the final room
   animation, and the original game-over path branches to the completion
   message and completion tune.
-- The first increment has been manually proven. The complete fourteen-sector
-  path remains an empirical exit test, not yet a completed claim.
+- `prepare_final_animation` wipes exactly 11 working records and converts each
+  remaining graphic-7 block into a homing 131..133 sparkle. A sparkle reaching
+  the player jumps directly to `game_over`, bypassing `lose_life`.
+- A complete fourteen-sector route has been manually proven through the final
+  correct drop. A shortened two-delivery regression then confirmed the repaired
+  original completion animation, message, and tune.
 
 Playtest pokes:
 
@@ -1418,15 +1422,35 @@ Playtest pokes:
 - Refuse first-time activation if the byte is already `0xC9`, because its
   original value cannot then be recovered safely.
 
-Critical final-drop rule:
+Infinite-lives correction:
 
-- The infinite-lives address is the entry of the original `lose_life` routine.
-  Replacing it with `RET` can also prevent the completed final animation from
-  reaching the game-completion screen.
-- Therefore disable Infinite lives before dropping charm 14. Partial
-  invulnerability may remain enabled.
-- The HTML status must issue a warning when original cauldron progress reaches
-  13/14 while Infinite lives remains enabled.
+- The infinite-lives address is the entry of the original `lose_life` routine,
+  but the normal final sparkle jumps directly to `game_over`.
+- Infinite lives is therefore not the ending-hang cause and need not be disabled
+  for the final drop. It may still be left off for a minimally patched proof.
+
+Completion pass-through revision, 2026 07 28:
+
+- A shortened target of 2 still hung with Infinite lives disabled, proving that
+  the route length and fourteen-delivery count were not the cause.
+- Root cause: Phase C suppressed the cauldron marker blocks, so the fixed
+  11-record wipe left no graphic-7 block to become a homing final sparkle. The
+  input-disabled room loop then had no route to `game_over`.
+- All cauldron rooms must use the exact original `0x88` eight-block frame. With
+  the original cauldron expansion, three blocks are wiped and five remain for
+  the final animation; all cardinal entry strips remain clear.
+- While `all_objs_in_cauldron` at `0x5BC3` is nonzero:
+  - C3.5e must clear ordinary-death latches and perform no room/XYZ writes;
+  - C3.5f must not perform its normal game-over origin reset;
+  - Stage 7 must ignore ending-generated physical-room changes;
+  - C3.5c must restore the original bubble/request updater instructions.
+- Once the original game clears `0x5BC3` on return to its menu, C3.5f may
+  compile logical origin `(0,0)` for the next game.
+- Diagnostics must expose completion pass-through state and elapsed frames so
+  manual testing can distinguish a progressing ending from a runtime reset.
+- Manual confirmation, 2026 07 28: target 2 reached the repaired original
+  ending successfully. The Completion target control remains off by default and
+  its displayed/default value has been restored from the probe value 2 to 14.
 
 First runtime validation, 2026 07 24:
 
@@ -1446,8 +1470,9 @@ Exit criteria:
   increments.
 - The C3.4 diagnostics report 14 accepted deliveries rather than an
   out-of-range request-table error.
-- With Infinite lives disabled for the final drop, the original completion
-  animation, message, and tune are observed.
+- The original completion animation, message, and tune are observed without a
+  hang; the shortened target-2 regression and full fourteen-sector route both
+  pass their respective portions of the integration proof.
 
 Strict policy:
 
