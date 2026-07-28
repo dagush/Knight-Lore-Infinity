@@ -3,6 +3,10 @@ import {
     getOriginalCharmRoomInteriorByRoomId,
     ORIGINAL_CHARM_ROOM_INTERIOR_COUNT,
 } from './knightlore-original-charm-rooms.js';
+import {
+    getOriginalRoomInteriorCatalogue,
+    ORIGINAL_ROOM_INTERIOR_COUNT,
+} from './knightlore-original-room-interiors.js';
 
 const DIRECTIONS = ['north', 'east', 'south', 'west'];
 
@@ -28,6 +32,9 @@ const DEFAULT_OPTIONS = {
     questCauldronBubbleMode: 'disabled',
     questCharmOriginalRooms: false,
     questOriginCharmRoomId: 0xb4,
+    distributedOriginalRoomInteriors: false,
+    distributedOriginalRoomMaxPerSector: 10,
+    distributedOriginalRoomFractionDivisor: 3,
 };
 
 const BIOMES = [
@@ -250,6 +257,8 @@ export function createKnightLoreProceduralMap(options = {}) {
     const chunks = new Map();
     const biomes = new Map();
     const questReachability = new Map();
+    const originalInteriorPlans = new Map();
+    const originalInteriorCatalogue = getOriginalRoomInteriorCatalogue();
 
     const chunkKey = (chunkX, chunkY) => `${chunkX},${chunkY}`;
 
@@ -892,6 +901,164 @@ export function createKnightLoreProceduralMap(options = {}) {
         return exits;
     };
 
+    const positionBlocksEntryStrip = (position, direction) => {
+        if (direction === 'north') {
+            return position.x >= 3 && position.x <= 4 && position.y >= 5;
+        }
+        if (direction === 'south') {
+            return position.x >= 3 && position.x <= 4 && position.y <= 2;
+        }
+        if (direction === 'east') {
+            return position.y >= 3 && position.y <= 4 && position.x >= 5;
+        }
+        if (direction === 'west') {
+            return position.y >= 3 && position.y <= 4 && position.x <= 2;
+        }
+        return false;
+    };
+
+    const originalInteriorFitsExits = (template, exits) => (
+        !template.blocks.some(run => (
+            run.positions.some(position => (
+                DIRECTIONS.some(direction => (
+                    exits[direction] && positionBlocksEntryStrip(position, direction)
+                ))
+            ))
+        ))
+    );
+
+    const buildOriginalInteriorPlan = (chunkX, chunkY) => {
+        const key = chunkKey(chunkX, chunkY);
+        const chunk = getChunk(chunkX, chunkY);
+        const quest = chunk.questSector.quest || {exists: false};
+        const excludedCoords = new Set([coordKey(0, 0)]);
+        if (quest.exists) {
+            excludedCoords.add(coordKey(quest.cauldron.x, quest.cauldron.y));
+            excludedCoords.add(coordKey(quest.charm.x, quest.charm.y));
+        }
+
+        const eligible = collectExistingCells(chunk.cells)
+            .map(local => ({
+                local,
+                x: chunkX * chunkSize + local.x,
+                y: chunkY * chunkSize + local.y,
+            }))
+            .filter(room => !excludedCoords.has(coordKey(room.x, room.y)))
+            .map(room => {
+                const exits = getRoomExits(room.x, room.y);
+                const compatible = originalInteriorCatalogue.filter(template => (
+                    originalInteriorFitsExits(template, exits)
+                ));
+                return {
+                    ...room,
+                    exits,
+                    compatible,
+                    rank: hashInts(config.worldSeed, chunkX, chunkY, room.x, room.y, 0xc370),
+                };
+            })
+            .sort((left, right) => (
+                left.compatible.length - right.compatible.length ||
+                left.rank - right.rank ||
+                left.y - right.y ||
+                left.x - right.x
+            ));
+
+        const maxPerSector = positiveIntegerOr(
+            config.distributedOriginalRoomMaxPerSector,
+            DEFAULT_OPTIONS.distributedOriginalRoomMaxPerSector
+        );
+        const fractionDivisor = positiveIntegerOr(
+            config.distributedOriginalRoomFractionDivisor,
+            DEFAULT_OPTIONS.distributedOriginalRoomFractionDivisor
+        );
+        const targetQuota = Math.min(maxPerSector, Math.floor(eligible.length / fractionDivisor));
+        const assignments = new Map();
+        const usedRoomIds = new Set();
+
+        for (const room of eligible) {
+            if (assignments.size >= targetQuota) break;
+            const available = room.compatible
+                .filter(template => !usedRoomIds.has(template.originalRoomId))
+                .map(template => ({
+                    template,
+                    rank: hashInts(
+                        config.worldSeed,
+                        chunkX,
+                        chunkY,
+                        room.x,
+                        room.y,
+                        template.originalRoomId,
+                        0xc371
+                    ),
+                }))
+                .sort((left, right) => (
+                    left.rank - right.rank ||
+                    left.template.originalRoomId - right.template.originalRoomId
+                ));
+            if (!available.length) continue;
+
+            const template = available[0].template;
+            usedRoomIds.add(template.originalRoomId);
+            assignments.set(coordKey(room.x, room.y), {
+                template,
+                exits: cloneExits(room.exits),
+            });
+        }
+
+        return {
+            key,
+            sectorX: chunkX,
+            sectorY: chunkY,
+            eligibleRoomCount: eligible.length,
+            targetQuota,
+            assignedCount: assignments.size,
+            fallbackCount: Math.max(0, targetQuota - assignments.size),
+            catalogueCount: originalInteriorCatalogue.length,
+            assignments,
+        };
+    };
+
+    const getOriginalInteriorPlan = (chunkX, chunkY) => {
+        const key = chunkKey(chunkX, chunkY);
+        if (!originalInteriorPlans.has(key)) {
+            originalInteriorPlans.set(key, buildOriginalInteriorPlan(chunkX, chunkY));
+        }
+        return originalInteriorPlans.get(key);
+    };
+
+    const getOriginalInteriorInfo = (x, y) => {
+        if (!config.distributedOriginalRoomInteriors) return null;
+        const coord = toChunkCoord(x, y);
+        const plan = getOriginalInteriorPlan(coord.chunkX, coord.chunkY);
+        const assignment = plan.assignments.get(coordKey(x, y)) || null;
+        const common = {
+            enabled: true,
+            selected: !!assignment,
+            sector: {x: coord.chunkX, y: coord.chunkY},
+            targetQuota: plan.targetQuota,
+            assignedCount: plan.assignedCount,
+            eligibleRoomCount: plan.eligibleRoomCount,
+            fallbackCount: plan.fallbackCount,
+            catalogueCount: plan.catalogueCount,
+            assignmentPolicy: 'deterministic one-third quota, maximum ten, without replacement inside each sector',
+            entranceClearance: 'initial object positions clear the three-cell inner strip of every generated exit',
+        };
+        if (!assignment) return common;
+
+        const template = assignment.template;
+        return {
+            ...common,
+            originalRoomId: template.originalRoomId,
+            originalRoomHex: template.originalRoomHex,
+            originalSelector: template.originalSelector,
+            blockRunCount: template.blockRunCount,
+            blockObjectCount: template.blockObjectCount,
+            architecturePolicy: template.architecturePolicy,
+            exitsChecked: DIRECTIONS.filter(direction => assignment.exits[direction]),
+            blocks: cloneData(template.blocks),
+        };
+    };
+
     const createBlockPositions = (x, y, count, salt = 0x100) => {
         const positions = [];
         const seen = new Set();
@@ -982,22 +1149,40 @@ export function createKnightLoreProceduralMap(options = {}) {
         const exits = getRoomExits(x, y);
         const questDressing = questInfo.dressing;
         const staticDressing = questDressing && questDressing.staticDressing;
+        const originalInterior = getOriginalInteriorInfo(x, y);
         const generatedSelector = chooseRoomSizeSelector(exits, x, y, config);
-        const selector = staticDressing && staticDressing.forceSquare ? 0 : generatedSelector;
+        const selector = (
+            (staticDressing && staticDressing.forceSquare) ||
+            (originalInterior && originalInterior.selected)
+        ) ? 0 : generatedSelector;
         const theme = biome.theme;
         const colour = staticDressing && Number.isInteger(staticDressing.colour)
             ? staticDressing.colour
             : chooseArrayValue(biome.colours, hash >>> 1);
         const questBlocks = createQuestDressingBlockRuns(questDressing);
-        const blocks = questBlocks || createBlockRuns(x, y, selector, biome, hash);
+        const blocks = questBlocks || (
+            originalInterior && originalInterior.selected
+                ? cloneData(originalInterior.blocks)
+                : createBlockRuns(x, y, selector, biome, hash)
+        );
         const extraBackgrounds = staticDressing ? cloneData(staticDressing.extraBackgrounds || []) : [];
         const originalCharmRoom = staticDressing && staticDressing.originalCharmRoom;
         const label = questDressing
             ? `${questDressing.labelPrefix}:${coordKey(x, y)}:${originalCharmRoom ? `${originalCharmRoom.originalRoomHex}:` : ''}${biome.id}`
+            : originalInterior && originalInterior.selected
+                ? `original-interior:${originalInterior.originalRoomHex}:${biome.id}:${coordKey(x, y)}`
             : `generated:${biome.id}:${coordKey(x, y)}`;
         const title = questDressing
             ? `${questDressing.role === 'cauldron' ? 'Quest cauldron' : 'Quest charm'} ${coordKey(x, y)}${originalCharmRoom ? ` using ${originalCharmRoom.originalRoomHex} interior` : ''}`
+            : originalInterior && originalInterior.selected
+                ? `${biome.title} ${coordKey(x, y)} using original ${originalInterior.originalRoomHex} interior`
             : `${biome.title} ${coordKey(x, y)}`;
+        commonMeta.procedural.originalInterior = originalInterior
+            ? {
+                ...cloneData(originalInterior),
+                blocks: undefined,
+            }
+            : null;
 
         return {
             coord: {x, y},
@@ -1054,6 +1239,17 @@ export function createKnightLoreProceduralMap(options = {}) {
             questCharmTypes: QUEST_CHARM_TYPES.length,
             questCharmOriginalRooms: !!config.questCharmOriginalRooms,
             originalCharmRoomInteriorCount: ORIGINAL_CHARM_ROOM_INTERIOR_COUNT,
+            distributedOriginalRoomInteriors: !!config.distributedOriginalRoomInteriors,
+            distributedOriginalRoomMaxPerSector: positiveIntegerOr(
+                config.distributedOriginalRoomMaxPerSector,
+                DEFAULT_OPTIONS.distributedOriginalRoomMaxPerSector
+            ),
+            distributedOriginalRoomFractionDivisor: positiveIntegerOr(
+                config.distributedOriginalRoomFractionDivisor,
+                DEFAULT_OPTIONS.distributedOriginalRoomFractionDivisor
+            ),
+            originalRoomInteriorCount: ORIGINAL_ROOM_INTERIOR_COUNT,
+            generatedOriginalInteriorPlans: originalInteriorPlans.size,
             generatedChunks: chunks.size,
             reachabilityChecks: questReachability.size,
         }),

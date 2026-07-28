@@ -252,6 +252,25 @@ sector hash, with one authored selection override: quest sector `(0,0)` uses
 original interior `0xB4` as the easiest current first-room proof. This is
 runtime generation policy, not a special JSON syntax.
 
+C3.7 ordinary original-room distribution follows the same JSON boundary. Its
+generated `meta.procedural.originalInterior` object records source room id,
+foreground group/object counts, entrance directions checked, and the sector
+assignment quota. This metadata is diagnostic and is not required in authored
+JSON.
+
+For both C3.6 and C3.7, copying only `blocks` does not automatically make a room
+safe with arbitrary new exits. Authors should keep each actual door's inner
+entry strip clear. The current generated proof checks:
+
+- north: x 3..4, y 5..7;
+- south: x 3..4, y 0..2;
+- east: y 3..4, x 5..7;
+- west: y 3..4, x 0..2.
+
+This rejects objects whose initial position occupies an entrance. Moving
+objects may still cross those strips later, so a manual play test remains
+necessary for hazard-heavy copied interiors.
+
 
 Labels and Uniqueness
 ---------------------

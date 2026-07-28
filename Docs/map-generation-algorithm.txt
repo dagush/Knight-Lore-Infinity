@@ -491,6 +491,80 @@ blocked, or if a dynamic group causes a reset or freeze. The correct later fix
 is a deterministic per-template entrance-clearance rule, not importing the
 original exits.
 
+Distributed Original-Room Interiors
+-----------------------------------
+
+Stage 8.4 C3.7 distributes ordinary original foreground layouts among generated
+rooms. It is independently opt-in:
+
+    ?stage84c37=1
+    ?stage8originalinteriors=1
+
+The generated compact catalogue lives in:
+
+    SRC/runtime/knightlore-original-room-interiors.js
+
+It is rebuilt from the original JSON dump by:
+
+    Tools/build-original-room-interiors.mjs
+
+Catalogue filtering is explicit:
+
+- start with the 128 occupied original rooms;
+- exclude the 32 rooms referenced by `special_objs_tbl`;
+- exclude original cauldron room `0x88`;
+- exclude 24 remaining rooms with no foreground groups;
+- retain 71 ordinary non-empty interiors containing 780 foreground objects.
+
+The source room contributes only compact foreground block groups. Its original
+selector, exits, backgrounds, colour, coordinate, and room id are provenance.
+The generated room keeps its existence, reciprocal exits, walls/arches, biome,
+colour, and physical sliding-cross id. Imported hosts are forced to square
+selector 0 during the first proof.
+
+For each 8x8 sector, eligible rooms are existing rooms other than:
+
+- logical origin `(0,0)`;
+- the sector cauldron anchor;
+- the sector charm anchor.
+
+The target assignment count is:
+
+    min(10, floor(eligible ordinary rooms / 3))
+
+Rooms with fewer compatible source interiors are considered first, with hashes
+providing deterministic tie-breaking and template choice. A source room id is
+used at most once per sector. Repetition across different sectors is expected
+because the generated world is unbounded.
+
+Before assignment, the generator checks every source object's initial packed
+position against each generated exit's three-cell-deep inner entry strip:
+
+- north: x 3..4 and y 5..7;
+- south: x 3..4 and y 0..2;
+- east:  y 3..4 and x 5..7;
+- west:  y 3..4 and x 0..2.
+
+An incompatible pairing is rejected. If no unused safe template remains, the
+logical room keeps its normal generated rocks/blocks. This is a static spawn
+clearance check only: it does not prove that a moving hazard can never cross an
+entry later.
+
+Automated validation on 2026 07 24 sampled 441 sectors from `(-10,-10)`
+through `(10,10)` with two independent generator instances:
+
+- all 441 sectors reached their computed target;
+- 4,409 ordinary interiors were assigned in total;
+- average assignment count was 9.998 per sector;
+- both instances produced identical room labels and assignment metadata;
+- no source id repeated inside a sector;
+- no assignment replaced a quest anchor or `(0,0)`;
+- every imported host used square selector 0.
+
+This is not a gameplay proof. C3.7 remains opt-in until multi-sector manual
+walking confirms that dynamic groups do not cause trapped entrances, black
+rooms, resets, freezes, or invalid transitions.
+
 
 Biome / Style Layer
 -------------------

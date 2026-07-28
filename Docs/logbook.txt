@@ -3203,3 +3203,128 @@ Conclusion:
 - record-31 cleanup across a full game restart is empirically complete;
 - ordinary C3.1 carried-item preservation remains unchanged during normal
   sliding-window play.
+
+
++============================================================+
+| 2026 07 24 - C3.7 Distributed Original Interiors           |
++============================================================+
+
+2026 07 24
+
+Stage 8.4 C3.7 began by extending the infinite map with ordinary foreground
+interiors copied from the original Knight Lore room table.
+
+The design keeps the same architecture boundary proven by C3.6:
+
+- the procedural map owns room existence and all cardinal exits;
+- reciprocal connectivity, walls, arches, biome, colour, and physical room ids
+  remain generated;
+- an original source room contributes only its compact foreground block groups;
+- original selectors, exits, backgrounds, colours, coordinates, and room ids
+  are provenance and are not imported;
+- imported ordinary hosts are square selector 0 during this first proof.
+
+A new build tool was added:
+
+    Tools/build-original-room-interiors.mjs
+
+It reads the saved original JSON map and generates the compact runtime
+catalogue:
+
+    SRC/runtime/knightlore-original-room-interiors.js
+
+Catalogue filtering produced:
+
+- 128 original occupied rooms;
+- minus 32 special-object/charm rooms;
+- minus original cauldron room `0x88`;
+- minus 24 ordinary rooms with no foreground groups;
+- 71 reusable ordinary interiors;
+- 780 foreground objects across those interiors.
+
+Each 8x8 sector now computes a deterministic ordinary-interior plan when
+`?stage84c37=1` or `?stage8originalinteriors=1` is enabled.
+
+Eligible rooms exclude:
+
+- logical origin `(0,0)`;
+- the sector cauldron anchor;
+- the sector charm anchor.
+
+The assignment target is:
+
+    min(10, floor(eligible ordinary rooms / 3))
+
+Source room ids are used without replacement inside one sector. Repetition
+between sectors is expected because the logical world is infinite while the
+source catalogue is finite.
+
+Before pairing a template with a generated room, the generator checks every
+initial foreground position against the entry strips belonging to that room's
+actual exits:
+
+- north: x 3..4, y 5..7;
+- south: x 3..4, y 0..2;
+- east: y 3..4, x 5..7;
+- west: y 3..4, x 0..2.
+
+Unsafe pairings are rejected. If no compatible unused source remains, the room
+falls back to its normal generated rocks or blocks. This is deliberately a
+static-position check; moving hazards can still cross an entrance later.
+
+Diagnostics were extended so the Stage 7 generated-cross table reports:
+
+- source room id;
+- foreground group and object counts;
+- generated exits checked for clearance;
+- assigned/target sector quota;
+- C3.7 catalogue and quota settings.
+
+Automated validation used two independent generator instances across 441
+sectors from `(-10,-10)` through `(10,10)`:
+
+- 4,409 ordinary interiors were assigned;
+- the average was 9.998 per sector;
+- every sector reached its computed target;
+- assignments were identical between both instances;
+- no source id repeated inside a sector;
+- no quest anchor or logical origin was replaced;
+- every imported host was square;
+- every assignment passed the static entry-strip rule.
+
+Webpack rebuilt the emulator and worker bundles successfully with only the
+existing bundle-size warnings. Browser diagnostics loaded build
+`stage84-c37-original-interiors-20260724-1` without console errors.
+
+The first live room tests also passed.
+
+At logical `(4,0)`, diagnostics showed:
+
+    original-interior:0x8E:rock-vaults:4,0
+
+The room correctly contained two pushable tables and one ghost, with generated
+east/south/west exits and sector quota `9/9`.
+
+At logical `(5,0)`, diagnostics showed:
+
+    original-interior:0xCF:rock-vaults:5,0
+
+This room contained one ghost and four generated exits. Inspection of the
+original source confirmed that this was intentional:
+
+- original `0x8E` contains two pushable tables and a ghost at grid `(3,5,0)`;
+- original `0xCF` independently contains a ghost at grid `(4,3,0)`.
+
+Therefore the second ghost was not stale working memory from `(4,0)`. C3.7
+guarantees unique source room ids inside a sector, not unique object types;
+different original rooms can legitimately contain the same ghost or hazard.
+
+Status:
+
+- catalogue generation complete;
+- deterministic sector assignment complete;
+- static entrance compatibility complete;
+- diagnostics and documentation complete;
+- initial two-room gameplay proof successful;
+- longer multi-sector walking remains the honest final test for moving hazards,
+  resets, freezes, black rooms, trapped entries, and transition stability.

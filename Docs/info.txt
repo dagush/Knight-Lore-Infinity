@@ -736,6 +736,105 @@ Stage 8.4 C3.0/C3.0b/C3.0c diagnostics:
              Conclusion: adjacent equal requirements are normal deterministic
              coincidences. There is no meaningful directional/region pattern
              in this sample and no anti-repeat rule is needed.
+       C3.7 distributed ordinary-room interior catalogue:
+          URL flags:
+             ?stage84c37=1 enables distributed ordinary interiors;
+             ?stage8originalinteriors=1 is an alias;
+             C3.6 remains independently controlled by ?stage84c36=1.
+          Generated source:
+             Tools/build-original-room-interiors.mjs reads the original JSON
+             room dump and writes:
+                SRC/runtime/knightlore-original-room-interiors.js
+          Catalogue:
+             128 original occupied rooms;
+             minus 32 special_objs_tbl charm rooms;
+             minus cauldron room 0x88;
+             minus 24 ordinary rooms without foreground groups;
+             equals 71 reusable ordinary interiors containing 780 foreground
+             objects.
+          Sector assignment:
+             eligible rooms exclude logical origin, cauldron anchor, and charm
+             anchor;
+             target = min(10, floor(eligible ordinary rooms / 3));
+             source room ids do not repeat inside one sector;
+             repetition across sectors remains expected.
+          Architecture rule:
+             only compact foreground block groups are copied;
+             generated existence, exits, reciprocal connectivity, walls,
+             arches, biome, colour, and physical ids remain authoritative;
+             imported hosts are square selector 0 for this proof.
+          Static entry-strip rule:
+             north x=3..4/y=5..7;
+             south x=3..4/y=0..2;
+             east y=3..4/x=5..7;
+             west y=3..4/x=0..2;
+             a template/room pairing is rejected if an initial object position
+             occupies a strip belonging to an actual generated exit.
+          Validation, 2026 07 24:
+             two independent generators matched over 441 sectors;
+             4,409 assignments, average 9.998 per sector;
+             zero quota failures, duplicate source ids, protected-room
+             replacements, square-host failures, or static-strip failures.
+          First manual proof:
+             logical (4,0) -> source 0x8E, rock-vaults, two pushable tables
+             and one ghost;
+             logical (5,0) -> distinct source 0xCF, rock-vaults, one ghost;
+             original 0x8E stores its ghost at grid (3,5,0);
+             original 0xCF stores its ghost at grid (4,3,0);
+             therefore the adjacent ghosts are independently authored source
+             objects, not a leftover working-memory ghost.
+          Important distinction:
+             source room ids are unique within a sector, but object types are
+             not. Distinct original interiors may contain the same ghost,
+             hazard, rock, or block type.
+          Remaining risk:
+             the strip check covers initial packed positions only. Moving
+             hazards may later cross an entrance, so longer multi-sector
+             gameplay remains necessary.
+       C3.8 fourteen-sector completion and playtest pokes:
+          Original ending path:
+             a correct drop increments objects_put_in_cauldron at 0x5BBB;
+             add_obj_to_cauldron compares the new value with decimal 14;
+             count 14 calls prepare_final_animation;
+             prepare_final_animation writes 1 to all_objs_in_cauldron at
+             0x5BC3;
+             game_over branches to game_complete_msg when that flag is set;
+             game_complete_msg displays the original completion text and
+             plays game_complete_tune.
+          Consequence for the dispersed map:
+             with C3.1, C3.3, and C3.4 enabled, fourteen successful drops at
+             fourteen distinct, unfinished logical cauldrons are expected to
+             reach the original ending. Only the first original counter
+             increment has been proven manually so far; the fourteen-sector
+             run is the definitive integration test.
+          Playtest Pokes table:
+             both controls start off on every page load;
+             original bytes are read from the loaded snapshot before writing;
+             enabled pokes are reasserted if a restart restores the code byte;
+             disabling restores and verifies the exact captured byte;
+             if a first read already finds 0xC9, activation is refused because
+             the restore value is unknown.
+          Infinite lives:
+             decimal address 53567 = 0xD13F;
+             poke value decimal 201 = 0xC9 (RET);
+             loaded-snapshot original observed 2026 07 24: 0x35;
+             browser test: 0x35 -> 0xC9 -> 0x35.
+          Partial invulnerability:
+             decimal address 47196 = 0xB85C;
+             poke value decimal 201 = 0xC9 (RET);
+             loaded-snapshot original observed 2026 07 24: 0xDD;
+             browser test: 0xDD -> 0xC9 -> 0xDD.
+          Critical completion caveat:
+             0xD13F is the entry of lose_life. The final animation eventually
+             uses the same player_dies/lose_life path to reach game_over, so an
+             active RET there may suppress the completion screen.
+             Disable Infinite lives before dropping charm 14. Partial
+             invulnerability may remain enabled.
+             The Playtest Pokes status warns at original progress 13/14.
+          C3.4 terminal diagnostics:
+             objects_put_in_cauldron == 14 is now reported as accepted
+             completion/final-animation state, not as an out-of-range request
+             slot error.
        C3.5e general death-respawn revision:
           A normal hazard death in imported charm-room interior 0xE8 reproduced
           the same opposite-room displacement previously seen after bubble

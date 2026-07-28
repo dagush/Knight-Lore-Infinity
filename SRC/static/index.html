@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>JSSpeccy v3</title>
-        <script src="jsspeccy/jsspeccy.js?v=stage84-c35f-charm-reset-20260723-2"></script>
+        <script src="jsspeccy/jsspeccy.js?v=stage84-c38-playtest-pokes-20260724-1"></script>
         <style>
             :root {
                 color-scheme: dark;
@@ -194,6 +194,63 @@
 
             .diagnostics-table tr.state-muted .notes {
                 color: #98a4b1;
+            }
+
+            .playtest-poke-table {
+                table-layout: fixed;
+            }
+
+            .playtest-poke-table th:nth-child(1),
+            .playtest-poke-table td:nth-child(1) {
+                width: 22%;
+            }
+
+            .playtest-poke-table th:nth-child(2),
+            .playtest-poke-table td:nth-child(2) {
+                width: 17%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .playtest-poke-table th:nth-child(3),
+            .playtest-poke-table td:nth-child(3) {
+                width: 15%;
+            }
+
+            .playtest-poke-table th:nth-child(4),
+            .playtest-poke-table td:nth-child(4),
+            .playtest-poke-table th:nth-child(5),
+            .playtest-poke-table td:nth-child(5),
+            .playtest-poke-table th:nth-child(6),
+            .playtest-poke-table td:nth-child(6) {
+                width: 9%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .playtest-poke-table th:nth-child(7),
+            .playtest-poke-table td:nth-child(7) {
+                width: 19%;
+            }
+
+            .playtest-poke-toggle {
+                display: inline-flex;
+                gap: 8px;
+                align-items: center;
+                min-height: 24px;
+                color: #ffffff;
+                font-weight: 700;
+                cursor: pointer;
+            }
+
+            .playtest-poke-toggle input {
+                width: 18px;
+                height: 18px;
+                margin: 0;
+                accent-color: #65c47a;
+            }
+
+            .playtest-poke-toggle:has(input:disabled) {
+                cursor: wait;
+                opacity: 0.65;
             }
 
             .cross-table {
@@ -453,9 +510,56 @@
     <body onload="window.KnightLoreInfinity.start()">
         <main class="page-shell">
             <div id="jsspeccy"></div>
+            <section id="knight-lore-playtest-pokes" class="diagnostics">
+                <h1>Playtest Pokes</h1>
+                <p id="playtest-pokes-status" class="stage-status">Both pokes are off. Waiting to capture the original bytes.</p>
+                <table class="diagnostics-table playtest-poke-table">
+                    <thead>
+                        <tr>
+                            <th>Poke</th>
+                            <th>Address</th>
+                            <th>Switch</th>
+                            <th>Value</th>
+                            <th>Original</th>
+                            <th>Current</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr id="playtest-poke-infinite-lives-row" class="state-muted">
+                            <td>Infinite lives</td>
+                            <td>53567 / 0xD13F</td>
+                            <td>
+                                <label class="playtest-poke-toggle">
+                                    <input id="playtest-poke-infinite-lives" type="checkbox">
+                                    <span>Off</span>
+                                </label>
+                            </td>
+                            <td>201 / 0xC9</td>
+                            <td id="playtest-poke-infinite-lives-original">-</td>
+                            <td id="playtest-poke-infinite-lives-current">-</td>
+                            <td id="playtest-poke-infinite-lives-status">Waiting for emulator memory.</td>
+                        </tr>
+                        <tr id="playtest-poke-invulnerability-row" class="state-muted">
+                            <td>Partial invulnerability</td>
+                            <td>47196 / 0xB85C</td>
+                            <td>
+                                <label class="playtest-poke-toggle">
+                                    <input id="playtest-poke-invulnerability" type="checkbox">
+                                    <span>Off</span>
+                                </label>
+                            </td>
+                            <td>201 / 0xC9</td>
+                            <td id="playtest-poke-invulnerability-original">-</td>
+                            <td id="playtest-poke-invulnerability-current">-</td>
+                            <td id="playtest-poke-invulnerability-status">Waiting for emulator memory.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
             <section id="knight-lore-stage8-quest-diagnostics" class="diagnostics">
                 <h1>Stage 8.2B/C - Quest Room Dressing</h1>
-                <p id="stage8-quest-status" class="stage-status">Diagnostics build: stage84-c35f-charm-reset-20260723-2. Waiting for quest-sector metadata.</p>
+                <p id="stage8-quest-status" class="stage-status">Diagnostics build: stage84-c38-playtest-pokes-20260724-1. Waiting for quest-sector metadata.</p>
                 <table class="diagnostics-table quest-sector-table">
                     <thead>
                         <tr>
@@ -478,7 +582,7 @@
             </section>
             <section id="knight-lore-stage84-c30-diagnostics" class="diagnostics">
                 <h1>Stage 8.4 C3.6 - Original Charm-Room Interiors</h1>
-                <p id="stage84-c30-status" class="stage-status">Diagnostics build: stage84-c35f-charm-reset-20260723-2. Waiting for item/charm memory samples.</p>
+                <p id="stage84-c30-status" class="stage-status">Diagnostics build: stage84-c38-playtest-pokes-20260724-1. Waiting for item/charm memory samples.</p>
                 <table class="diagnostics-table">
                     <thead>
                         <tr>
@@ -497,7 +601,7 @@
             </section>
             <section id="knight-lore-wood-wall-reference" class="diagnostics">
                 <h1>Wooden Square Wall Reference</h1>
-                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: stage84-c35f-charm-reset-20260723-2.</p>
+                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: stage84-c38-playtest-pokes-20260724-1.</p>
                 <div class="wood-tuning-controls">
                     <label for="stage7-west-filler-x-slider">Selector 1 west wall X</label>
                     <input id="stage7-west-filler-x-slider" type="range" min="0" max="191" step="1" value="95">
@@ -561,7 +665,7 @@
             </section>
             <section id="knight-lore-stage7-style-diagnostics" class="diagnostics">
                 <h1>Stage 7 - Current Generated Cross</h1>
-                <p id="stage7-style-status" class="stage-status">Diagnostics build: stage84-c35f-charm-reset-20260723-2. Waiting for the Stage 7 cross.</p>
+                <p id="stage7-style-status" class="stage-status">Diagnostics build: stage84-c38-playtest-pokes-20260724-1. Waiting for the Stage 7 cross.</p>
                 <table class="diagnostics-table style-cross-table">
                     <thead>
                         <tr>
@@ -595,7 +699,7 @@
             </section>
             <section id="knight-lore-stage2-diagnostics" class="diagnostics">
                 <h1>Stage 2 - Physical 5-Room Cross</h1>
-                <p id="stage2-status" class="stage-status">Diagnostics build: stage84-c35f-charm-reset-20260723-2. Waiting for the first Stage 2 sample.</p>
+                <p id="stage2-status" class="stage-status">Diagnostics build: stage84-c38-playtest-pokes-20260724-1. Waiting for the first Stage 2 sample.</p>
                 <table class="diagnostics-table cross-table">
                     <thead>
                         <tr>
@@ -614,7 +718,7 @@
             </section>
             <section id="knight-lore-stage4-diagnostics" class="diagnostics">
                 <h1>Stage 4.5 - Logical Map JSON Authoring</h1>
-                <p id="stage4-status" class="stage-status">Diagnostics build: stage84-c35f-charm-reset-20260723-2. Waiting for the logical map probe.</p>
+                <p id="stage4-status" class="stage-status">Diagnostics build: stage84-c38-playtest-pokes-20260724-1. Waiting for the logical map probe.</p>
                 <table class="diagnostics-table logical-map-table">
                     <thead>
                         <tr>

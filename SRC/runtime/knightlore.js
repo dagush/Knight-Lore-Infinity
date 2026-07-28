@@ -2,7 +2,7 @@ import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage84-c35f-charm-reset-20260723-2';
+    const KL_DIAGNOSTICS_BUILD = 'stage84-c38-playtest-pokes-20260724-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_MAP_FORMAT = 'knight-lore-infinity-logical-map-v1';
     const KL_STAGE45_MAP_URL = KL_URL_PARAMS.get('map');
@@ -74,6 +74,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     );
     const KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED = ['1', 'true', 'on', 'yes'].includes(
         (KL_URL_PARAMS.get('stage84c36') || KL_URL_PARAMS.get('stage8originalcharmrooms') || '').trim().toLowerCase()
+    );
+    const KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED = ['1', 'true', 'on', 'yes'].includes(
+        (KL_URL_PARAMS.get('stage84c37') || KL_URL_PARAMS.get('stage8originalinteriors') || '').trim().toLowerCase()
     );
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
@@ -462,6 +465,30 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             0x1f, 0x32, 0x29, 0x35, 0x2e, 0x16, 0x0d, 0x11, 0x0a,
         ],
     };
+    const KL_PLAYTEST_POKES = [
+        {
+            key: 'infiniteLives',
+            label: 'Infinite lives',
+            addr: 53567,
+            value: 201,
+            inputId: 'playtest-poke-infinite-lives',
+            rowId: 'playtest-poke-infinite-lives-row',
+            originalId: 'playtest-poke-infinite-lives-original',
+            currentId: 'playtest-poke-infinite-lives-current',
+            statusId: 'playtest-poke-infinite-lives-status',
+        },
+        {
+            key: 'invulnerability',
+            label: 'Partial invulnerability',
+            addr: 47196,
+            value: 201,
+            inputId: 'playtest-poke-invulnerability',
+            rowId: 'playtest-poke-invulnerability-row',
+            originalId: 'playtest-poke-invulnerability-original',
+            currentId: 'playtest-poke-invulnerability-current',
+            statusId: 'playtest-poke-invulnerability-status',
+        },
+    ];
 
     const KL_STAGE4 = {
         coordinateConvention: 'north is y + 1; south is y - 1',
@@ -935,6 +962,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             questCauldronBubbles: KL_STAGE82C_BUBBLE_MODE === 'global' || KL_STAGE82C_BUBBLE_MODE === 'cauldron',
             questCauldronBubbleMode: KL_STAGE82C_BUBBLE_MODE,
             questCharmOriginalRooms: KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED,
+            distributedOriginalRoomInteriors: KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED,
         });
         let activeDocument = {
             format: KL_MAP_FORMAT,
@@ -1504,6 +1532,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 questSector: cloneData(reciprocal.room.questSector),
                 questCharm: cloneData(reciprocal.room.questCharm),
                 questDressing: cloneData(reciprocal.room.questDressing),
+                originalInterior: cloneData(
+                    reciprocal.room.meta &&
+                    reciprocal.room.meta.procedural
+                        ? reciprocal.room.meta.procedural.originalInterior || null
+                        : null
+                ),
                 originalCharmRoom: cloneData(
                     reciprocal.room.questDressing &&
                     reciprocal.room.questDressing.staticDressing
@@ -1577,6 +1611,17 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const stage8QuestStatus = document.getElementById('stage8-quest-status');
         const stage84C30Tbody = document.getElementById('stage84-c30-body');
         const stage84C30Status = document.getElementById('stage84-c30-status');
+        const playtestPokesStatus = document.getElementById('playtest-pokes-status');
+        const playtestPokeUi = new Map(KL_PLAYTEST_POKES.map(definition => [
+            definition.key,
+            {
+                input: document.getElementById(definition.inputId),
+                row: document.getElementById(definition.rowId),
+                original: document.getElementById(definition.originalId),
+                current: document.getElementById(definition.currentId),
+                status: document.getElementById(definition.statusId),
+            },
+        ]));
         const crossTbody = document.getElementById('stage2-cross-body');
         const stage2Status = document.getElementById('stage2-status');
         const logicalTbody = document.getElementById('stage4-logical-body');
@@ -1885,6 +1930,20 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 : 'disabled with ?stage84c35f=0',
             lastError: null,
         };
+        const playtestPokes = Object.fromEntries(KL_PLAYTEST_POKES.map(definition => [
+            definition.key,
+            {
+                requested: false,
+                original: null,
+                current: null,
+                writes: 0,
+                restores: 0,
+                inFlight: false,
+                lastAction: 'waiting to capture original byte',
+                lastError: null,
+            },
+        ]));
+        let playtestPokeSyncPromise = null;
 
         if (logicalMapLoadPromise) {
             logicalMapLoadPromise.finally(() => {
@@ -2031,6 +2090,152 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 data: result.data,
             };
         };
+
+        const renderPlaytestPokes = () => {
+            const progress = stage84C34RequestOrderPatch.objectsPutInCauldron;
+            const infiniteLives = playtestPokes.infiniteLives;
+            const enabledCount = KL_PLAYTEST_POKES.filter(definition => (
+                playtestPokes[definition.key].requested
+            )).length;
+            const finalDropWarning = infiniteLives.requested && progress >= 13;
+
+            if (playtestPokesStatus) {
+                playtestPokesStatus.textContent = finalDropWarning
+                    ? `Original cauldron progress ${progress}/14. Disable Infinite lives before the fourteenth drop: its RET poke blocks the original lose_life path used to reach the ending.`
+                    : `Original cauldron progress ${progress}/14. ${enabledCount ? `${enabledCount} poke(s) enabled.` : 'Both pokes are off.'} Original bytes are captured before writing and restored exactly when switched off. Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`;
+            }
+
+            for (const definition of KL_PLAYTEST_POKES) {
+                const state = playtestPokes[definition.key];
+                const ui = playtestPokeUi.get(definition.key);
+                if (!ui) continue;
+
+                if (ui.input) {
+                    ui.input.checked = state.requested;
+                    ui.input.disabled = state.inFlight || state.original === null;
+                    const label = ui.input.nextElementSibling;
+                    if (label) label.textContent = state.requested ? 'On' : 'Off';
+                }
+                if (ui.original) {
+                    ui.original.textContent = state.original === null ? '-' : fmtByte(state.original);
+                }
+                if (ui.current) {
+                    ui.current.textContent = state.current === null ? '-' : fmtByte(state.current);
+                }
+                if (ui.status) {
+                    ui.status.textContent = state.lastError || state.lastAction;
+                }
+                if (ui.row) {
+                    const finalDropRisk = definition.key === 'infiniteLives' && finalDropWarning;
+                    ui.row.className = state.lastError
+                        ? 'state-bad'
+                        : finalDropRisk
+                            ? 'state-warn'
+                            : state.requested
+                                ? 'state-ok'
+                                : 'state-muted';
+                }
+            }
+        };
+
+        const syncPlaytestPokes = reason => {
+            if (playtestPokeSyncPromise) return playtestPokeSyncPromise;
+
+            playtestPokeSyncPromise = (async () => {
+                if (typeof emu.readMemory !== 'function' || typeof emu.writeMemory !== 'function') {
+                    for (const definition of KL_PLAYTEST_POKES) {
+                        const state = playtestPokes[definition.key];
+                        state.lastError = 'JSSpeccy readMemory/writeMemory is not available.';
+                        state.lastAction = 'memory API unavailable';
+                    }
+                    renderPlaytestPokes();
+                    return;
+                }
+
+                for (const definition of KL_PLAYTEST_POKES) {
+                    const state = playtestPokes[definition.key];
+                    state.inFlight = true;
+                    state.lastError = null;
+                    renderPlaytestPokes();
+
+                    try {
+                        const readResult = await emu.readMemory(definition.addr, 1);
+                        let current = readResult.data[0];
+                        state.current = current;
+
+                        if (state.original === null) {
+                            if (current === definition.value) {
+                                state.requested = false;
+                                state.lastError = `Cannot capture the original byte: ${hexWord(definition.addr)} already contains ${fmtByte(definition.value)}. Reload with the poke off.`;
+                                state.lastAction = 'original-byte capture refused';
+                                continue;
+                            }
+                            state.original = current;
+                            state.lastAction = `captured original ${fmtByte(current)}; poke remains off`;
+                        }
+
+                        if (state.requested) {
+                            if (current !== definition.value) {
+                                await emu.writeMemory(definition.addr, Uint8Array.from([definition.value]));
+                                const verify = await emu.readMemory(definition.addr, 1);
+                                current = verify.data[0];
+                                state.current = current;
+                                if (current !== definition.value) {
+                                    throw new Error(`write verification returned ${fmtByte(current)}`);
+                                }
+                                state.writes++;
+                                state.lastAction = `${reason}: wrote ${fmtByte(definition.value)}; writes ${state.writes}`;
+                            } else {
+                                state.lastAction = `active; ${fmtByte(definition.value)} verified; writes ${state.writes}`;
+                            }
+                        } else if (current === definition.value) {
+                            await emu.writeMemory(definition.addr, Uint8Array.from([state.original]));
+                            const verify = await emu.readMemory(definition.addr, 1);
+                            current = verify.data[0];
+                            state.current = current;
+                            if (current !== state.original) {
+                                throw new Error(`restore verification returned ${fmtByte(current)}`);
+                            }
+                            state.restores++;
+                            state.lastAction = `restored captured ${fmtByte(state.original)}; restores ${state.restores}`;
+                        } else if (current === state.original) {
+                            state.lastAction = `off; captured original ${fmtByte(state.original)} verified`;
+                        } else {
+                            state.lastAction = `off; current ${fmtByte(current)} differs from captured ${fmtByte(state.original)}, so no byte was overwritten`;
+                        }
+                    } catch (err) {
+                        state.lastError = `Memory operation failed: ${err.message || err}`;
+                        state.lastAction = 'poke synchronization failed';
+                    } finally {
+                        state.inFlight = false;
+                        renderPlaytestPokes();
+                    }
+                }
+            })().finally(() => {
+                playtestPokeSyncPromise = null;
+            });
+
+            return playtestPokeSyncPromise;
+        };
+
+        for (const definition of KL_PLAYTEST_POKES) {
+            const ui = playtestPokeUi.get(definition.key);
+            if (!ui || !ui.input) continue;
+            ui.input.addEventListener('change', () => {
+                const state = playtestPokes[definition.key];
+                state.requested = ui.input.checked;
+                state.lastError = null;
+                state.lastAction = state.requested
+                    ? `enabling ${definition.label.toLowerCase()}`
+                    : `disabling ${definition.label.toLowerCase()} and restoring captured byte`;
+                renderPlaytestPokes();
+                syncPlaytestPokes('toggle').catch(err => {
+                    state.lastError = `Toggle failed: ${err.message || err}`;
+                    renderPlaytestPokes();
+                });
+            });
+        }
+        renderPlaytestPokes();
 
         const readByte = (range, addr) => {
             const index = addr - range.start;
@@ -3280,6 +3485,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED
                     ? 'C3.6 original charm-room interiors are enabled: generated topology/architecture is preserved while one deterministic original special-object room supplies the interior block groups and charm XYZ.'
                     : 'C3.6 original charm-room interiors are off.',
+                KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED
+                    ? 'C3.7 distributed ordinary interiors are enabled: up to one-third/ten eligible rooms per sector receive a unique entrance-compatible original foreground layout.'
+                    : 'C3.7 distributed ordinary interiors are off.',
                 KL_STAGE84_C33_ENABLED
                     ? 'C3.3 drop-gated JS-side cauldron acceptance is on: matching carried charm sprites can complete the persistent sector state after a player drop action.'
                     : 'C3.3 JS-side cauldron acceptance is off.',
@@ -3967,6 +4175,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             if (typeof emu.writeMemory !== 'function') {
                 lastAction = 'writeMemory unavailable';
                 setState({enabled: false});
+                return;
+            }
+
+            if (objectsPutInCauldron === KL_STAGE84_C30.objectsRequiredLength) {
+                lastAction = 'all 14 original cauldron deliveries accepted; completion flag/final animation should now be active';
+                setState({enabled: true});
                 return;
             }
 
@@ -5863,9 +6077,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             addRow({
                 state: stage84C34RequestOrderPatch.lastError
                     ? 'bad'
-                    : stage84C34RequestOrderPatch.requested
-                        ? logicalCauldron ? 'warn' : 'muted'
-                        : 'muted',
+                    : stage84C34RequestOrderPatch.objectsPutInCauldron === KL_STAGE84_C30.objectsRequiredLength
+                        ? 'ok'
+                        : stage84C34RequestOrderPatch.requested
+                            ? logicalCauldron ? 'warn' : 'muted'
+                            : 'muted',
                 probe: 'C3.4 request-order patch',
                 address: `${hexWord(KL_STAGE84_C30.objectsRequiredAddr)}..${hexWord(KL_STAGE84_C30.objectsRequiredAddr + KL_STAGE84_C30.objectsRequiredLength - 1)}`,
                 decode: formatStage84C34RequestPatch(),
@@ -6152,7 +6368,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const experiment = item.theme === 'tree' && item.size.selector !== 0
                 ? `; custom tree wall; west wall X ${hexByte(stage7WoodWallTuning.westFillerX)}`
                 : '';
-            return `entry ${item.entrySize}; ${item.byteCount} bytes; bg ${item.backgroundCount}: ${backgrounds}; ${overlay}${experiment}`;
+            const original = item.originalInterior && item.originalInterior.selected
+                ? [
+                    `original ${item.originalInterior.originalRoomHex}`,
+                    `${item.originalInterior.blockRunCount} group(s)`,
+                    `${item.originalInterior.blockObjectCount} object(s)`,
+                    `entry strips clear ${item.originalInterior.exitsChecked.join('/') || 'no exits'}`,
+                    `sector ${item.originalInterior.assignedCount}/${item.originalInterior.targetQuota}`,
+                ].join('; ')
+                : '';
+            return [
+                `entry ${item.entrySize}; ${item.byteCount} bytes; bg ${item.backgroundCount}: ${backgrounds}; ${overlay}${experiment}`,
+                original,
+            ].filter(Boolean).join('; ');
         };
 
         const renderStage7StyleTable = () => {
@@ -6199,9 +6427,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const transition = stage7SlidingCross.lastTransition
                 ? ` Last move ${stage7SlidingCross.lastTransition.direction}.`
                 : '';
+            const proceduralStats = logicalMap.stats().procedural;
             stage7StyleStatus.textContent = [
                 `Center ${fmtLogicalCoord(stage7SlidingCross.center)}; generation ${stage7SlidingCross.generation}.`,
                 `Styles in cross: ${styleNames.length ? styleNames.join(', ') : 'authored/no generated style'}.`,
+                proceduralStats.distributedOriginalRoomInteriors
+                    ? `C3.7 original interiors: catalogue ${proceduralStats.originalRoomInteriorCount}; quota 1/${proceduralStats.distributedOriginalRoomFractionDivisor}, max ${proceduralStats.distributedOriginalRoomMaxPerSector}.`
+                    : 'C3.7 original interiors are off.',
                 adjustmentCount
                     ? `Reciprocal overlay adjustments: ${adjustmentCount}.`
                     : 'Reciprocal overlay: no changes.',
@@ -6693,6 +6925,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
 
             try {
                 await applyStage2StartRoomPoke();
+                await syncPlaytestPokes('frame sync');
                 if (stage7SlidingCross.enabled) {
                     await applyStage7CrossInjection('Initial Stage 7 physical cross injection');
                     await applyStage2RoomCleanPatch();

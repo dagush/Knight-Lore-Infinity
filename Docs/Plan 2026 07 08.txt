@@ -1263,6 +1263,192 @@ Exit criteria:
 - The charm appears at the selected original XYZ and remains compatible with
   the established C3.1-C3.4 carry/drop flow.
 
+C3.7 - Distributed Original-Room Interiors
+-------------------------------------------
+
+Goal:
+
+- Reuse a controlled fraction of the original game's ordinary room interiors
+  throughout the infinite map, while preserving the procedural topology and
+  keeping quest rooms under the existing C3.6/cauldron systems.
+
+Catalogue:
+
+- Build a compact generated catalogue from the original room dump.
+- Exclude:
+  - all 32 rooms referenced by `special_objs_tbl`;
+  - original cauldron room `0x88`;
+  - rooms with no foreground block data.
+- The initial catalogue therefore contains ordinary non-empty foreground
+  interiors only. Original room ids remain provenance, never physical ids.
+
+Sector assignment:
+
+- Consider only existing ordinary logical rooms in each 8x8 sector.
+- Never replace:
+  - the logical origin `(0,0)`;
+  - the sector cauldron anchor;
+  - the sector charm anchor.
+- Use a deterministic target:
+
+      min(10, floor(eligible ordinary rooms / 3))
+
+- Rank logical rooms and source templates from `(sectorX, sectorY, worldSeed)`
+  hashes.
+- Use each original source template at most once inside a sector.
+- Repetition between different sectors is expected because the logical world
+  is unbounded and the source catalogue is finite.
+
+Architecture boundary:
+
+- The generated logical map remains authoritative for:
+  - room existence;
+  - all cardinal exits and reciprocal connectivity;
+  - wall and arch backgrounds;
+  - biome/theme and colour;
+  - physical sliding-cross ids.
+- An original source contributes only its compact foreground block groups.
+- Force the first imported hosts to square selector 0. Do not import the
+  original selector, exits, backgrounds, walls, arches, colour, coordinate, or
+  room id.
+
+Entrance compatibility:
+
+- Reject a room/template pairing when an original foreground object's initial
+  packed position overlaps the generated door's inner entry strip.
+- Check only strips belonging to exits that actually exist in the generated
+  room.
+- This is a conservative static-position check, not a proof that a moving
+  hazard can never cross an entrance later.
+- If a selected logical room has no safe unused template, leave its normal
+  generated rocks/blocks in place rather than forcing questionable data.
+
+First proof:
+
+- Opt in with `?stage84c37=1` or `?stage8originalinteriors=1`.
+- Keep C3.6 independently controlled by `?stage84c36=1`.
+- Expose the original source room id, group/object counts, entrance-clearance
+  result, sector target, and assigned count in diagnostics.
+- Walk several sectors and verify:
+  - quest cauldron/charm rooms remain unchanged;
+  - `(0,0)` retains the original eight-block starting frame;
+  - imported ordinary interiors repeat deterministically on revisit;
+  - every generated entrance is usable;
+  - no retrieve_screen reset, freeze, black room, or invalid transition occurs.
+
+Initial validation, 2026 07 24:
+
+- A deterministic two-instance scan covered 441 sectors from `(-10,-10)`
+  through `(10,10)`.
+- All sectors reached their computed quotas: 4,409 assignments in total,
+  averaging 9.998 per sector.
+- No source room id repeated within a sector.
+- No assignment replaced a quest anchor or `(0,0)`.
+- Every imported host was square and passed the static entry-strip check.
+- Browser diagnostics loaded build
+  `stage84-c37-original-interiors-20260724-1` without console errors.
+- The first manual room proof confirmed:
+  - `(4,0)` uses original interior `0x8E` in the generated `rock-vaults`
+    biome, with two pushable tables and one ghost;
+  - `(5,0)` uses distinct original interior `0xCF`, whose source data
+    independently contains one ghost;
+  - the adjacent ghosts are therefore intentional source-content repetition,
+    not a working-memory leak.
+- Source ids are unique per sector, but object types are not. Different
+  original rooms may legitimately contain the same hazard or object type.
+- Longer multi-sector play remains required before the final gameplay exit
+  criterion can be declared complete.
+
+Risks:
+
+- Original foreground groups can include dynamic hazards and moving objects,
+  not merely inert rocks or blocks.
+- Static entrance clearance cannot prove later moving-object clearance.
+- Original puzzles were composed for their original walls and exits, so some
+  interiors may feel easier, harder, or visually unusual under generated
+  architecture.
+- The per-sector ten-room target is intentionally provisional. Reduce it if
+  repetition feels excessive or longer play exposes too many fragile rooms.
+
+Exit criteria:
+
+- Sector assignments are deterministic across revisits and reloads.
+- No source template is repeated within one sector.
+- Quest anchors and logical origin are never replaced.
+- Generated exits and reciprocal connectivity are unchanged.
+- Sampled sectors achieve their target whenever enough entrance-compatible
+  templates exist, and otherwise report an explicit safe fallback.
+- Multi-sector play finds no reset, freeze, black room, trapped entry, or
+  location-entry decode failure.
+
+C3.8 - Fourteen-Sector Completion Endurance Test
+-------------------------------------------------
+
+Goal:
+
+- Deliver fourteen correct charms to fourteen different logical cauldrons and
+  verify that the dispersed quest loop can reach the original Knight Lore
+  ending.
+
+Original completion path:
+
+- C3.4 makes each current/adjacent logical cauldron request the JS sector charm
+  through the active byte of `objects_required` at `0xC27D..0xC28A`.
+- A correct original drop increments `objects_put_in_cauldron` at `0x5BBB`.
+- On count 14, the original `add_obj_to_cauldron` routine calls
+  `prepare_final_animation`.
+- That routine sets `all_objs_in_cauldron` at `0x5BC3`, starts the final room
+  animation, and the original game-over path branches to the completion
+  message and completion tune.
+- The first increment has been manually proven. The complete fourteen-sector
+  path remains an empirical exit test, not yet a completed claim.
+
+Playtest pokes:
+
+- Add two HTML switches directly below the emulator:
+  - infinite lives: decimal 53567 / `0xD13F`, value 201 / `0xC9`;
+  - partial invulnerability: decimal 47196 / `0xB85C`, value 201 / `0xC9`.
+- Both switches are off after every page load.
+- Never hard-code restore bytes. After the snapshot is ready, read and retain
+  each original byte before any poke write.
+- While enabled, verify/reassert `0xC9` after frame completion so a snapshot or
+  game restart cannot silently clear an active switch.
+- When disabled, restore and verify the exact captured byte. If memory no
+  longer contains our `0xC9`, do not overwrite an unrelated changed value.
+- Refuse first-time activation if the byte is already `0xC9`, because its
+  original value cannot then be recovered safely.
+
+Critical final-drop rule:
+
+- The infinite-lives address is the entry of the original `lose_life` routine.
+  Replacing it with `RET` can also prevent the completed final animation from
+  reaching the game-completion screen.
+- Therefore disable Infinite lives before dropping charm 14. Partial
+  invulnerability may remain enabled.
+- The HTML status must issue a warning when original cauldron progress reaches
+  13/14 while Infinite lives remains enabled.
+
+First runtime validation, 2026 07 24:
+
+- The loaded snapshot reported original bytes:
+  - `0xD13F = 0x35`;
+  - `0xB85C = 0xDD`.
+- Browser-controlled toggle tests verified:
+  - `0x35 -> 0xC9 -> 0x35`;
+  - `0xDD -> 0xC9 -> 0xDD`.
+- Both controls loaded off and the browser console remained error-free.
+
+Exit criteria:
+
+- Fourteen distinct JS sectors become completed through player-initiated,
+  matching original cauldron drops.
+- `objects_put_in_cauldron` advances from 0 to 14 without duplicate-sector
+  increments.
+- The C3.4 diagnostics report 14 accepted deliveries rather than an
+  out-of-range request-table error.
+- With Infinite lives disabled for the final drop, the original completion
+  animation, message, and tune are observed.
+
 Strict policy:
 
 - Do not rely on charm/cauldron pokes until we have read-only evidence.
