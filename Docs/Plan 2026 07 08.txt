@@ -424,6 +424,60 @@ Exit criteria:
 - The original game continues running normally.
 - No Spectrum rendering code is modified.
 
+First implementation status, 2026 07 29:
+
+- The original wizard is active only at logical origin `(0,0)` through exact
+  original background id `0x12` and original updater logic.
+- Dialogue content and branching are isolated in `SRC/runtime/dialogue.js`; the
+  overlay controller contains presentation and state-machine behaviour only.
+- The wizard automatically opens the introduction once per page session when
+  the player is at `(0,0)`, physical room `0x88` is active, and one live wizard
+  pair exists. It additionally waits for a normal controllable player body
+  sprite (`0x10..0x15`, `0x18..0x1D`, `0x30..0x35`, or `0x38..0x3D`), so the
+  appearance-sparkle sequence cannot open dialogue early. It does not
+  auto-open again after leaving and returning.
+- The opening uses three compact pages: `HELLO, ADVENTURER!`, the dispersed
+  curse explanation, and the three numbered topics. Those topics cover
+  cauldron requests, globally usable charms, and fourteen offerings formed by
+  seven charm signs requested twice.
+- `HELLO, ADVENTURER!` is first-conversation-only. `dialogue.js` declares
+  `replayStart: 'opening'`, so later number-key conversations skip the greeting
+  and begin at the dispersed-curse explanation.
+- Keys `1..3` choose a branch, a non-zero number advances the remaining
+  wizard/player/wizard lines, and the next number closes after the final line.
+  While open, `0` or Escape closes early. While closed, a number replays the
+  conversation from its opening.
+- The box is drawn over the emulator canvas with Spectrum-like hard pixel
+  edges, black paper, white ink, a bright border, and a comic speech tail.
+- The tail follows the wizard head for wizard lines and the player head for
+  player lines through live record fields `+24..+27`; no renderer projection
+  or game-memory write is added.
+- The box follows its current speaker using a factor-0.5 weighted update
+  between the previous displayed position and the latest live position in
+  Spectrum-screen coordinates. The stored position resets on a page/speaker
+  change. This remains visibly attached while damping frame-to-frame jitter.
+  Above/below placement stays fixed for each page.
+- The original `+27` pixel Y axis points upward, opposite CSS `top`; the HTML
+  anchor uses `24 + (192 - pixelY - spriteHeight)` for the final vertical
+  placement.
+- The box automatically chooses an above/below tail placement so longer lines
+  remain inside the 320x240 emulator canvas. Its width is 144 Spectrum pixels,
+  and opening prose is paginated to reduce screen coverage. Leaving the origin
+  closes it.
+- An open page freezes unchanged while player body sprite `0x5C..0x5F`
+  performs a human/wolf transformation. Its text, node, speaker, and smoothed
+  position survive; dialogue advance keys are ignored, and smooth following
+  resumes when a controllable human/wolf sprite returns.
+- Input is observed but not consumed, so the original Spectrum keyboard path
+  remains unchanged.
+- Diagnostics row `Stage 8.3 wizard dialogue` reports availability,
+  player sprite/readiness, transformation/frozen state, auto-start/completion,
+  node, speaker, branch, replay/open/close/position counts, last key, and the
+  current raw/smoothed anchor.
+- Disable control: `?stage83dialogue=0`.
+- Proximity requirements beyond sharing the room and future conversations
+  remain later Stage 8.3 work.
+
 
 Stage 8.4 - C3 Original Charm/Item/Cauldron Mechanic Probes
 -----------------------------------------------------------

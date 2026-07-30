@@ -3739,3 +3739,84 @@ default-Off behaviour.
 Build:
 
     stage84-c38a-navigation-map-20260728-10
+
+
++============================================================+
+| 2026 07 29 - Origin Wizard And External Dialogue           |
++============================================================+
+
+2026 07 29
+
+The original Knight Lore wizard was restored at logical origin `(0,0)` as the
+first persistent NPC in the infinite map. The authored origin room now appends
+the exact original background template `0x12`, while retaining the clear
+centre, four exits, and original eight-block frame needed by the project.
+
+Only the room template is selected by JavaScript. The original game still
+owns the wizard's paired live records, square clockwise route, animation,
+drawing, collision, and movement logic. C3.9 diagnostics confirmed exactly one
+wizard head/body pair at origin and no wizard in ordinary generated rooms.
+
+Stage 8.3 added an HTML dialogue layer over the JSSpeccy canvas. It does not
+modify the Spectrum framebuffer, renderer, wizard records, keyboard matrix, or
+gameplay memory. Dialogue prose and branching are isolated in
+`SRC/runtime/dialogue.js`, while the overlay controller handles interaction,
+speaker tracking, and presentation.
+
+The first automatic conversation now waits until the player has completed the
+appearance sequence and has a normal controllable human or wolf body sprite.
+It opens with the one-time greeting:
+
+    HELLO, ADVENTURER!
+
+The wizard then explains the dispersed curse and offers three numbered topics:
+
+- what each cauldron seeks;
+- whether a charm must come from the cauldron's own sector;
+- why fourteen offerings are required from seven charm signs used twice.
+
+Each branch alternates between wizard and player and ends with a final wizard
+reply. Keys `1..3` choose a branch, non-zero number keys advance, and `0` or
+Escape closes the box. Later number-key replays begin at the curse explanation
+and deliberately skip the one-time greeting.
+
+The speech box uses Spectrum-like black paper, bright hard-edged borders, small
+pixel text, and a comic tail. Wizard lines follow the live wizard head; player
+lines follow the live player head. The original calculated screen fields at
+record offsets `+24..+27` provide sprite size and pixel position.
+
+Several positioning details were established experimentally:
+
+- Knight Lore's live pixel Y increases upward, opposite CSS `top`, so the
+  overlay converts it with `24 + (192 - pixelY - spriteHeight)`;
+- above/below placement is selected once per page to prevent side flipping;
+- a three-frame arithmetic average introduced an undesirable balancing lag;
+- the accepted follower is the earlier factor-0.5 weighted update:
+
+      displayed = previous_displayed
+                  + 0.5 * (current_live - previous_displayed)
+
+This retains a visible connection to the moving speaker while damping the
+single-frame jitter. The stored position resets when the page or speaker
+changes.
+
+Human/wolf transformations receive a separate freeze rule. While sprite
+`0x5C..0x5F` is active, the current text, dialogue node, speaker, and smoothed
+position remain unchanged; dialogue number keys are ignored. Tracking resumes
+on the same page when a controllable body sprite returns.
+
+Manual checks confirmed the original wizard movement, corrected vertical
+attachment, compact box size, complete three-branch conversation, one-time
+greeting, replay entry point, transformation continuity, and the restored
+factor-0.5 motion. Deterministic motion verification produced:
+
+    160 -> 165 -> 167.5 -> 168.75
+
+The integrated page loaded without browser errors. Runtime controls remain:
+
+    ?stage84c39wizard=0   disable the original origin wizard
+    ?stage83dialogue=0    disable the external dialogue overlay
+
+Build:
+
+    stage83-wizard-dialogue-20260730-2

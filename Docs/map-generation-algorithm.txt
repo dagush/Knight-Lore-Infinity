@@ -119,6 +119,16 @@ procedural room. It uses the original room `0x88` eight-block floor frame:
 This keeps the original cauldron-room silhouette while leaving the central
 spawn/walk lanes clear.
 
+The current C3.9 origin override also appends original background id `0x12` to
+this room only. At startup the runtime restores the exact original wizard
+background template at `0x6FAE..0x6FBE`; RetrieveScreen therefore creates the
+same two-part wizard used by original room `0x88`. The room does not append
+background id `0x13`, so the original cauldron is not restored at the origin.
+
+The authored payload and the reciprocal-exit compiler keep `extraBackgrounds`
+unique. This matters for multi-record actors: an exit correction must never
+append `0x12` twice and create two overlapping wizards.
+
 
 Corridor Branch Growth
 ----------------------
@@ -794,6 +804,31 @@ Lookup order:
 1. If an authored JSON room exists at the coordinate, use it.
 2. Otherwise, ask createKnightLoreProceduralMap().getRoomDefinition(x, y).
 3. Cache the generated result for stable diagnostics and persistent state.
+
+Origin wizard integration is deliberately narrower than ordinary procedural
+generation:
+
+- only authored logical room `(0,0)` adds background id `0x12`;
+- the global `0x12` pointer/template bytes are the original bytes, unmodified;
+- original code owns movement, animation, clockwise boundary turns, drawing,
+  and collision;
+- generated rooms, quest anchors, and distributed original interiors do not
+  add the wizard;
+- `?stage84c39wizard=0` disables the origin instance for a control run.
+
+Stage 8.3 can attach an external speech box to this origin actor. Conversation
+availability is derived from the current logical coordinate and live wizard
+pair, not from map-generation metadata. A separate live-player readiness gate
+delays its first automatic page, while transformation state can freeze an
+already-open page. The dialogue therefore remains a UI feature and does not
+change procedural topology, room payloads, persistence, or the logical-map
+JSON format. Its prose and branch tree live separately in
+`SRC/runtime/dialogue.js`.
+
+The C3.9 diagnostic scans the special live slots and full expanded-room range
+for one wizard head/body pair at the origin and no pair elsewhere. It reports
+the live sprites, XYZ, signed dX/dY, and the direction encoded in the low two
+bits of record byte `+13`.
 
 Before writing the physical five-room cross, Stage 7 applies a reciprocal-exit
 overlay. This overlay does not modify the source logical room. It only changes

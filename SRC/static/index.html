@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>JSSpeccy v3</title>
-        <script src="jsspeccy/jsspeccy.js?v=stage84-c38a-navigation-map-20260728-10"></script>
+        <script src="jsspeccy/jsspeccy.js?v=stage83-wizard-dialogue-20260730-2"></script>
         <style>
             :root {
                 color-scheme: dark;
@@ -43,6 +43,63 @@
 
             #jsspeccy canvas {
                 height: auto !important;
+            }
+
+            .knight-lore-wizard-dialogue {
+                --kl-dialog-scale: 1;
+                --kl-dialog-tail-x: 56px;
+                position: absolute;
+                z-index: 20;
+                box-sizing: border-box;
+                width: 144px;
+                min-height: 34px;
+                padding: 7px 6px;
+                border: 2px solid #ffffff;
+                border-radius: 0;
+                background: #000000;
+                box-shadow:
+                    0 0 0 2px #000000,
+                    0 0 0 3px #f4e925;
+                color: #ffffff;
+                font-family: Menlo, Monaco, "Courier New", monospace;
+                font-size: 8px;
+                font-weight: 700;
+                line-height: 10px;
+                letter-spacing: 0;
+                text-align: center;
+                white-space: pre-line;
+                overflow-wrap: break-word;
+                image-rendering: pixelated;
+                pointer-events: none;
+                transform: scale(var(--kl-dialog-scale));
+                transform-origin: top left;
+            }
+
+            .knight-lore-wizard-dialogue[data-speaker="player"] {
+                color: #f4e925;
+            }
+
+            .knight-lore-wizard-dialogue::after {
+                content: "";
+                position: absolute;
+                left: var(--kl-dialog-tail-x);
+                bottom: -7px;
+                width: 8px;
+                height: 8px;
+                border-right: 2px solid #ffffff;
+                border-bottom: 2px solid #ffffff;
+                background: #000000;
+                transform: translateX(-50%) rotate(45deg);
+                transform-origin: center;
+            }
+
+            .knight-lore-wizard-dialogue[data-placement="below"]::after {
+                top: -7px;
+                bottom: auto;
+                border-top: 2px solid #ffffff;
+                border-right: 0;
+                border-bottom: 0;
+                border-left: 2px solid #ffffff;
             }
 
             .navigation-map {
@@ -895,7 +952,7 @@
             </section>
             <section id="knight-lore-stage8-quest-diagnostics" class="diagnostics">
                 <h1>Stage 8.2B/C - Quest Room Dressing</h1>
-                <p id="stage8-quest-status" class="stage-status">Diagnostics build: stage84-c38a-navigation-map-20260728-10. Waiting for quest-sector metadata.</p>
+                <p id="stage8-quest-status" class="stage-status">Diagnostics build: stage83-wizard-dialogue-20260730-2. Waiting for quest-sector metadata.</p>
                 <table class="diagnostics-table quest-sector-table">
                     <thead>
                         <tr>
@@ -918,7 +975,7 @@
             </section>
             <section id="knight-lore-stage84-c30-diagnostics" class="diagnostics">
                 <h1>Stage 8.4 C3.6 - Original Charm-Room Interiors</h1>
-                <p id="stage84-c30-status" class="stage-status">Diagnostics build: stage84-c38a-navigation-map-20260728-10. Waiting for item/charm memory samples.</p>
+                <p id="stage84-c30-status" class="stage-status">Diagnostics build: stage83-wizard-dialogue-20260730-2. Waiting for item/charm memory samples.</p>
                 <table class="diagnostics-table">
                     <thead>
                         <tr>
@@ -937,7 +994,7 @@
             </section>
             <section id="knight-lore-wood-wall-reference" class="diagnostics">
                 <h1>Wooden Square Wall Reference</h1>
-                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: stage84-c38a-navigation-map-20260728-10.</p>
+                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: stage83-wizard-dialogue-20260730-2.</p>
                 <div class="wood-tuning-controls">
                     <label for="stage7-west-filler-x-slider">Selector 1 west wall X</label>
                     <input id="stage7-west-filler-x-slider" type="range" min="0" max="191" step="1" value="95">
@@ -1001,7 +1058,7 @@
             </section>
             <section id="knight-lore-stage7-style-diagnostics" class="diagnostics">
                 <h1>Stage 7 - Current Generated Cross</h1>
-                <p id="stage7-style-status" class="stage-status">Diagnostics build: stage84-c38a-navigation-map-20260728-10. Waiting for the Stage 7 cross.</p>
+                <p id="stage7-style-status" class="stage-status">Diagnostics build: stage83-wizard-dialogue-20260730-2. Waiting for the Stage 7 cross.</p>
                 <table class="diagnostics-table style-cross-table">
                     <thead>
                         <tr>
@@ -1035,7 +1092,7 @@
             </section>
             <section id="knight-lore-stage2-diagnostics" class="diagnostics">
                 <h1>Stage 2 - Physical 5-Room Cross</h1>
-                <p id="stage2-status" class="stage-status">Diagnostics build: stage84-c38a-navigation-map-20260728-10. Waiting for the first Stage 2 sample.</p>
+                <p id="stage2-status" class="stage-status">Diagnostics build: stage83-wizard-dialogue-20260730-2. Waiting for the first Stage 2 sample.</p>
                 <table class="diagnostics-table cross-table">
                     <thead>
                         <tr>
@@ -1054,7 +1111,7 @@
             </section>
             <section id="knight-lore-stage4-diagnostics" class="diagnostics">
                 <h1>Stage 4.5 - Logical Map JSON Authoring</h1>
-                <p id="stage4-status" class="stage-status">Diagnostics build: stage84-c38a-navigation-map-20260728-10. Waiting for the logical map probe.</p>
+                <p id="stage4-status" class="stage-status">Diagnostics build: stage83-wizard-dialogue-20260730-2. Waiting for the logical map probe.</p>
                 <table class="diagnostics-table logical-map-table">
                     <thead>
                         <tr>

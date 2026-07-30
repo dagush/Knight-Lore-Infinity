@@ -460,6 +460,18 @@ This is runtime policy rather than JSON syntax. Authors should therefore:
 - treat `(0,0)` as the new-game wizard/NPC anchor unless a future runtime
   configuration explicitly chooses another origin.
 
+In the built-in map, that anchor is now active: the authored origin includes
+`extraBackgrounds: [0x12]`, while its normal `backgrounds` retain all four
+arches and the square stone wall. The runtime restores the original `0x12`
+template, so this produces the original moving wizard without encoding any
+wizard movement state in JSON. Do not also place `0x12` in `backgrounds`; the
+compiler de-duplicates `extraBackgrounds`, but one authoritative declaration
+is clearer and avoids accidental duplicate actors in external tooling.
+
+The origin must not include `0x13` unless an author deliberately wants an
+original cauldron there. Knight Lore Infinity's built-in origin has the wizard,
+the eight-block frame, and no cauldron.
+
 The reset changes the active logical coordinate only. Authored map data and
 JS-side persistent quest state are retained. The original game remains
 responsible for fresh player body/head XYZ during its new-game initialization.

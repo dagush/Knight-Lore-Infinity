@@ -303,6 +303,97 @@ Room/location shape and background presets:
         while leaving the center clear:
            type 0x00 at (2,6,0), (1,5,0), (5,6,0), (6,5,0),
                        (6,2,0), (5,1,0), (1,2,0), (2,1,0).
+        C3.9 restores the exact original wizard background bytes shown above
+        and appends background id 0x12 only to this authored origin. The origin
+        does not append 0x13, so no cauldron occupies the player spawn.
+        Runtime option:
+           ?stage84c39wizard=0   disable the origin wizard control
+        Default/current preset:
+           enabled
+        The JS layer does not patch the wizard updater or movement state.
+        Original code expands the two background records, updates both halves,
+        moves the actor in NSEW order, and turns clockwise when X/Y reaches a
+        room boundary. Original collision/deadly behaviour is also retained.
+        C3.9 diagnostics expect exactly one live wizard head/body pair at
+        logical (0,0) and none in other logical rooms. They expose live sprite
+        ids, XYZ, signed dX/dY, and +13 direction.
+     Stage 8.3 external wizard dialogue:
+        The dialogue is HTML layered over the JSSpeccy canvas. It does not
+        modify the Spectrum framebuffer, renderer, room data, wizard records,
+        keyboard matrix, or any gameplay memory.
+        The conversation context exists only when all of these remain true:
+           logical coordinate (0,0);
+           active physical room 0x88;
+           exactly one live original wizard head/body pair.
+        Automatic opening additionally requires a controllable player body
+        sprite. The readiness gate follows the original updater dispatch table
+        and accepts only normal human/wolf bottom sprites whose updater calls
+        check_user_input:
+           0x10..0x15, 0x18..0x1D, 0x30..0x35, 0x38..0x3D.
+        Player-appearance sparkles 0x78..0x7F, death sparkles, null records,
+        and transformation sprites cannot trigger the automatic dialogue.
+        Dialogue prose and branch structure are isolated in:
+           SRC/runtime/dialogue.js
+        The wizard automatically opens the introductory conversation once per
+        page session when the context exists and the readiness gate first
+        becomes true.
+        This teaches the interaction without an HTML instruction banner and
+        does not repeatedly interrupt the player after returning to (0,0).
+        The compact opening is split into three pages so it does not cover most
+        of the Spectrum picture:
+           HELLO, ADVENTURER!
+           the dispersed-curse explanation;
+           the three player replies.
+        `HELLO, ADVENTURER!` is used only by the automatic first conversation
+        of the page session. Number-key replays begin directly at the
+        dispersed-curse explanation (`opening` in `dialogue.js`).
+        The final opening page offers:
+           1  what the cauldrons seek;
+           2  whether a charm must return to its home sector;
+           3  how many offerings break the curse.
+        Key 1, 2, or 3 chooses a branch. Any non-zero number advances the
+        wizard/player/wizard exchange. On the final wizard line, another
+        number completes and closes the conversation. While open, 0 or Escape
+        closes early. While closed, any number replays it from the curse
+        explanation, skipping the one-time "HELLO, ADVENTURER!" greeting.
+        Number events continue to reach the Spectrum normally; the HTML layer
+        only observes them. Leaving (0,0), losing the live wizard pair, or
+        entering a non-active/menu state closes it automatically.
+        Wizard pages follow the live wizard top record; player pages follow the
+        live player head record. Screen movement uses a factor-0.5 weighted
+        update between the previous displayed position and the latest live
+        position:
+           displayed = previous_displayed
+                       + 0.5 * (current_live - previous_displayed)
+        The stored position resets whenever the page/speaker changes.
+        This keeps the speech tail attached while damping frame-to-frame pixel
+        jitter. Each page locks its above/below placement, so smoothing cannot
+        make the box flip sides while it is being read. Both records provide
+        the calculated screen fields:
+           +24 sprite width in bytes;
+           +25 sprite height;
+           +26 pixel X;
+           +27 pixel Y.
+        Knight Lore's live pixel Y increases upward, while CSS top increases
+        downward. The HTML anchor therefore converts the head coordinate with:
+           screenY = 24 + (192 - livePixelY - spriteHeight)
+        It adds the Spectrum border offset (32,24) inside JSSpeccy's 320x240
+        canvas and then applies the canvas display scale. The box and tail
+        choose an above/below placement that fits the current speaker. No 3D
+        reprojection is invented.
+        If an open conversation observes a transformation sprite 0x5C..0x5F,
+        it freezes the current node, text, speaker, and smoothed screen position.
+        Dialogue number keys are ignored until a controllable human/wolf body
+        sprite returns, then the same page resumes unchanged. Leaving the
+        origin or losing the wizard still closes the conversation normally.
+        Runtime control:
+           ?stage83dialogue=0   disable the dialogue overlay
+        Diagnostic row:
+           Stage 8.3 wizard dialogue
+        The row reports context availability, player body sprite/readiness,
+        transformation/frozen state, automatic-start/completion state, current
+        node, speaker, branch, replay/open/close/position counts, last key, and
+        the raw and smoothed pixel/screen anchor.
 
 Working memory: between 5BA0h and 6107h
 
@@ -1028,7 +1119,9 @@ Use:
 The `playtest=latest` preset enables the current proven stack: Stage 7 sliding,
 original cauldron visual with cauldron-gated bubbles, C3.1 collectible charm,
 C3.3 acceptance, C3.4 request-order patch, C3.5c timing throttle, C3.6 original
-charm-room interiors, and C3.7 distributed ordinary original interiors.
+charm-room interiors, C3.7 distributed ordinary original interiors, and the
+C3.9 original wizard at logical origin `(0,0)`. It also enables the Stage 8.3
+automatic three-branch wizard conversation.
 
 It deliberately does not enable infinite lives or partial invulnerability;
 those remain player-controlled HTML toggles.
@@ -1056,8 +1149,11 @@ Startup signature barrier, 2026 07 28:
 - Confirmed repaired readback: center `0x88` at `0x6251..0x6262`, backgrounds
   `0x00 0x01 0x02 0x03 0x0C`, and eight type-`0x00` blocks.
 - Background template `0x13` remains restored globally for actual logical
-  cauldron anchors, but origin does not reference it. Wizard template `0x12`
-  remains zeroed.
+  cauldron anchors, but origin does not reference it.
+- As of C3.9, wizard template `0x12` is restored globally and only the authored
+  logical origin references it. The compiled origin background list is
+  `0x00 0x01 0x02 0x03 0x0C 0x12`; it retains eight type-`0x00` blocks and
+  contains no `0x13` cauldron.
 0x07 is a regular block,
 0x52 is a ghost (mark this for possible later usage), and
 0x54 is a table,

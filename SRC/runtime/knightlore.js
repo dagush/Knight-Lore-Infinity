@@ -1,10 +1,13 @@
 import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 import { createKnightLoreNavigationMap } from './knightlore-navigation-map.js';
+import { createKnightLoreWizardDialogue } from './knightlore-wizard-dialogue.js';
+import { KNIGHT_LORE_WIZARD_DIALOGUE } from './dialogue.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
     let navigationMap = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage84-c38a-navigation-map-20260728-10';
+    let wizardDialogue = null;
+    const KL_DIAGNOSTICS_BUILD = 'stage83-wizard-dialogue-20260730-2';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_TRUE_PARAM_VALUES = ['1', 'true', 'on', 'yes', 'enabled'];
     const KL_CURRENT_PLAYTEST_PRESET = ['latest', 'current', '1'].includes(
@@ -84,6 +87,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     );
     const KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED = getBooleanUrlOption(
         ['stage84c37', 'stage8originalinteriors'],
+        true
+    );
+    const KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED = getBooleanUrlOption(
+        ['stage84c39wizard', 'stage8wizard', 'wizard'],
+        true
+    );
+    const KL_STAGE83_WIZARD_DIALOGUE_ENABLED = getBooleanUrlOption(
+        ['stage83dialogue', 'wizarddialogue', 'dialogue'],
         true
     );
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
@@ -372,6 +383,39 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         liveBubbleSlotAddr: 0x5c68,
         liveBubbleSlotLength: 0x18,
     };
+    const KL_STAGE84_C39_ORIGIN_WIZARD = {
+        enabled: KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED,
+        logicalCoord: {x: 0, y: 0},
+        backgroundId: 0x12,
+        backgroundAddr: 0x6fae,
+        backgroundBytes: [
+            0x9e, 0x98, 0x68, 0x80, 0x05, 0x05, 0x18, 0x10,
+            0x90, 0xa0, 0x60, 0x80, 0x05, 0x05, 0x00, 0x12,
+            0x00,
+        ],
+        topSprites: [0x9e, 0x9f],
+        directionNames: ['west', 'north', 'east', 'south'],
+    };
+    const KL_STAGE83_WIZARD_DIALOGUE = {
+        enabled: KL_STAGE83_WIZARD_DIALOGUE_ENABLED && KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED,
+        dialogue: KNIGHT_LORE_WIZARD_DIALOGUE,
+    };
+    const getStage2RoomPatchBytes = patch => {
+        if (patch.kind === 'wizard-background' && KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED) {
+            return KL_STAGE84_C39_ORIGIN_WIZARD.backgroundBytes.slice();
+        }
+        if (patch.kind === 'cauldron-background' && KL_STAGE82C_CAULDRON_VISUAL_ENABLED) {
+            return KL_STAGE82C_ORIGINAL_CAULDRON.cauldronBackgroundBytes.slice();
+        }
+        if (
+            patch.kind === 'cauldron-bubbles' &&
+            KL_STAGE82C_CAULDRON_VISUAL_ENABLED &&
+            KL_STAGE82C_BUBBLES_ENABLED
+        ) {
+            return KL_STAGE82C_ORIGINAL_CAULDRON.bubbleTemplateBytes.slice();
+        }
+        return Array(patch.length).fill(0);
+    };
     const KL_STAGE84_C30 = {
         staticObjectTableStart: 0x6ff2,
         staticObjectTableEnd: 0x7112,
@@ -419,7 +463,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         disposableRecordIndex: 31,
         disposableInactiveRoom: 0xff,
         disposablePosition: {x: 0x80, y: 0x80, z: 0x80},
+        playerBodyRecordAddr: 0x5c08,
         playerBodyXyzAddr: 0x5c09,
+        playerHeadRecordAddr: 0x5c28,
         playerHeadXyzAddr: 0x5c29,
         liveSlots: [
             {label: 'live item slot 1', addr: 0x5c48},
@@ -544,6 +590,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             colour: 6,
             theme: 'stone',
             exits: {north: 'arch', east: 'arch', south: 'arch', west: 'arch'},
+            extraBackgrounds: KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED ? [0x12] : [],
             blocks: [
                 {
                     type: 0x00,
@@ -592,6 +639,20 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         0x65: 'bottle',
         0x66: 'ball/crystal ball',
         0x67: 'life',
+        0x90: 'guard/wizard body 0',
+        0x91: 'guard/wizard body 1',
+        0x92: 'guard/wizard body 2',
+        0x93: 'guard/wizard body 3',
+        0x94: 'guard/wizard body 4',
+        0x95: 'guard/wizard body 5',
+        0x98: 'guard/wizard body 8',
+        0x99: 'guard/wizard body 9',
+        0x9a: 'guard/wizard body 10',
+        0x9b: 'guard/wizard body 11',
+        0x9c: 'guard/wizard body 12',
+        0x9d: 'guard/wizard body 13',
+        0x9e: 'wizard head 0',
+        0x9f: 'wizard head 1',
         0xa0: 'good bubble 0',
         0xa1: 'good bubble 1',
         0xa2: 'good bubble 2',
@@ -722,16 +783,24 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         Array.isArray(room.extraBackgrounds) ? room.extraBackgrounds : []
     );
 
+    const mergeExtraBackgrounds = (backgrounds, room) => {
+        const extras = Array.from(new Set(getExtraBackgrounds(room)));
+        const extraIds = new Set(extras);
+        return [
+            ...backgrounds.filter(background => !extraIds.has(background)),
+            ...extras,
+        ];
+    };
+
     const buildStoneBackgroundsWithExits = (room, exits) => {
         const selectorInfo = KL_SIZE_SELECTORS[room.size.selector];
         if (!selectorInfo) return [];
-        return [
+        return mergeExtraBackgrounds([
             ...KL_DIRECTIONS
                 .filter(direction => exits && exits[direction])
                 .map(direction => KL_STONE_ARCH_IDS[direction]),
             selectorInfo.wallId,
-            ...getExtraBackgrounds(room),
-        ];
+        ], room);
     };
 
     const buildTreeSquareBackgroundsWithExits = (room, exits) => {
@@ -747,7 +816,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             !KL_ALL_WALL_IDS.has(value)
         ));
 
-        return [...baseBackgrounds, ...specialBackgrounds, ...getExtraBackgrounds(room)];
+        return mergeExtraBackgrounds([...baseBackgrounds, ...specialBackgrounds], room);
     };
 
     const buildTreeRectangularBackgroundsWithExits = (room, exits) => {
@@ -768,7 +837,11 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             !KL_ALL_WALL_IDS.has(value)
         ));
 
-        return [...archBackgrounds, customWallId, ...specialBackgrounds, ...getExtraBackgrounds(room)];
+        return mergeExtraBackgrounds([
+            ...archBackgrounds,
+            customWallId,
+            ...specialBackgrounds,
+        ], room);
     };
 
     const buildBackgrounds = room => {
@@ -821,7 +894,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 !KL_TREE_FILLER_IDS.has(value) &&
                 !KL_ALL_WALL_IDS.has(value)
             ));
-            return [...buildStoneBackgroundsWithExits(room, exits), ...specialBackgrounds];
+            return mergeExtraBackgrounds([
+                ...buildStoneBackgroundsWithExits(room, exits),
+                ...specialBackgrounds,
+            ], room);
         }
 
         const nonArchBackgrounds = (room.backgrounds || [])
@@ -829,7 +905,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const archBackgrounds = KL_DIRECTIONS
             .filter(direction => exits[direction])
             .map(direction => chooseArchIdForRoom(room, direction));
-        return [...archBackgrounds, ...nonArchBackgrounds, ...getExtraBackgrounds(room)];
+        return mergeExtraBackgrounds([...archBackgrounds, ...nonArchBackgrounds], room);
     };
 
     const normalizeLogicalRoomDefinition = (definition, source) => {
@@ -1762,6 +1838,15 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const stage8QuestStatus = document.getElementById('stage8-quest-status');
         const stage84C30Tbody = document.getElementById('stage84-c30-body');
         const stage84C30Status = document.getElementById('stage84-c30-status');
+        const emulatorCanvas = document.querySelector('#jsspeccy canvas');
+        const emulatorAppRoot = emulatorCanvas ? emulatorCanvas.parentElement : null;
+        if (wizardDialogue) wizardDialogue.destroy();
+        wizardDialogue = createKnightLoreWizardDialogue({
+            root: emulatorAppRoot,
+            canvas: emulatorCanvas,
+            enabled: KL_STAGE83_WIZARD_DIALOGUE.enabled,
+            dialogue: KL_STAGE83_WIZARD_DIALOGUE.dialogue,
+        });
         const playtestPokesStatus = document.getElementById('playtest-pokes-status');
         const playtestPokeUi = new Map(KL_PLAYTEST_POKES.map(definition => [
             definition.key,
@@ -2849,34 +2934,27 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             stage2RoomCleanPatch.attempted = true;
             try {
                 for (const patch of KL_STAGE2.cleanRoomPatches) {
-                    let bytes = new Uint8Array(patch.length);
-                    if (
-                        patch.kind === 'cauldron-background' &&
-                        KL_STAGE82C_CAULDRON_VISUAL_ENABLED
-                    ) {
-                        bytes = Uint8Array.from(KL_STAGE82C_ORIGINAL_CAULDRON.cauldronBackgroundBytes);
-                    } else if (
-                        patch.kind === 'cauldron-bubbles' &&
-                        KL_STAGE82C_CAULDRON_VISUAL_ENABLED &&
-                        KL_STAGE82C_BUBBLES_ENABLED
-                    ) {
-                        bytes = Uint8Array.from(KL_STAGE82C_ORIGINAL_CAULDRON.bubbleTemplateBytes);
-                    }
-                    await emu.writeMemory(patch.addr, bytes);
+                    await emu.writeMemory(
+                        patch.addr,
+                        Uint8Array.from(getStage2RoomPatchBytes(patch))
+                    );
                 }
-                if (KL_STAGE82C_CAULDRON_VISUAL_ENABLED) {
+                if (KL_STAGE82C_CAULDRON_VISUAL_ENABLED || KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED) {
                     await emu.writeMemory(
                         KL_STAGE82C_ORIGINAL_CAULDRON.offsetTableAddr,
                         Uint8Array.from(KL_STAGE82C_ORIGINAL_CAULDRON.offsetTableBytes)
                     );
                 }
+                const wizardMode = KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED
+                    ? 'restored original wizard background 0x12 for logical origin (0,0)'
+                    : 'zeroed wizard background';
                 const cauldronMode = KL_STAGE82C_CAULDRON_VISUAL_ENABLED
                     ? `restored original cauldron background 0x13; bubbles ${describeStage82CBubbleMode(KL_STAGE82C_BUBBLE_MODE)}`
                     : 'zeroed cauldron background and bubbles';
                 stage2RoomCleanPatch = {
                     attempted: true,
                     done: true,
-                    message: `Cleaned wizard background and ${cauldronMode} for room ${hexByte(KL_STAGE2.centerRoom)}.`,
+                    message: `${wizardMode}; ${cauldronMode} for physical room ${hexByte(KL_STAGE2.centerRoom)}.`,
                 };
             } catch (err) {
                 const errorText = String(err);
@@ -2974,9 +3052,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const startLocationPatchOk = sameBytes(startLocationBytes, KL_STAGE2.startLocationsPatched);
             const cleanReadback = sample.cleanRoomPatches || [];
             const cleanPatchOk = cleanReadback.length === KL_STAGE2.cleanRoomPatches.length &&
-                cleanReadback.every(item => allZero(item.bytes));
+                cleanReadback.every(item => sameBytes(item.bytes, getStage2RoomPatchBytes(item)));
             const cleanSummary = cleanReadback.length
-                ? cleanReadback.map(item => `${item.label}: ${allZero(item.bytes) ? 'zeroed' : 'not zeroed'}`).join('; ')
+                ? cleanReadback.map(item => {
+                    const expected = getStage2RoomPatchBytes(item);
+                    const mode = allZero(item.bytes) ? 'zeroed' : 'active';
+                    return `${item.label}: ${mode}${sameBytes(item.bytes, expected) ? ' OK' : ' mismatch'}`;
+                }).join('; ')
                 : 'waiting for clean readback';
 
             stage2Status.textContent = [
@@ -3013,9 +3095,16 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 } else if (found && isCenter && cleanPatchOk && (
                     entry.backgrounds.includes(0x12) || entry.backgrounds.includes(0x13)
                 )) {
-                    status += KL_STAGE82C_CAULDRON_VISUAL_ENABLED && entry.backgrounds.includes(0x13)
-                        ? ' Original cauldron id 0x13 is active for the Phase C visual probe.'
-                        : ' Wizard/cauldron ids remain in the compact entry but expand to null records.';
+                    if (entry.backgrounds.includes(0x12)) {
+                        status += KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED
+                            ? ' Original wizard id 0x12 is active for logical origin (0,0).'
+                            : ' Wizard id 0x12 expands to null records.';
+                    }
+                    if (entry.backgrounds.includes(0x13)) {
+                        status += KL_STAGE82C_CAULDRON_VISUAL_ENABLED
+                            ? ' Original cauldron id 0x13 is active for the Phase C visual probe.'
+                            : ' Cauldron id 0x13 expands to null records.';
+                    }
                 }
 
                 return `
@@ -6323,6 +6412,95 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             };
         };
 
+        const toSignedByte = value => (
+            value & 0x80 ? value - 0x100 : value
+        );
+
+        const findStage84C39WizardPairs = workRange => {
+            const pairs = [];
+            const recordLength = KL_STAGE7_SLIDING_CROSS.slotSize;
+            for (
+                let addr = KL_STAGE84_C30.liveSlots[0].addr;
+                addr + recordLength * 2 <= KL_STAGE1.workEnd;
+                addr += recordLength
+            ) {
+                const topRecord = readBytesFromRange(workRange, addr, recordLength);
+                if (!KL_STAGE84_C39_ORIGIN_WIZARD.topSprites.includes(topRecord[0])) continue;
+
+                const bodyAddr = addr + recordLength;
+                const bodyRecord = readBytesFromRange(workRange, bodyAddr, recordLength);
+                const topBytes = topRecord.slice(0, 14);
+                const bodyBytes = bodyRecord.slice(0, 14);
+                const directionIndex = (topBytes[13] || 0) & 0x03;
+                pairs.push({
+                    addr,
+                    bodyAddr,
+                    topRecord,
+                    bodyRecord,
+                    topBytes,
+                    bodyBytes,
+                    topSprite: topBytes[0] || 0,
+                    bodySprite: bodyBytes[0] || 0,
+                    x: topBytes[1] || 0,
+                    y: topBytes[2] || 0,
+                    z: topBytes[3] || 0,
+                    dx: toSignedByte(topBytes[9] || 0),
+                    dy: toSignedByte(topBytes[10] || 0),
+                    directionIndex,
+                    direction: KL_STAGE84_C39_ORIGIN_WIZARD.directionNames[directionIndex],
+                    spriteWidthBytes: topRecord[24] || 0,
+                    spriteHeight: topRecord[25] || 0,
+                    pixelX: topRecord[26],
+                    pixelY: topRecord[27],
+                });
+            }
+            return pairs;
+        };
+
+        const updateStage83WizardDialogue = (workRange, sample) => {
+            if (!wizardDialogue) return;
+
+            const currentCoord = getStage8CurrentCoord();
+            const wizardPairs = findStage84C39WizardPairs(workRange);
+            const wizardPair = wizardPairs.length === 1 ? wizardPairs[0] : null;
+            const playerBodySprite = readByte(workRange, KL_STAGE84_C30.playerBodyRecordAddr) || 0;
+            const playerReady = (
+                (playerBodySprite >= 0x10 && playerBodySprite <= 0x15) ||
+                (playerBodySprite >= 0x18 && playerBodySprite <= 0x1d) ||
+                (playerBodySprite >= 0x30 && playerBodySprite <= 0x35) ||
+                (playerBodySprite >= 0x38 && playerBodySprite <= 0x3d)
+            );
+            const playerTransforming = playerBodySprite >= 0x5c && playerBodySprite <= 0x5f;
+            const available = KL_STAGE83_WIZARD_DIALOGUE.enabled &&
+                sameCoord(currentCoord, KL_STAGE84_C39_ORIGIN_WIZARD.logicalCoord) &&
+                sample.room0 === KL_STAGE7_SLIDING_CROSS.centerRoom &&
+                !!wizardPair;
+            const playerHeadRecord = readBytesFromRange(
+                workRange,
+                KL_STAGE84_C30.playerHeadRecordAddr,
+                KL_STAGE7_SLIDING_CROSS.slotSize
+            );
+
+            wizardDialogue.update({
+                available,
+                playerReady,
+                playerTransforming,
+                playerBodySprite,
+                wizardAnchor: wizardPair ? {
+                    pixelX: wizardPair.pixelX,
+                    pixelY: wizardPair.pixelY,
+                    spriteWidthBytes: wizardPair.spriteWidthBytes,
+                    spriteHeight: wizardPair.spriteHeight,
+                } : null,
+                playerAnchor: playerHeadRecord[0] ? {
+                    pixelX: playerHeadRecord[26],
+                    pixelY: playerHeadRecord[27],
+                    spriteWidthBytes: playerHeadRecord[24],
+                    spriteHeight: playerHeadRecord[25],
+                } : null,
+            });
+        };
+
         const decodeStage84StaticObjectRecord = (itemObjectRange, index) => {
             const addr = KL_STAGE84_C30.staticObjectTableStart +
                 index * KL_STAGE84_C30.staticObjectRecordSize;
@@ -6373,6 +6551,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             const originalCauldronCheck = sample.room0 === KL_STAGE84_C30.cauldronPhysicalRoom;
             const logicalCauldron = currentRoom.questRole === 'cauldron';
             const c35aDynamicCandidates = getStage84C35aDynamicCandidates(workRange);
+            const wizardAtOrigin = sameCoord(currentCoord, KL_STAGE84_C39_ORIGIN_WIZARD.logicalCoord);
+            const wizardBackgroundPresent = currentRoom.backgrounds.includes(
+                KL_STAGE84_C39_ORIGIN_WIZARD.backgroundId
+            );
+            const wizardPairs = findStage84C39WizardPairs(workRange);
+            const wizardExpected = KL_STAGE84_C39_ORIGIN_WIZARD.enabled &&
+                wizardAtOrigin &&
+                sample.room0 === KL_STAGE7_SLIDING_CROSS.centerRoom;
             const rows = [];
             const addRow = row => rows.push(row);
 
@@ -6397,6 +6583,77 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                         : 'C3.4 original request-order patch is off.',
                     'Original inventory, charm-order, and global completion bytes are not directly written.',
                 ].join(' '),
+            });
+
+            const wizardState = !KL_STAGE84_C39_ORIGIN_WIZARD.enabled
+                ? wizardPairs.length ? 'warn' : 'muted'
+                : wizardExpected
+                    ? wizardBackgroundPresent && wizardPairs.length === 1 ? 'ok' : 'bad'
+                    : wizardPairs.length ? 'bad' : 'muted';
+            const wizardPair = wizardPairs[0] || null;
+            addRow({
+                state: wizardState,
+                probe: 'C3.9 origin wizard',
+                address: wizardPair
+                    ? `${hexWord(KL_STAGE84_C39_ORIGIN_WIZARD.backgroundAddr)}..${hexWord(KL_STAGE84_C39_ORIGIN_WIZARD.backgroundAddr + KL_STAGE84_C39_ORIGIN_WIZARD.backgroundBytes.length - 1)} / live ${hexWord(wizardPair.addr)}, ${hexWord(wizardPair.bodyAddr)}`
+                    : `${hexWord(KL_STAGE84_C39_ORIGIN_WIZARD.backgroundAddr)}..${hexWord(KL_STAGE84_C39_ORIGIN_WIZARD.backgroundAddr + KL_STAGE84_C39_ORIGIN_WIZARD.backgroundBytes.length - 1)}`,
+                decode: [
+                    `requested ${KL_STAGE84_C39_ORIGIN_WIZARD.enabled ? 'yes' : 'no'}`,
+                    `origin ${wizardAtOrigin ? 'yes' : 'no'}`,
+                    `active room ${sample.room0 === KL_STAGE7_SLIDING_CROSS.centerRoom ? 'yes' : 'no'}`,
+                    `background ${hexByte(KL_STAGE84_C39_ORIGIN_WIZARD.backgroundId)} ${wizardBackgroundPresent ? 'present' : 'absent'}`,
+                    `live pairs ${wizardPairs.length}`,
+                    wizardPair
+                        ? `top ${fmtMechanicSprite(wizardPair.topSprite)}; body ${fmtMechanicSprite(wizardPair.bodySprite)}; XYZ ${fmtXYZ(wizardPair.x, wizardPair.y, wizardPair.z)}; dX ${wizardPair.dx}; dY ${wizardPair.dy}; direction ${wizardPair.direction} (${wizardPair.directionIndex}); screen px ${wizardPair.pixelX},${wizardPair.pixelY}; sprite ${wizardPair.spriteWidthBytes * 8}x${wizardPair.spriteHeight}`
+                        : 'no live wizard record',
+                ].join('; '),
+                room: `logical ${fmtLogicalCoord(currentCoord)}; physical ${hexByte(sample.room0)}; expected ${wizardExpected ? 'one original pair' : 'none'}`,
+                bytes: wizardPair
+                    ? fmtBytes([...wizardPair.topBytes, ...wizardPair.bodyBytes], 28)
+                    : fmtBytes(KL_STAGE84_C39_ORIGIN_WIZARD.backgroundBytes, 17),
+                notes: 'The JS layer only restores the exact original background 0x12 template and includes it in logical room (0,0). Movement, clockwise boundary turns, animation, drawing, and collision remain owned by the original Knight Lore updater. Add ?stage84c39wizard=0 to disable it.',
+            });
+
+            const dialogueState = wizardDialogue
+                ? wizardDialogue.getState()
+                : {enabled: false, available: false, visible: false, lastAction: 'not installed'};
+            const dialogueAnchor = dialogueState.anchor;
+            addRow({
+                state: !dialogueState.enabled
+                    ? 'muted'
+                    : dialogueState.visible
+                        ? 'ok'
+                        : dialogueState.available
+                            ? 'ok'
+                            : 'muted',
+                probe: 'Stage 8.3 wizard dialogue',
+                address: 'HTML overlay / number keys 0..9',
+                decode: [
+                    `enabled ${dialogueState.enabled ? 'yes' : 'no'}`,
+                    `available ${dialogueState.available ? 'yes' : 'no'}`,
+                    `player ${fmtMechanicSprite(dialogueState.playerBodySprite || 0)}`,
+                    `player ready ${dialogueState.playerReady ? 'yes' : 'no'}`,
+                    `transforming ${dialogueState.playerTransforming ? 'yes' : 'no'}`,
+                    `frozen ${dialogueState.frozen ? 'yes' : 'no'}`,
+                    `smoothing factor ${dialogueState.smoothingFactor || 0}`,
+                    `visible ${dialogueState.visible ? 'yes' : 'no'}`,
+                    `auto-started ${dialogueState.autoStarted ? 'yes' : 'no'}`,
+                    `completed ${dialogueState.completed ? 'yes' : 'no'}`,
+                    `node ${dialogueState.nodeId || '-'}`,
+                    `speaker ${dialogueState.speaker || '-'}`,
+                    `branch ${dialogueState.branch || '-'}`,
+                    `replays ${dialogueState.replays || 0}`,
+                    `opens ${dialogueState.opens || 0}`,
+                    `closes ${dialogueState.closes || 0}`,
+                    `positions ${dialogueState.positionUpdates || 0}`,
+                    `last key ${dialogueState.lastKey === null ? '-' : dialogueState.lastKey}`,
+                    dialogueAnchor
+                        ? `anchor px ${dialogueAnchor.pixelX},${dialogueAnchor.pixelY}; raw ${dialogueAnchor.rawScreenX},${dialogueAnchor.rawScreenY}; smooth ${dialogueAnchor.screenX.toFixed(1)},${dialogueAnchor.screenY.toFixed(1)}; box ${dialogueAnchor.placement || '-'}`
+                        : 'anchor -',
+                ].join('; '),
+                room: `logical ${fmtLogicalCoord(currentCoord)}; physical ${hexByte(sample.room0)}`,
+                bytes: '-',
+                notes: `${dialogueState.lastAction}. Dialogue content lives in runtime/dialogue.js. The first automatic conversation begins at greeting; replays begin at opening. The box follows its speaker using the previous factor-0.5 weighted screen position while keeping page placement stable; transformation sprites 0x5C..0x5F freeze text and motion. Choose 1..3, use a number to advance, and use 0 or Escape to close.`,
             });
 
             addRow({
@@ -6705,9 +6962,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             }
 
             stage84C30Status.textContent = [
-                `C3.0-C3.6 mechanic diagnostics at ${fmtLogicalCoord(currentCoord)} (${currentRoom.questRole || 'none'}).`,
+                `C3.0-C3.9 mechanic diagnostics at ${fmtLogicalCoord(currentCoord)} (${currentRoom.questRole || 'none'}).`,
                 quest.exists ? `Required ${formatQuestCharm(quest.requiredCharm)}.` : 'No quest in current sector.',
-                `Sampling carry state ${hexWord(KL_STAGE84_C30.carryStateStart)}..${hexWord(KL_STAGE84_C30.carryStateEnd - 1)}, ${KL_STAGE84_C30.liveSlots.length} live slots, ${KL_STAGE84_C30.dynamicProbeCount} dynamic records, and ${staticRecordCount} raw static object records (${nonZeroStaticRecordCount} currently non-zero).`,
+                `Sampling carry state ${hexWord(KL_STAGE84_C30.carryStateStart)}..${hexWord(KL_STAGE84_C30.carryStateEnd - 1)}, ${KL_STAGE84_C30.liveSlots.length} live slots, ${KL_STAGE84_C30.dynamicProbeCount} displayed dynamic records, the full dynamic range for C3.9, and ${staticRecordCount} raw static object records (${nonZeroStaticRecordCount} currently non-zero).`,
                 `C3.1 disposable record ${stage84C31DisposableCharm.recordIndex} is ${stage84C31DisposableCharm.requested ? 'requested' : 'off'}; last action: ${stage84C31DisposableCharm.lastAction}.`,
                 `C3.2 carried state: ${stage84C32CarryProbe.lastAction}.`,
                 `C3.3 JS acceptance: ${stage84C33CauldronAcceptance.lastAction}.`,
@@ -6717,6 +6974,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 `C3.5c routine throttle: ${stage84C35cRoutineThrottle.lastAction}.`,
                 `C3.5e death guard: ${stage84C35eBubbleRespawnGuard.lastAction}.`,
                 `C3.5f origin reset: ${stage84C35fGameOverOriginReset.lastAction}.`,
+                `C3.9 origin wizard: ${wizardPairs.length} live pair(s); ${wizardExpected ? 'one expected' : 'none expected'}.`,
+                `Stage 8.3 dialogue: ${dialogueState.lastAction}.`,
                 `Diagnostics build: ${KL_DIAGNOSTICS_BUILD}.`,
             ].join(' ');
 
@@ -7519,6 +7778,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 await updateStage84C35bSlowdownProbe(workRange);
                 await updateStage84C35cRoutineThrottle(workRange);
                 updateStage84C35eBubbleRespawnState(workRange, sample);
+                updateStage83WizardDialogue(workRange, sample);
 
                 const entry = decodeLocationEntry(staticRange, sample.room0);
                 if (stage5RoomIdRecenterTest.enabled && !KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {
@@ -7777,6 +8037,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         getQuestReachability: logicalMap.getQuestReachabilityAt,
         get navigationMap() {
             return navigationMap;
+        },
+        get wizardDialogue() {
+            return wizardDialogue;
         },
         compileLogicalRoom: logicalMap.compileRoom,
         loadLogicalMapDocument,
