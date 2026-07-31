@@ -1617,6 +1617,130 @@ Exit criteria:
   deterministic local quest.
 
 
+Stage 9 - Bouncing-Ball Combat
+------------------------------
+
+Goal:
+
+- Add a new internal mechanic using original Knight Lore room/object data but
+  no original-code modification: the player will eventually launch original
+  bouncing-ball objects that can kill guards and can also rebound into the
+  player.
+
+Phase A - deterministic guard-room proof:
+
+- Reserve two existing ordinary generated rooms in every quest sector:
+  - one nearest to the cauldron anchor;
+  - one nearest to the charm anchor;
+  - deterministic hashes resolve equal-distance ties.
+- Exclude logical origin, both quest anchors, missing cells, and the other
+  selected guard host.
+- Reserve guard hosts before C3.7 original-interior assignment, guaranteeing
+  that a guard room is never simultaneously taken from the original-map
+  catalogue.
+- Force guard hosts to square selector 0.
+- Add one original foreground group `0x0D` (`guard square patrol`) at packed
+  floor position `(6,1,0)`.
+- Enumerate the 92 classic solutions to the 8-queens problem and select one
+  deterministically for each guard room.
+- Rank solutions first by the number of queens that conflict with active
+  three-cell entrance strips, then by a stable room hash.
+- Exclude solutions containing the guard's initial `(6,1,0)` square.
+- Remove only queens that conflict with active entrance strips. With the
+  current geometry this produces:
+  - eight obstacles for no/single/adjacent-exit masks;
+  - seven for opposite-exit or three-exit masks;
+  - six for four-exit rooms, because every classic solution has at least two
+    conflicts under the established three-cell clearance rule.
+- Render retained queens as deterministic spikes `0x05`, rocks `0x03`, and
+  blocks `0x00`; wooden rooms use spikes/blocks.
+- Keep the guard and every obstacle outside the three-cell inner strip of each
+  active entrance.
+- Mark selected hosts orange in the HTML navigation map's Generated mode and
+  identify their cauldron/charm affinity in the tooltip and Stage 7 details.
+- Runtime control: `?stage9guards=0` (aliases `stage84c310guards` and
+  `guardrooms`) disables Phase A.
+
+Confirmed engine behaviour:
+
+- Group `0x0D` expands through the original `guard_square` template and the
+  original NSEW updater. Disassembly shows direction changes driven by the
+  guard's X/Y out-of-bounds flags. Manual play on 2026 07 30 additionally
+  confirmed that the guard bounces correctly from every generated foreground
+  obstacle. The lighter obstacle layout therefore behaves as the intended
+  `0x78`-inspired room challenge.
+
+Automated proof, 2026 07 30:
+
+- 81 sectors `(-4,-4)..(4,4)` produced exactly two distinct guard rooms;
+- no guard host replaced origin, a quest anchor, or a C3.7 original interior;
+- every host was square and contained exactly one `0x0D` guard;
+- every source pattern was one of the 92 valid non-attacking solutions;
+- every retained pattern contained six, seven, or eight obstacles according to
+  its doorway mask;
+- no retained queen occupied the guard spawn or an active doorway strip;
+- no guard/obstacle initial position entered an active doorway strip;
+- two independent generators produced identical labels and block payloads.
+
+Sector `(0,0)` first manual probes:
+
+- `(4,0)`: guard room one step from charm `(3,0)`;
+- `(4,3)`: guard room one step from cauldron `(4,4)`.
+
+Initial manual proof, 2026 07 30:
+
+- both generated rooms appeared and contained one correctly animated guard;
+- guards followed the expected trajectory and bounced from every generated
+  obstacle;
+- all doorways remained usable;
+- leaving and re-entering reset the guard cleanly without duplicates or stale
+  live records;
+- guard rooms in other inspected sectors also behaved correctly.
+
+Obstacle-layout refinement, 2026 07 30-31:
+
+- the original inner layout let the guard settle onto the outermost patrol ring
+  after a few bounces;
+- a one/two-wall-deflector revision passed static invariants but was superseded
+  before manual proof because it could still produce simple short circuits;
+- the current generator instead uses deterministic 8-queens solutions, giving
+  one obstacle in every original row and column with diagonal separation;
+- in an 81-sector sample of 162 guard rooms, 19 retained eight queens, 126
+  retained seven, and the 17 four-exit rooms retained six;
+- both sector `(0,0)` probes retain seven queens;
+- manual play in both sector `(0,0)` probes confirmed correct animation,
+  obstacle bounces, usable entrances, and clean revisit resets;
+- the queen layouts produce a useful initial period of less predictable room
+  traversal. After enough time, the original deterministic guard updater may
+  still settle into a simple rectangular-like orbit;
+- that eventual orbit is accepted for Phase A. Searching or simulating many
+  generated layouts to optimize long-term patrol complexity would be a much
+  larger procedural-content system and is deliberately out of scope.
+
+Phase A status:
+
+- complete by automated invariants and manual gameplay proof;
+- the next work is the bouncing-ball object and launch-lifecycle probe.
+
+Phase A exit criteria:
+
+- both guards expand, walk, turn, animate, collide, and kill exactly as the
+  original engine intends;
+- every entrance remains usable;
+- repeated visits regenerate the same room payload without duplicate or stale
+  guards;
+- walking multiple sectors causes no black room, reset, freeze, or invalid
+  location decode.
+
+Later combat phases:
+
+- probe a real original bouncing-ball foreground record and its live updater;
+- identify a safe player input and spawn lifecycle;
+- preserve the original bounce and deadly collision logic;
+- prove that the ball can kill a guard and can also kill the player;
+- define cleanup/persistence when leaving, revisiting, dying, or recentering.
+
+
 Data Model Sketch
 -----------------
 

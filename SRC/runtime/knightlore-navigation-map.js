@@ -15,6 +15,10 @@ const getQuest = sector => sector && sector.quest && sector.quest.exists
     ? sector.quest
     : null;
 
+const getGuardRoom = room => (
+    room && room.meta && room.meta.procedural && room.meta.procedural.guardRoom
+);
+
 const drawDiamond = (context, x, y, radius) => {
     context.beginPath();
     context.moveTo(x, y - radius);
@@ -179,8 +183,12 @@ export function createKnightLoreNavigationMap(options) {
         const visited = visible.visited.has(key);
         const completedSector = room.questSector && visible.completed.has(room.questSector.key);
         const wooden = room.theme === 'wood' || /wood/i.test(room.theme || '') || /wood/i.test(room.label || '');
+        const guardRoom = getGuardRoom(room);
+        const revealGuardRoom = state.mode === 'generated' && guardRoom && guardRoom.selected;
 
-        context.fillStyle = completedSector
+        context.fillStyle = revealGuardRoom
+            ? '#e68a3f'
+            : completedSector
             ? '#2f9e66'
             : visited
                 ? '#d5dde2'
@@ -345,7 +353,12 @@ export function createKnightLoreNavigationMap(options) {
 
         const quest = room.meta && room.meta.quest;
         const completed = !!(quest && quest.state && quest.state.completed);
-        const role = room.questRole && room.questRole !== 'none' ? room.questRole : 'ordinary';
+        const guardRoom = getGuardRoom(room);
+        const role = room.questRole && room.questRole !== 'none'
+            ? room.questRole
+            : guardRoom && guardRoom.selected
+                ? `guard room near ${guardRoom.anchorRole}`
+                : 'ordinary';
         const charm = room.questCharm && (room.questCharm.label || room.questCharm.name || room.questCharm.spriteHex);
         tooltip.textContent = `${room.label} | (${coord.x}, ${coord.y}) | ${role}` +
             `${charm ? ` | ${charm}` : ''}${completed ? ' | sector completed' : ''}`;

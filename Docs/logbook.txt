@@ -3820,3 +3820,71 @@ The integrated page loaded without browser errors. Runtime controls remain:
 Build:
 
     stage83-wizard-dialogue-20260730-2
+
+
++============================================================+
+| 2026 07 30 - Deterministic Guard Rooms And Eight Queens    |
++============================================================+
+
+2026 07 30
+
+Stage 9 Phase A introduced two deterministic guard rooms in every quest
+sector as preparation for the later bouncing-ball combat mechanic. One host is
+chosen near the cauldron and one near the charm. Hosts must already exist in
+the generated topology and exclude logical origin, both quest anchors, and
+rooms reserved for imported original interiors.
+
+Each host is forced to square selector 0 and receives one original foreground
+group `0x0D` at `(6,1,0)`. The original Knight Lore data expands this into the
+paired guard records and the unmodified square-patrol updater continues to own
+movement, animation, collision, direction changes, and room-entry reset.
+
+The HTML navigation map marks these rooms orange in Generated mode. Stage 7
+details identify whether a host belongs to the cauldron or charm assignment,
+its anchor distance, guard position, obstacle pattern, and sector quota.
+
+The first generated obstacle layout used a small collection of rocks, blocks,
+and spikes. Manual play confirmed two rooms per sector, correctly animated and
+deadly guards, usable doorways, clean revisit resets, stable generation in
+other sectors, and a guard bounce from every generated obstacle. However, the
+guard soon settled onto the outermost patrol ring. A subsequent wall-deflector
+experiment still encouraged short simple circuits and was superseded before
+manual proof.
+
+The accepted revision derives each room from the 92 classic solutions to the
+8-queens problem:
+
+- select deterministically from `(worldSeed,x,y)`;
+- reject solutions occupying the guard's `(6,1)` start square;
+- rank candidates by the fewest conflicts with active three-cell door strips;
+- remove only queens that block an active entrance;
+- turn retained queens into deterministic spikes, rocks, and blocks.
+
+Strict entrance clearance means the final room need not retain all eight
+queens. No/single/adjacent-door masks can retain eight, opposite or three-door
+masks retain seven, and four-door rooms require two removals and retain six.
+This deliberate reduction is safer than allowing a queen to block an arch.
+
+Automated validation covered 81 sectors and 162 guard rooms. It found exactly
+two legal hosts per sector, no origin/anchor/original-interior overlap, valid
+non-attacking source solutions, one guard per room, no guard or retained queen
+inside an entrance strip, and identical output from independent generators.
+The sample contained 19 eight-queen, 126 seven-queen, and 17 six-queen rooms.
+
+The two first manual probes were `(4,0)`, near charm `(3,0)`, and `(4,3)`, near
+cauldron `(4,4)`. Both retained seven queens. Final play confirmed correct
+animation, all obstacle bounces, clear doors, and clean reset on re-entry.
+
+The queen layout keeps the patrol interesting for a reasonable initial period.
+After enough time, the original deterministic updater can still converge on a
+simple rectangular-like orbit. This is accepted as a natural engine limit. A
+trial-and-error generator that simulates and scores long-term patrol paths
+would be disproportionate for this project, so Stage 9 Phase A is complete.
+
+Runtime control:
+
+    ?stage9guards=0
+
+Build:
+
+    stage9-guard-rooms-20260731-1

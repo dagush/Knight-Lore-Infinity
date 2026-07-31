@@ -1103,13 +1103,37 @@ guard: 0x90~0x95 is the lower part of the back of the guard and
        0x97 is the front head, and
        0x98~0x9D are the front view of the legs.
        0x1E and 0x1F are, without doubt, the head of the guard
+       Stage 9 Phase A uses compact foreground group 0x0D, whose original
+       template expands to the 0x1E/0x1F top and 0x90.. body pair. Two
+       deterministic ordinary generated rooms are reserved per quest sector,
+       one near each quest anchor. They are square rooms with one guard at
+       packed floor coordinate (6,1,0) and a deterministic obstacle pattern
+       selected from the 92 classic 8-queens solutions. Solutions containing
+       the guard spawn are excluded. Queens inside active three-cell entrance
+       strips are removed, leaving eight obstacles for compatible masks, seven
+       for opposite/three-exit masks, and six for four-exit rooms. Retained
+       queens become spikes/rocks/blocks. The hosts are reserved before C3.7
+       assignment and therefore never also contain a distributed original-room
+       interior.
+       The original updater remains unmodified. Its NSEW routine changes
+       direction from X/Y out-of-bounds flags. Manual testing on 2026 07 30
+       confirmed correct animation, expected trajectory, deadly collision,
+       clean revisit reset, usable doors, and a bounce from every generated
+       obstacle. The first layout nevertheless settled onto simple outer-ring
+       circuits. Manual testing of both sector (0,0) rooms confirmed that the
+       8-queens revision produces a useful initial period of more varied room
+       travel while retaining correct bounces, clear doors, and clean resets.
+       Given enough time, a guard may still converge on a simple rectangular-
+       like orbit. This is accepted; simulation-driven layout optimization is
+       intentionally outside the project scope.
+       Runtime control: ?stage9guards=0
 0x08 0x09 portcullis
 0x10~0x15 legs ????
 0x16 gargoyle
 0xB4~0xB5 fire
 
 
-Current Integrated Playtest URL (2026 07 28)
+Current Integrated Playtest URL (2026 07 30)
 ---------------------------------------------
 
 Use:
@@ -1121,7 +1145,8 @@ original cauldron visual with cauldron-gated bubbles, C3.1 collectible charm,
 C3.3 acceptance, C3.4 request-order patch, C3.5c timing throttle, C3.6 original
 charm-room interiors, C3.7 distributed ordinary original interiors, and the
 C3.9 original wizard at logical origin `(0,0)`. It also enables the Stage 8.3
-automatic three-branch wizard conversation.
+automatic three-branch wizard conversation and Stage 9 Phase A deterministic
+guard rooms.
 
 It deliberately does not enable infinite lives or partial invulnerability;
 those remain player-controlled HTML toggles.

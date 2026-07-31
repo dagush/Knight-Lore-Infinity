@@ -7,7 +7,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
     let navigationMap = null;
     let wizardDialogue = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage83-wizard-dialogue-20260730-2';
+    const KL_DIAGNOSTICS_BUILD = 'stage9-guard-rooms-20260731-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_TRUE_PARAM_VALUES = ['1', 'true', 'on', 'yes', 'enabled'];
     const KL_CURRENT_PLAYTEST_PRESET = ['latest', 'current', '1'].includes(
@@ -87,6 +87,10 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     );
     const KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED = getBooleanUrlOption(
         ['stage84c37', 'stage8originalinteriors'],
+        true
+    );
+    const KL_STAGE9_GUARD_ROOMS_ENABLED = getBooleanUrlOption(
+        ['stage9guards', 'stage84c310guards', 'guardrooms'],
         true
     );
     const KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED = getBooleanUrlOption(
@@ -1062,6 +1066,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             questCauldronBubbleMode: KL_STAGE82C_BUBBLE_MODE,
             questCharmOriginalRooms: KL_STAGE84_C36_ORIGINAL_CHARM_ROOMS_ENABLED,
             distributedOriginalRoomInteriors: KL_STAGE84_C37_ORIGINAL_INTERIORS_ENABLED,
+            generatedGuardRooms: KL_STAGE9_GUARD_ROOMS_ENABLED,
+            generatedGuardRoomsPerSector: 2,
         });
         let activeDocument = {
             format: KL_MAP_FORMAT,
@@ -1763,6 +1769,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     reciprocal.room.meta &&
                     reciprocal.room.meta.procedural
                         ? reciprocal.room.meta.procedural.originalInterior || null
+                        : null
+                ),
+                guardRoom: cloneData(
+                    reciprocal.room.meta &&
+                    reciprocal.room.meta.procedural
+                        ? reciprocal.room.meta.procedural.guardRoom || null
                         : null
                 ),
                 originalCharmRoom: cloneData(
@@ -7060,8 +7072,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                     `sector ${item.originalInterior.assignedCount}/${item.originalInterior.targetQuota}`,
                 ].join('; ')
                 : '';
+            const guardRoom = item.guardRoom && item.guardRoom.selected
+                ? [
+                    `guard room near ${item.guardRoom.anchorRole}`,
+                    `anchor distance ${item.guardRoom.distance}`,
+                    `sector ${item.guardRoom.assignedCount}/${item.guardRoom.targetCount}`,
+                    item.guardRoom.dressing
+                        ? `${item.guardRoom.dressing.pattern}; solution ${item.guardRoom.dressing.queenSolutionIndex}/91; ${item.guardRoom.dressing.obstacleCount} obstacle(s); removed ${item.guardRoom.dressing.removedQueenCount} for doors; guard ${fmtNamedId(item.guardRoom.dressing.guardType, KL_BLOCK_NAMES)} at (${item.guardRoom.dressing.guardPosition.x},${item.guardRoom.dressing.guardPosition.y})`
+                        : 'dressing unavailable',
+                ].join('; ')
+                : '';
             return [
                 `entry ${item.entrySize}; ${item.byteCount} bytes; bg ${item.backgroundCount}: ${backgrounds}; ${overlay}${experiment}`,
+                guardRoom,
                 original,
             ].filter(Boolean).join('; ');
         };
@@ -7117,6 +7140,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 proceduralStats.distributedOriginalRoomInteriors
                     ? `C3.7 original interiors: catalogue ${proceduralStats.originalRoomInteriorCount}; quota 1/${proceduralStats.distributedOriginalRoomFractionDivisor}, max ${proceduralStats.distributedOriginalRoomMaxPerSector}.`
                     : 'C3.7 original interiors are off.',
+                proceduralStats.generatedGuardRooms
+                    ? `Stage 9 guard rooms: ${proceduralStats.generatedGuardRoomsPerSector} per quest sector; ${proceduralStats.generatedGuardRoomPlans} sector plan(s) inspected.`
+                    : 'Stage 9 guard rooms are off.',
                 adjustmentCount
                     ? `Reciprocal overlay adjustments: ${adjustmentCount}.`
                     : 'Reciprocal overlay: no changes.',

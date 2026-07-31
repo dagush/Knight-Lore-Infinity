@@ -957,6 +957,81 @@ Explicit flags override the preset, so focused generator controls remain
 possible, for example `?playtest=latest&stage84c37=0`.
 
 
+Deterministic Guard Rooms
+-------------------------
+
+Stage 9 Phase A reserves two ordinary generated hosts per quest sector before
+the distributed original-interior plan is built. The implementation is kept in:
+
+    SRC/runtime/knightlore-guard-rooms.js
+
+For each sector, logical origin and the cauldron/charm anchors are excluded.
+Existing candidates are ranked by Manhattan distance to the current anchor,
+then by a stable hash of world seed, sector, coordinate, anchor role, and
+assignment index. The first assignment targets the cauldron and the second
+targets the charm. The first selected coordinate is removed before the second
+ranking. With the current generated topology, both sector `(0,0)` hosts are one
+step from their respective anchors:
+
+    charm guard:    (4,0), near charm (3,0)
+    cauldron guard: (4,3), near cauldron (4,4)
+
+Selected keys are added to the exclusion set used by the C3.7 original-room
+planner. Consequently, guard rooms retain generated architecture and cannot
+also receive an imported original interior. Because two candidates are
+reserved first, the ordinary-interior quota may fall slightly. Sector `(0,0)`
+currently remains a 9/9 original-interior sector.
+
+Every guard host is forced to square selector 0 and compiles only ordinary
+location-entry block groups:
+
+- one type `0x0D` square-patrol guard at `(6,1,0)`;
+- one deterministic source from the 92 classic 8-queens solutions;
+- solutions containing the guard spawn `(6,1,0)` are excluded;
+- solutions are ranked by fewest active-door conflicts, then stable room hash;
+- queens inside an active three-cell entrance strip are removed;
+- stone styles choose among spike `0x05`, rock `0x03`, and block `0x00`;
+- tree styles choose spike `0x05` and block `0x00`;
+- all initial positions avoid every active three-cell inner entrance strip.
+
+This reuses the original `guard_square` template and updater; no guard code or
+working-memory updater is patched. Static analysis shows the square guard turns
+when its X/Y out-of-bounds flags are set. Manual play on 2026 07 30 confirmed
+that the guard also bounces from every generated foreground obstacle. The first
+layout eventually let it settle onto the outermost patrol ring. A brief
+one/two-wall-deflector revision passed static checks but was superseded by the
+8-queens layout before manual proof. One queen per source row and column, with
+diagonal separation, is intended to prevent long unobstructed orthogonal lanes
+and simple clustered circuits.
+
+Doorway compatibility is not guessed. Enumeration of all 92 solutions gives:
+
+- zero removals for no, single, or adjacent-exit masks;
+- one removal for opposite-exit and three-exit masks;
+- two removals for a four-exit room. No classic solution can retain seven while
+  also preserving all four established three-cell entrance strips.
+
+The navigation map paints guard hosts orange only in Generated mode and labels
+them as near-cauldron or near-charm in the tooltip. `?stage9guards=0` disables
+generation for a control run.
+
+An 81-sector deterministic validation found exactly two distinct legal hosts
+per sector, no anchor/origin/original-interior overlap, and one guard per host.
+All source patterns satisfied row/column/diagonal queen constraints; retained
+patterns contained six to eight obstacles, never overlapped the guard spawn or
+an active entrance strip, and independent generators produced byte-for-byte
+stable labels/block payloads. Distribution was 19 eight-queen, 126 seven-queen,
+and 17 six-queen rooms.
+
+Manual play in both sector `(0,0)` guard rooms confirmed the queen-pattern
+revision: guards animated and bounced correctly, entrances remained usable,
+and revisits reset the guard cleanly. The pattern provides a useful initial
+period of varied movement, although the original deterministic patrol can
+eventually converge on a simple rectangular-like orbit. That limit is accepted.
+A trial-and-error generator that simulates and scores long-term patrols could
+reduce such convergence, but its complexity is outside this project's scope.
+
+
 Known Limits and Future Work
 ----------------------------
 
@@ -965,7 +1040,8 @@ director.
 
 Open future work:
 
-- richer hazard placement;
+- bouncing-ball launch, guard damage, and projectile cleanup/persistence;
+- richer hazard placement beyond the first deterministic guard rooms;
 - treasure placement;
 - authored special-room injection;
 - biome/style zones;
