@@ -1,0 +1,1159 @@
+<!doctype html>
+<html>
+    <head>
+        <title>JSSpeccy v3</title>
+        <script src="jsspeccy/jsspeccy.js?v=pages-manual-snapshot-20260801-1"></script>
+        <style>
+            :root {
+                color-scheme: dark;
+                font-family: Arial, Helvetica, sans-serif;
+            }
+
+            body {
+                margin: 0;
+                min-height: 100vh;
+                background: #30343a;
+                color: #f2f5f8;
+            }
+
+            .page-shell {
+                width: min(1280px, calc(100vw - 32px));
+                margin: 0 auto;
+                padding: 18px 0 28px;
+            }
+
+            .play-workspace {
+                display: grid;
+                grid-template-columns: 640px minmax(360px, 1fr);
+                gap: 16px;
+                align-items: start;
+            }
+
+            #jsspeccy {
+                width: 640px;
+                max-width: 100%;
+                margin: 0;
+                background-color: white;
+            }
+
+            #jsspeccy > div,
+            #jsspeccy canvas {
+                max-width: 100%;
+            }
+
+            #jsspeccy canvas {
+                height: auto !important;
+            }
+
+            .knight-lore-wizard-dialogue {
+                --kl-dialog-scale: 1;
+                --kl-dialog-tail-x: 56px;
+                position: absolute;
+                z-index: 20;
+                box-sizing: border-box;
+                width: 144px;
+                min-height: 34px;
+                padding: 7px 6px;
+                border: 2px solid #ffffff;
+                border-radius: 0;
+                background: #000000;
+                box-shadow:
+                    0 0 0 2px #000000,
+                    0 0 0 3px #f4e925;
+                color: #ffffff;
+                font-family: Menlo, Monaco, "Courier New", monospace;
+                font-size: 8px;
+                font-weight: 700;
+                line-height: 10px;
+                letter-spacing: 0;
+                text-align: center;
+                white-space: pre-line;
+                overflow-wrap: break-word;
+                image-rendering: pixelated;
+                pointer-events: none;
+                transform: scale(var(--kl-dialog-scale));
+                transform-origin: top left;
+            }
+
+            .knight-lore-wizard-dialogue[data-speaker="player"] {
+                color: #f4e925;
+            }
+
+            .knight-lore-wizard-dialogue::after {
+                content: "";
+                position: absolute;
+                left: var(--kl-dialog-tail-x);
+                bottom: -7px;
+                width: 8px;
+                height: 8px;
+                border-right: 2px solid #ffffff;
+                border-bottom: 2px solid #ffffff;
+                background: #000000;
+                transform: translateX(-50%) rotate(45deg);
+                transform-origin: center;
+            }
+
+            .knight-lore-wizard-dialogue[data-placement="below"]::after {
+                top: -7px;
+                bottom: auto;
+                border-top: 2px solid #ffffff;
+                border-right: 0;
+                border-bottom: 0;
+                border-left: 2px solid #ffffff;
+            }
+
+            .navigation-map {
+                display: grid;
+                grid-template-rows: auto minmax(0, 1fr) auto auto;
+                height: 526px;
+                min-width: 0;
+                border: 1px solid #5b6570;
+                background: #1b2024;
+                color: #f2f5f8;
+            }
+
+            .navigation-map-toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+                min-height: 42px;
+                padding: 7px 8px;
+                border-bottom: 1px solid #3d454f;
+                background: #272d32;
+            }
+
+            .navigation-map-title {
+                min-width: 114px;
+                margin-right: auto;
+            }
+
+            .navigation-map-title h1 {
+                margin: 0;
+                font-size: 14px;
+                line-height: 1.15;
+                letter-spacing: 0;
+            }
+
+            .navigation-map-coordinate {
+                color: #c8d1d8;
+                font-family: Menlo, Consolas, monospace;
+                font-size: 11px;
+            }
+
+            .navigation-map-segmented {
+                display: inline-flex;
+                border: 1px solid #626c74;
+            }
+
+            .navigation-map button {
+                min-width: 32px;
+                min-height: 30px;
+                border: 0;
+                border-left: 1px solid #626c74;
+                border-radius: 0;
+                background: #353c42;
+                color: #e8edf1;
+                font: inherit;
+                cursor: pointer;
+            }
+
+            .navigation-map button:first-child {
+                border-left: 0;
+            }
+
+            .navigation-map button:hover,
+            .navigation-map button:focus-visible {
+                background: #4a545c;
+                outline: 2px solid #ffd166;
+                outline-offset: -2px;
+            }
+
+            .navigation-map-mode {
+                padding: 0 9px;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            .navigation-map-mode.is-active {
+                background: #e4e9ed;
+                color: #171b1e;
+            }
+
+            .navigation-map-actions {
+                display: inline-flex;
+                border: 1px solid #626c74;
+            }
+
+            .navigation-map-action {
+                width: 32px;
+                padding: 0;
+                font-size: 18px;
+                line-height: 1;
+            }
+
+            .navigation-map-follow {
+                display: inline-flex;
+                gap: 5px;
+                align-items: center;
+                min-height: 30px;
+                color: #d8dfe4;
+                font-size: 11px;
+                cursor: pointer;
+            }
+
+            .navigation-map-follow input {
+                width: 16px;
+                height: 16px;
+                margin: 0;
+                accent-color: #54c384;
+            }
+
+            .navigation-map-canvas-wrap {
+                position: relative;
+                min-height: 320px;
+                overflow: hidden;
+                background: #121619;
+            }
+
+            .navigation-map-canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+                cursor: grab;
+                touch-action: none;
+            }
+
+            .navigation-map-canvas.is-dragging {
+                cursor: grabbing;
+            }
+
+            .navigation-map-tooltip {
+                position: absolute;
+                z-index: 2;
+                max-width: min(290px, calc(100% - 16px));
+                padding: 6px 8px;
+                border: 1px solid #78838b;
+                background: rgba(20, 24, 27, 0.96);
+                color: #ffffff;
+                font-family: Menlo, Consolas, monospace;
+                font-size: 11px;
+                line-height: 1.35;
+                pointer-events: none;
+            }
+
+            .navigation-map-legend {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px 12px;
+                align-items: center;
+                min-height: 38px;
+                padding: 6px 8px;
+                border-top: 1px solid #3d454f;
+                color: #cbd3d9;
+                font-size: 11px;
+            }
+
+            .navigation-map-key {
+                display: inline-flex;
+                gap: 5px;
+                align-items: center;
+                white-space: nowrap;
+            }
+
+            .navigation-map-swatch {
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                box-sizing: border-box;
+                background: #68747d;
+            }
+
+            .navigation-map-swatch.cauldron {
+                border-radius: 50%;
+                background: #ef6262;
+            }
+
+            .navigation-map-swatch.charm {
+                width: 9px;
+                height: 9px;
+                background: #52a8ff;
+                transform: rotate(45deg);
+            }
+
+            .navigation-map-swatch.completed {
+                background: #4fd08a;
+            }
+
+            .navigation-map-swatch.guard {
+                background: #e68a3f;
+            }
+
+            .navigation-map-swatch.origin {
+                border: 2px solid #ffd166;
+                background: transparent;
+            }
+
+            .navigation-map-swatch.current {
+                border: 2px solid #ffffff;
+                border-radius: 50%;
+                background: #20262b;
+            }
+
+            .navigation-map-status {
+                margin: 0;
+                min-height: 16px;
+                padding: 5px 8px;
+                border-top: 1px solid #3d454f;
+                color: #9faab2;
+                font-family: Menlo, Consolas, monospace;
+                font-size: 10px;
+                line-height: 1.3;
+                overflow-wrap: anywhere;
+            }
+
+            .navigation-map-status[data-state-stable="false"] {
+                color: #ffaaa0;
+            }
+
+            @media (max-width: 1120px) {
+                .play-workspace {
+                    grid-template-columns: minmax(0, 640px);
+                    justify-content: center;
+                }
+
+                .navigation-map {
+                    height: 500px;
+                }
+            }
+
+            @media (max-width: 620px) {
+                .page-shell {
+                    width: calc(100vw - 16px);
+                    padding-top: 8px;
+                }
+
+                .play-workspace {
+                    gap: 10px;
+                }
+
+                .navigation-map {
+                    height: 440px;
+                }
+
+                .navigation-map-title {
+                    min-width: 100%;
+                }
+
+                .navigation-map-toolbar {
+                    align-items: stretch;
+                }
+
+                .navigation-map-follow {
+                    margin-left: auto;
+                }
+            }
+
+            .diagnostics {
+                margin-top: 16px;
+                border: 1px solid #5b6570;
+                background: #1f2329;
+            }
+
+            .diagnostics h1 {
+                margin: 0;
+                padding: 10px 12px;
+                border-bottom: 1px solid #5b6570;
+                color: #ffffff;
+                font-size: 16px;
+                font-weight: 700;
+                letter-spacing: 0;
+            }
+
+            .stage-status {
+                margin: 0;
+                padding: 9px 12px;
+                border-bottom: 1px solid #3d454f;
+                color: #c7d1dc;
+                font-size: 13px;
+                line-height: 1.35;
+            }
+
+            .wood-tuning-controls {
+                display: grid;
+                grid-template-columns: minmax(160px, 1fr) minmax(180px, 2fr) minmax(92px, auto);
+                gap: 8px 12px;
+                align-items: center;
+                padding: 9px 12px;
+                border-bottom: 1px solid #3d454f;
+                color: #d9e4ee;
+                font-size: 13px;
+            }
+
+            .wood-tuning-controls label {
+                font-weight: 700;
+            }
+
+            .wood-tuning-controls input[type="range"] {
+                width: 100%;
+            }
+
+            .wood-tuning-controls output {
+                font-family: Menlo, Consolas, monospace;
+                color: #ffffff;
+                text-align: right;
+            }
+
+            .wood-tuning-status {
+                grid-column: 1 / -1;
+                margin: 0;
+                color: #c7d1dc;
+                line-height: 1.35;
+            }
+
+            .wood-tuning-records {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .wood-tuning-records th:nth-child(1),
+            .wood-tuning-records td:nth-child(1),
+            .wood-tuning-records th:nth-child(2),
+            .wood-tuning-records td:nth-child(2) {
+                width: 7%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .wood-tuning-records th:nth-child(3),
+            .wood-tuning-records td:nth-child(3) {
+                width: 14%;
+            }
+
+            .wood-tuning-records th:nth-child(4),
+            .wood-tuning-records td:nth-child(4),
+            .wood-tuning-records th:nth-child(5),
+            .wood-tuning-records td:nth-child(5),
+            .wood-tuning-records th:nth-child(6),
+            .wood-tuning-records td:nth-child(6),
+            .wood-tuning-records th:nth-child(7),
+            .wood-tuning-records td:nth-child(7),
+            .wood-tuning-records th:nth-child(8),
+            .wood-tuning-records td:nth-child(8),
+            .wood-tuning-records th:nth-child(9),
+            .wood-tuning-records td:nth-child(9) {
+                width: 7%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .wood-tuning-records th:nth-child(10),
+            .wood-tuning-records td:nth-child(10) {
+                width: 30%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            @media (max-width: 620px) {
+                .wood-tuning-controls {
+                    grid-template-columns: 1fr;
+                }
+
+                .wood-tuning-controls output {
+                    text-align: left;
+                }
+            }
+
+            .diagnostics-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 13px;
+                line-height: 1.35;
+            }
+
+            .diagnostics-table th,
+            .diagnostics-table td {
+                padding: 7px 9px;
+                border-bottom: 1px solid #3d454f;
+                vertical-align: top;
+                overflow-wrap: anywhere;
+            }
+
+            .diagnostics-table th {
+                background: #2b3138;
+                color: #d9e4ee;
+                text-align: left;
+                font-weight: 700;
+            }
+
+            .diagnostics-table tr:last-child td {
+                border-bottom: 0;
+            }
+
+            .diagnostics-table .field {
+                width: 28%;
+                color: #d6dde5;
+                font-weight: 700;
+            }
+
+            .diagnostics-table .value {
+                width: 32%;
+                font-family: Menlo, Consolas, monospace;
+                color: #ffffff;
+            }
+
+            .diagnostics-table .notes {
+                width: 40%;
+                color: #c7d1dc;
+            }
+
+            .diagnostics-table tr.state-ok .notes {
+                color: #9be6b0;
+            }
+
+            .diagnostics-table tr.state-warn .notes {
+                color: #ffd98d;
+            }
+
+            .diagnostics-table tr.state-bad .notes {
+                color: #ffaaa0;
+            }
+
+            .diagnostics-table tr.state-muted .notes {
+                color: #98a4b1;
+            }
+
+            .playtest-poke-table {
+                table-layout: fixed;
+            }
+
+            .playtest-poke-table th:nth-child(1),
+            .playtest-poke-table td:nth-child(1) {
+                width: 22%;
+            }
+
+            .playtest-poke-table th:nth-child(2),
+            .playtest-poke-table td:nth-child(2) {
+                width: 17%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .playtest-poke-table th:nth-child(3),
+            .playtest-poke-table td:nth-child(3) {
+                width: 15%;
+            }
+
+            .playtest-poke-table th:nth-child(4),
+            .playtest-poke-table td:nth-child(4),
+            .playtest-poke-table th:nth-child(5),
+            .playtest-poke-table td:nth-child(5),
+            .playtest-poke-table th:nth-child(6),
+            .playtest-poke-table td:nth-child(6) {
+                width: 9%;
+                font-family: Menlo, Consolas, monospace;
+            }
+
+            .playtest-poke-table th:nth-child(7),
+            .playtest-poke-table td:nth-child(7) {
+                width: 19%;
+            }
+
+            .playtest-poke-toggle {
+                display: inline-flex;
+                gap: 8px;
+                align-items: center;
+                min-height: 24px;
+                color: #ffffff;
+                font-weight: 700;
+                cursor: pointer;
+            }
+
+            .playtest-poke-toggle input {
+                width: 18px;
+                height: 18px;
+                margin: 0;
+                accent-color: #65c47a;
+            }
+
+            .playtest-poke-toggle:has(input:disabled) {
+                cursor: wait;
+                opacity: 0.65;
+            }
+
+            .playtest-poke-value {
+                box-sizing: border-box;
+                width: 4.5rem;
+                padding: 0.25rem 0.35rem;
+                border: 1px solid #68737d;
+                border-radius: 3px;
+                background: #11171c;
+                color: #edf2f5;
+                font: inherit;
+                text-align: right;
+            }
+
+            .cross-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .cross-table th:nth-child(1),
+            .cross-table td:nth-child(1) {
+                width: 8%;
+            }
+
+            .cross-table th:nth-child(2),
+            .cross-table td:nth-child(2) {
+                width: 7%;
+            }
+
+            .cross-table th:nth-child(3),
+            .cross-table td:nth-child(3) {
+                width: 15%;
+            }
+
+            .cross-table th:nth-child(4),
+            .cross-table td:nth-child(4) {
+                width: 12%;
+            }
+
+            .cross-table th:nth-child(5),
+            .cross-table td:nth-child(5) {
+                width: 10%;
+            }
+
+            .cross-table th:nth-child(6),
+            .cross-table td:nth-child(6) {
+                width: 25%;
+            }
+
+            .cross-table th:nth-child(7),
+            .cross-table td:nth-child(7) {
+                width: 12%;
+            }
+
+            .cross-table th:nth-child(8),
+            .cross-table td:nth-child(8) {
+                width: 11%;
+            }
+
+            .logical-map-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .logical-map-table th:nth-child(1),
+            .logical-map-table td:nth-child(1) {
+                width: 8%;
+            }
+
+            .logical-map-table th:nth-child(2),
+            .logical-map-table td:nth-child(2) {
+                width: 10%;
+            }
+
+            .logical-map-table th:nth-child(3),
+            .logical-map-table td:nth-child(3) {
+                width: 8%;
+            }
+
+            .logical-map-table th:nth-child(4),
+            .logical-map-table td:nth-child(4) {
+                width: 8%;
+            }
+
+            .logical-map-table th:nth-child(5),
+            .logical-map-table td:nth-child(5) {
+                width: 12%;
+            }
+
+            .logical-map-table th:nth-child(6),
+            .logical-map-table td:nth-child(6) {
+                width: 11%;
+            }
+
+            .logical-map-table th:nth-child(7),
+            .logical-map-table td:nth-child(7) {
+                width: 15%;
+            }
+
+            .logical-map-table th:nth-child(8),
+            .logical-map-table td:nth-child(8) {
+                width: 10%;
+            }
+
+            .logical-map-table th:nth-child(9),
+            .logical-map-table td:nth-child(9) {
+                width: 12%;
+            }
+
+            .logical-map-table th:nth-child(10),
+            .logical-map-table td:nth-child(10) {
+                width: 6%;
+            }
+
+            .style-cross-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .style-cross-table th:nth-child(1),
+            .style-cross-table td:nth-child(1) {
+                width: 7%;
+            }
+
+            .style-cross-table th:nth-child(2),
+            .style-cross-table td:nth-child(2) {
+                width: 7%;
+            }
+
+            .style-cross-table th:nth-child(3),
+            .style-cross-table td:nth-child(3) {
+                width: 8%;
+            }
+
+            .style-cross-table th:nth-child(4),
+            .style-cross-table td:nth-child(4) {
+                width: 15%;
+            }
+
+            .style-cross-table th:nth-child(5),
+            .style-cross-table td:nth-child(5) {
+                width: 12%;
+            }
+
+            .style-cross-table th:nth-child(6),
+            .style-cross-table td:nth-child(6) {
+                width: 10%;
+            }
+
+            .style-cross-table th:nth-child(7),
+            .style-cross-table td:nth-child(7) {
+                width: 11%;
+            }
+
+            .style-cross-table th:nth-child(8),
+            .style-cross-table td:nth-child(8) {
+                width: 10%;
+            }
+
+            .style-cross-table th:nth-child(9),
+            .style-cross-table td:nth-child(9) {
+                width: 12%;
+            }
+
+            .style-cross-table th:nth-child(10),
+            .style-cross-table td:nth-child(10) {
+                width: 8%;
+            }
+
+            .quest-sector-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .quest-sector-table th:nth-child(1),
+            .quest-sector-table td:nth-child(1) {
+                width: 7%;
+            }
+
+            .quest-sector-table th:nth-child(2),
+            .quest-sector-table td:nth-child(2) {
+                width: 7%;
+            }
+
+            .quest-sector-table th:nth-child(3),
+            .quest-sector-table td:nth-child(3) {
+                width: 9%;
+            }
+
+            .quest-sector-table th:nth-child(4),
+            .quest-sector-table td:nth-child(4) {
+                width: 7%;
+            }
+
+            .quest-sector-table th:nth-child(5),
+            .quest-sector-table td:nth-child(5) {
+                width: 8%;
+            }
+
+            .quest-sector-table th:nth-child(6),
+            .quest-sector-table td:nth-child(6) {
+                width: 14%;
+            }
+
+            .quest-sector-table th:nth-child(7),
+            .quest-sector-table td:nth-child(7) {
+                width: 11%;
+            }
+
+            .quest-sector-table th:nth-child(8),
+            .quest-sector-table td:nth-child(8) {
+                width: 15%;
+            }
+
+            .quest-sector-table th:nth-child(9),
+            .quest-sector-table td:nth-child(9) {
+                width: 14%;
+            }
+
+            .quest-sector-table th:nth-child(10),
+            .quest-sector-table td:nth-child(10) {
+                width: 8%;
+            }
+
+            .wood-reference-table {
+                table-layout: fixed;
+                font-size: 12px;
+            }
+
+            .wood-reference-table th:nth-child(1),
+            .wood-reference-table td:nth-child(1) {
+                width: 8%;
+            }
+
+            .wood-reference-table th:nth-child(2),
+            .wood-reference-table td:nth-child(2) {
+                width: 14%;
+            }
+
+            .wood-reference-table th:nth-child(3),
+            .wood-reference-table td:nth-child(3) {
+                width: 7%;
+            }
+
+            .wood-reference-table th:nth-child(4),
+            .wood-reference-table td:nth-child(4) {
+                width: 8%;
+            }
+
+            .wood-reference-table th:nth-child(5),
+            .wood-reference-table td:nth-child(5),
+            .wood-reference-table th:nth-child(6),
+            .wood-reference-table td:nth-child(6),
+            .wood-reference-table th:nth-child(7),
+            .wood-reference-table td:nth-child(7),
+            .wood-reference-table th:nth-child(8),
+            .wood-reference-table td:nth-child(8),
+            .wood-reference-table th:nth-child(9),
+            .wood-reference-table td:nth-child(9),
+            .wood-reference-table th:nth-child(10),
+            .wood-reference-table td:nth-child(10),
+            .wood-reference-table th:nth-child(11),
+            .wood-reference-table td:nth-child(11) {
+                width: 7%;
+                font-family: Menlo, Consolas, monospace;
+            }
+        </style>
+    </head>
+    <body onload="window.KnightLoreInfinity.start()">
+        <main class="page-shell">
+            <div class="play-workspace">
+                <div id="jsspeccy"></div>
+                <section id="knight-lore-navigation-map" class="navigation-map" aria-labelledby="knight-lore-navigation-map-title">
+                    <header class="navigation-map-toolbar">
+                        <div class="navigation-map-title">
+                            <h1 id="knight-lore-navigation-map-title">Logical Map</h1>
+                            <span class="navigation-map-coordinate" data-navigation-coord>(0, 0)</span>
+                        </div>
+                        <div class="navigation-map-segmented" role="group" aria-label="Map visibility">
+                            <button class="navigation-map-mode is-active" type="button" data-navigation-mode="visited" aria-pressed="true">Visited</button>
+                            <button class="navigation-map-mode" type="button" data-navigation-mode="generated" aria-pressed="false">Generated</button>
+                        </div>
+                        <div class="navigation-map-actions" role="group" aria-label="Map view controls">
+                            <button class="navigation-map-action" type="button" data-navigation-action="zoom-out" title="Zoom out" aria-label="Zoom out">-</button>
+                            <button class="navigation-map-action" type="button" data-navigation-action="center" title="Center on player" aria-label="Center on player">&#9678;</button>
+                            <button class="navigation-map-action" type="button" data-navigation-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+                        </div>
+                        <label class="navigation-map-follow" title="Keep the logical map centered on the player">
+                            <input type="checkbox" data-navigation-follow checked>
+                            <span>Follow</span>
+                        </label>
+                    </header>
+                    <div class="navigation-map-canvas-wrap" data-navigation-canvas-wrap>
+                        <canvas class="navigation-map-canvas" data-navigation-canvas tabindex="0" aria-label="Knight Lore logical navigation map"></canvas>
+                        <div class="navigation-map-tooltip" data-navigation-tooltip hidden></div>
+                    </div>
+                    <div class="navigation-map-legend" aria-label="Map legend">
+                        <span class="navigation-map-key"><span class="navigation-map-swatch current"></span>Player</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch origin"></span>Origin</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch cauldron"></span>Cauldron</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch charm"></span>Charm</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch guard"></span>Guard</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch completed"></span>Completed</span>
+                    </div>
+                    <p class="navigation-map-status" data-navigation-status data-state-stable="true">Waiting for logical map data.</p>
+                </section>
+            </div>
+            <section id="knight-lore-stage9-ball-probe" class="diagnostics">
+                <h1>Stage 9B - Live Bouncing-Ball Probe</h1>
+                <p id="stage9-ball-probe-status" class="stage-status">Diagnostics build: pages-manual-snapshot-20260801-1. Probe disabled unless requested explicitly.</p>
+                <table class="diagnostics-table">
+                    <thead>
+                        <tr>
+                            <th>Probe</th>
+                            <th>Address</th>
+                            <th>Decode</th>
+                            <th>Room/Coord</th>
+                            <th>Bytes</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage9-ball-probe-body">
+                        <tr class="state-muted"><td colspan="6">Waiting for runtime.</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            <section id="knight-lore-playtest-pokes" class="diagnostics">
+                <h1>Playtest Pokes</h1>
+                <p id="playtest-pokes-status" class="stage-status">All playtest pokes are off. Waiting to capture the original bytes.</p>
+                <table class="diagnostics-table playtest-poke-table">
+                    <thead>
+                        <tr>
+                            <th>Poke</th>
+                            <th>Address</th>
+                            <th>Switch</th>
+                            <th>Value</th>
+                            <th>Original</th>
+                            <th>Current</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr id="playtest-poke-infinite-lives-row" class="state-muted">
+                            <td>Infinite lives</td>
+                            <td>53567 / 0xD13F</td>
+                            <td>
+                                <label class="playtest-poke-toggle">
+                                    <input id="playtest-poke-infinite-lives" type="checkbox">
+                                    <span>Off</span>
+                                </label>
+                            </td>
+                            <td>201 / 0xC9</td>
+                            <td id="playtest-poke-infinite-lives-original">-</td>
+                            <td id="playtest-poke-infinite-lives-current">-</td>
+                            <td id="playtest-poke-infinite-lives-status">Waiting for emulator memory.</td>
+                        </tr>
+                        <tr id="playtest-poke-invulnerability-row" class="state-muted">
+                            <td>Partial invulnerability</td>
+                            <td>47196 / 0xB85C</td>
+                            <td>
+                                <label class="playtest-poke-toggle">
+                                    <input id="playtest-poke-invulnerability" type="checkbox">
+                                    <span>Off</span>
+                                </label>
+                            </td>
+                            <td>201 / 0xC9</td>
+                            <td id="playtest-poke-invulnerability-original">-</td>
+                            <td id="playtest-poke-invulnerability-current">-</td>
+                            <td id="playtest-poke-invulnerability-status">Waiting for emulator memory.</td>
+                        </tr>
+                        <tr id="playtest-poke-completion-target-row" class="state-muted">
+                            <td>Completion target</td>
+                            <td>49759 / 0xC25F</td>
+                            <td>
+                                <label class="playtest-poke-toggle">
+                                    <input id="playtest-poke-completion-target" type="checkbox">
+                                    <span>Off</span>
+                                </label>
+                            </td>
+                            <td>
+                                <input
+                                    id="playtest-poke-completion-target-value"
+                                    class="playtest-poke-value"
+                                    type="number"
+                                    min="1"
+                                    max="14"
+                                    step="1"
+                                    value="14"
+                                    aria-label="Completion target charm count"
+                                >
+                            </td>
+                            <td id="playtest-poke-completion-target-original">-</td>
+                            <td id="playtest-poke-completion-target-current">-</td>
+                            <td id="playtest-poke-completion-target-status">Waiting for emulator memory.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage8-quest-diagnostics" class="diagnostics">
+                <h1>Stage 8.2B/C - Quest Room Dressing</h1>
+                <p id="stage8-quest-status" class="stage-status">Diagnostics build: pages-manual-snapshot-20260801-1. Waiting for quest-sector metadata.</p>
+                <table class="diagnostics-table quest-sector-table">
+                    <thead>
+                        <tr>
+                            <th>Probe</th>
+                            <th>Coord</th>
+                            <th>Sector/Local</th>
+                            <th>Role</th>
+                            <th>Charm</th>
+                            <th>Anchors</th>
+                            <th>State</th>
+                            <th>Reach</th>
+                            <th>Dressing</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage8-quest-body">
+                        <tr class="state-muted"><td colspan="10">Waiting for runtime.</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage84-c30-diagnostics" class="diagnostics">
+                <h1>Stage 8.4 C3.6 - Original Charm-Room Interiors</h1>
+                <p id="stage84-c30-status" class="stage-status">Diagnostics build: pages-manual-snapshot-20260801-1. Waiting for item/charm memory samples.</p>
+                <table class="diagnostics-table">
+                    <thead>
+                        <tr>
+                            <th>Probe</th>
+                            <th>Address</th>
+                            <th>Decode</th>
+                            <th>Room/Coord</th>
+                            <th>Bytes</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage84-c30-body">
+                        <tr class="state-muted"><td colspan="6">Waiting for runtime.</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            <section id="knight-lore-wood-wall-reference" class="diagnostics">
+                <h1>Wooden Square Wall Reference</h1>
+                <p class="stage-status">Original square wooden wall background records: 0x0F tree room size 1, 0x10 tree filler west, 0x11 tree filler north. Diagnostics build: pages-manual-snapshot-20260801-1.</p>
+                <div class="wood-tuning-controls">
+                    <label for="stage7-west-filler-x-slider">Selector 1 west wall X</label>
+                    <input id="stage7-west-filler-x-slider" type="range" min="0" max="191" step="1" value="95">
+                    <output id="stage7-west-filler-x-value" for="stage7-west-filler-x-slider">0x5F (95)</output>
+                    <p id="stage7-west-filler-x-status" class="wood-tuning-status">Waiting for runtime.</p>
+                </div>
+                <table class="diagnostics-table wood-tuning-records">
+                    <thead>
+                        <tr>
+                            <th>Bg</th>
+                            <th>Rec</th>
+                            <th>Use</th>
+                            <th>Sprite</th>
+                            <th>X</th>
+                            <th>Y</th>
+                            <th>Z</th>
+                            <th>W/D</th>
+                            <th>H/F</th>
+                            <th>Bytes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage7-west-filler-records-body">
+                        <tr class="state-muted"><td colspan="10">Waiting for runtime.</td></tr>
+                    </tbody>
+                </table>
+                <table class="diagnostics-table wood-reference-table">
+                    <thead>
+                        <tr>
+                            <th>Bg</th>
+                            <th>Name</th>
+                            <th>Rec</th>
+                            <th>Use</th>
+                            <th>Sprite</th>
+                            <th>X</th>
+                            <th>Y</th>
+                            <th>Z</th>
+                            <th>Width</th>
+                            <th>Depth</th>
+                            <th>Height/Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>1</td><td>west</td><td>0x80</td><td>0x3F</td><td>0x49</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>2</td><td>west</td><td>0x81</td><td>0x3F</td><td>0x58</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>3</td><td>west</td><td>0x82</td><td>0x3F</td><td>0x68</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x10</td><td>tree filler west</td><td>1</td><td>west gap</td><td>0x80</td><td>0x3F</td><td>0x78</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x10</td><td>tree filler west</td><td>2</td><td>west gap</td><td>0x81</td><td>0x3F</td><td>0x88</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>4</td><td>west</td><td>0x80</td><td>0x3F</td><td>0x98</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>5</td><td>west</td><td>0x81</td><td>0x3F</td><td>0xA8</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>6</td><td>west</td><td>0x82</td><td>0x3F</td><td>0xB8</td><td>0x80</td><td>0x00</td><td>0x08</td><td>0x2C / 0x10</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>7</td><td>north</td><td>0x80</td><td>0x48</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>8</td><td>north</td><td>0x81</td><td>0x58</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>9</td><td>north</td><td>0x82</td><td>0x68</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x11</td><td>tree filler north</td><td>1</td><td>north gap</td><td>0x80</td><td>0x78</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x11</td><td>tree filler north</td><td>2</td><td>north gap</td><td>0x81</td><td>0x88</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>10</td><td>north</td><td>0x80</td><td>0x98</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>11</td><td>north</td><td>0x81</td><td>0xA8</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                        <tr><td>0x0F</td><td>tree room size 1</td><td>12</td><td>north</td><td>0x82</td><td>0xB8</td><td>0xC0</td><td>0x80</td><td>0x08</td><td>0x00</td><td>0x2C / 0x50</td></tr>
+                    </tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage7-style-diagnostics" class="diagnostics">
+                <h1>Stage 7 - Current Generated Cross</h1>
+                <p id="stage7-style-status" class="stage-status">Diagnostics build: pages-manual-snapshot-20260801-1. Waiting for the Stage 7 cross.</p>
+                <table class="diagnostics-table style-cross-table">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>Phys</th>
+                            <th>Coord</th>
+                            <th>Label</th>
+                            <th>Style</th>
+                            <th>Shape</th>
+                            <th>Theme/Colour</th>
+                            <th>Exits</th>
+                            <th>Blocks</th>
+                            <th>Entry</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage7-style-body"></tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage1-diagnostics" class="diagnostics">
+                <h1>Stage 1 - Read-Only Room Loading Anatomy</h1>
+                <table class="diagnostics-table">
+                    <thead>
+                        <tr>
+                            <th class="field">Field</th>
+                            <th class="value">Value</th>
+                            <th class="notes">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage1-diagnostics-body"></tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage2-diagnostics" class="diagnostics">
+                <h1>Stage 2 - Physical 5-Room Cross</h1>
+                <p id="stage2-status" class="stage-status">Diagnostics build: pages-manual-snapshot-20260801-1. Waiting for the first Stage 2 sample.</p>
+                <table class="diagnostics-table cross-table">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>Room</th>
+                            <th>Entry</th>
+                            <th>Header</th>
+                            <th>Size</th>
+                            <th>Counts</th>
+                            <th>Arch Exits</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage2-cross-body"></tbody>
+                </table>
+            </section>
+            <section id="knight-lore-stage4-diagnostics" class="diagnostics">
+                <h1>Stage 4.5 - Logical Map JSON Authoring</h1>
+                <p id="stage4-status" class="stage-status">Diagnostics build: pages-manual-snapshot-20260801-1. Waiting for the logical map probe.</p>
+                <table class="diagnostics-table logical-map-table">
+                    <thead>
+                        <tr>
+                            <th>Query</th>
+                            <th>Label</th>
+                            <th>Coord</th>
+                            <th>Source</th>
+                            <th>Size/Attr</th>
+                            <th>Exits</th>
+                            <th>Backgrounds</th>
+                            <th>Blocks</th>
+                            <th>Compiled Entry</th>
+                            <th>State</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stage4-logical-body"></tbody>
+                </table>
+            </section>
+        </main>
+    </body>
+</html>

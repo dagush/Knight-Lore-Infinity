@@ -2331,21 +2331,23 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             });
         }
 
-        tbody.innerHTML = KL_STAGE1.rows.map(([id, label]) => `
-            <tr data-row="${id}" class="state-muted">
-                <td class="field">${label}</td>
-                <td class="value">...</td>
-                <td class="notes">Waiting for the first completed frame.</td>
-            </tr>
-        `).join('');
+        if (tbody) {
+            tbody.innerHTML = KL_STAGE1.rows.map(([id, label]) => `
+                <tr data-row="${id}" class="state-muted">
+                    <td class="field">${label}</td>
+                    <td class="value">...</td>
+                    <td class="notes">Waiting for the first completed frame.</td>
+                </tr>
+            `).join('');
 
-        tbody.querySelectorAll('tr[data-row]').forEach(row => {
-            rowEls.set(row.dataset.row, {
-                row,
-                value: row.querySelector('.value'),
-                notes: row.querySelector('.notes'),
+            tbody.querySelectorAll('tr[data-row]').forEach(row => {
+                rowEls.set(row.dataset.row, {
+                    row,
+                    value: row.querySelector('.value'),
+                    notes: row.querySelector('.notes'),
+                });
             });
-        });
+        }
 
         const setRow = (id, value, notes, state = '') => {
             const els = rowEls.get(id);

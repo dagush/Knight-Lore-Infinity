@@ -1,16 +1,5 @@
 # Knight Lore Infinity
 
-**Knight Lore Infinity** is a purely experimental, non-profit, just-for-fun
-project built around the original 1984 ZX Spectrum game *Knight Lore* and the
-JavaScript emulator JSSpeccy 3.
-
-The experiment asks a slightly unreasonable question: how far can the original
-game be extended from JavaScript, using runtime memory inspection and carefully
-timed memory changes, without modifying the original game source code or
-replacing its renderer?
-
-The answer turned out to be: surprisingly far.
-
 ## Live Demo
 
 Open the [Knight Lore Infinity live demo](https://dagush.github.io/Knight-Lore-Infinity/).
@@ -24,6 +13,17 @@ start.
 
 The hosted build enables the current integrated playtest, including bouncing
 ball combat in generated guard rooms. Press `B` to fire there.
+
+**Knight Lore Infinity** is a purely experimental, non-profit, just-for-fun
+project built around the original 1984 ZX Spectrum game *Knight Lore* and the
+JavaScript emulator JSSpeccy 3.
+
+The experiment asks a slightly unreasonable question: how far can the original
+game be extended from JavaScript, using runtime memory inspection and carefully
+timed memory changes, without modifying the original game source code or
+replacing its renderer?
+
+The answer turned out to be: surprisingly far.
 
 ## What It Does
 

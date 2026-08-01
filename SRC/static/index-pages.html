@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Knight Lore Infinity</title>
+        <script src="jsspeccy/jsspeccy.js?v=pages-player-20260801-1"></script>
+        <style>
+            :root {
+                color-scheme: dark;
+                font-family: Arial, Helvetica, sans-serif;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                min-height: 100vh;
+                background: #30343a;
+                color: #f2f5f8;
+            }
+
+            button,
+            input {
+                font: inherit;
+            }
+
+            a {
+                color: #8fcaff;
+            }
+
+            a:hover,
+            a:focus-visible {
+                color: #ffffff;
+            }
+
+            .page-shell {
+                width: min(1280px, calc(100vw - 32px));
+                margin: 0 auto;
+                padding: 18px 0 32px;
+            }
+
+            .play-workspace {
+                display: grid;
+                grid-template-columns: 640px minmax(360px, 1fr);
+                gap: 16px;
+                align-items: start;
+            }
+
+            #jsspeccy {
+                width: 640px;
+                max-width: 100%;
+                margin: 0;
+                background-color: white;
+            }
+
+            #jsspeccy > div,
+            #jsspeccy canvas {
+                max-width: 100%;
+            }
+
+            #jsspeccy canvas {
+                height: auto !important;
+            }
+
+            .knight-lore-wizard-dialogue {
+                --kl-dialog-scale: 1;
+                --kl-dialog-tail-x: 56px;
+                position: absolute;
+                z-index: 20;
+                width: 144px;
+                min-height: 34px;
+                padding: 7px 6px;
+                border: 2px solid #ffffff;
+                border-radius: 0;
+                background: #000000;
+                box-shadow: 0 0 0 2px #000000, 0 0 0 3px #f4e925;
+                color: #ffffff;
+                font-family: Menlo, Monaco, "Courier New", monospace;
+                font-size: 8px;
+                font-weight: 700;
+                line-height: 10px;
+                letter-spacing: 0;
+                text-align: center;
+                white-space: pre-line;
+                overflow-wrap: break-word;
+                image-rendering: pixelated;
+                pointer-events: none;
+                transform: scale(var(--kl-dialog-scale));
+                transform-origin: top left;
+            }
+
+            .knight-lore-wizard-dialogue[data-speaker="player"] {
+                color: #f4e925;
+            }
+
+            .knight-lore-wizard-dialogue::after {
+                content: "";
+                position: absolute;
+                left: var(--kl-dialog-tail-x);
+                bottom: -7px;
+                width: 8px;
+                height: 8px;
+                border-right: 2px solid #ffffff;
+                border-bottom: 2px solid #ffffff;
+                background: #000000;
+                transform: translateX(-50%) rotate(45deg);
+                transform-origin: center;
+            }
+
+            .knight-lore-wizard-dialogue[data-placement="below"]::after {
+                top: -7px;
+                bottom: auto;
+                border-top: 2px solid #ffffff;
+                border-right: 0;
+                border-bottom: 0;
+                border-left: 2px solid #ffffff;
+            }
+
+            .navigation-map {
+                display: grid;
+                grid-template-rows: auto minmax(0, 1fr) auto auto;
+                height: 526px;
+                min-width: 0;
+                border: 1px solid #5b6570;
+                background: #1b2024;
+                color: #f2f5f8;
+            }
+
+            .navigation-map-toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: center;
+                min-height: 42px;
+                padding: 7px 8px;
+                border-bottom: 1px solid #3d454f;
+                background: #272d32;
+            }
+
+            .navigation-map-title {
+                min-width: 114px;
+                margin-right: auto;
+            }
+
+            .navigation-map-title h1 {
+                margin: 0;
+                font-size: 14px;
+                line-height: 1.15;
+                letter-spacing: 0;
+            }
+
+            .navigation-map-coordinate {
+                color: #c8d1d8;
+                font-family: Menlo, Consolas, monospace;
+                font-size: 11px;
+            }
+
+            .navigation-map-segmented,
+            .navigation-map-actions {
+                display: inline-flex;
+                border: 1px solid #626c74;
+            }
+
+            .navigation-map button {
+                min-width: 32px;
+                min-height: 30px;
+                border: 0;
+                border-left: 1px solid #626c74;
+                border-radius: 0;
+                background: #353c42;
+                color: #e8edf1;
+                cursor: pointer;
+            }
+
+            .navigation-map button:first-child {
+                border-left: 0;
+            }
+
+            .navigation-map button:hover,
+            .navigation-map button:focus-visible {
+                background: #4a545c;
+                outline: 2px solid #ffd166;
+                outline-offset: -2px;
+            }
+
+            .navigation-map-mode {
+                padding: 0 9px;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            .navigation-map-mode.is-active {
+                background: #e4e9ed;
+                color: #171b1e;
+            }
+
+            .navigation-map-action {
+                width: 32px;
+                padding: 0;
+                font-size: 18px;
+                line-height: 1;
+            }
+
+            .navigation-map-follow {
+                display: inline-flex;
+                gap: 5px;
+                align-items: center;
+                min-height: 30px;
+                color: #d8dfe4;
+                font-size: 11px;
+                cursor: pointer;
+            }
+
+            .navigation-map-follow input {
+                width: 16px;
+                height: 16px;
+                margin: 0;
+                accent-color: #54c384;
+            }
+
+            .navigation-map-canvas-wrap {
+                position: relative;
+                min-height: 320px;
+                overflow: hidden;
+                background: #121619;
+            }
+
+            .navigation-map-canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+                cursor: grab;
+                touch-action: none;
+            }
+
+            .navigation-map-canvas.is-dragging {
+                cursor: grabbing;
+            }
+
+            .navigation-map-tooltip {
+                position: absolute;
+                z-index: 2;
+                max-width: min(290px, calc(100% - 16px));
+                padding: 6px 8px;
+                border: 1px solid #78838b;
+                background: rgba(20, 24, 27, 0.96);
+                color: #ffffff;
+                font-family: Menlo, Consolas, monospace;
+                font-size: 11px;
+                line-height: 1.35;
+                pointer-events: none;
+            }
+
+            .navigation-map-legend {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px 12px;
+                align-items: center;
+                min-height: 38px;
+                padding: 6px 8px;
+                border-top: 1px solid #3d454f;
+                color: #cbd3d9;
+                font-size: 11px;
+            }
+
+            .navigation-map-key {
+                display: inline-flex;
+                gap: 5px;
+                align-items: center;
+                white-space: nowrap;
+            }
+
+            .navigation-map-swatch {
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                background: #68747d;
+            }
+
+            .navigation-map-swatch.cauldron {
+                border-radius: 50%;
+                background: #ef6262;
+            }
+
+            .navigation-map-swatch.charm {
+                width: 9px;
+                height: 9px;
+                background: #52a8ff;
+                transform: rotate(45deg);
+            }
+
+            .navigation-map-swatch.completed {
+                background: #4fd08a;
+            }
+
+            .navigation-map-swatch.guard {
+                background: #e68a3f;
+            }
+
+            .navigation-map-swatch.origin {
+                border: 2px solid #ffd166;
+                background: transparent;
+            }
+
+            .navigation-map-swatch.current {
+                border: 2px solid #ffffff;
+                border-radius: 50%;
+                background: #20262b;
+            }
+
+            .navigation-map-status {
+                margin: 0;
+                min-height: 16px;
+                padding: 5px 8px;
+                border-top: 1px solid #3d454f;
+                color: #9faab2;
+                font-family: Menlo, Consolas, monospace;
+                font-size: 10px;
+                line-height: 1.3;
+                overflow-wrap: anywhere;
+            }
+
+            .navigation-map-status[data-state-stable="false"] {
+                color: #ffaaa0;
+            }
+
+            .play-aids {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px 18px;
+                align-items: center;
+                margin-top: 16px;
+                padding: 10px 12px;
+                border-top: 1px solid #69747d;
+                border-bottom: 1px solid #69747d;
+                background: #252b30;
+            }
+
+            .play-aids h2 {
+                margin: 0;
+                font-size: 14px;
+                letter-spacing: 0;
+            }
+
+            .play-aid-controls {
+                display: flex;
+                flex: 1 1 500px;
+                flex-wrap: wrap;
+                gap: 8px 16px;
+                align-items: center;
+            }
+
+            .play-aid-controls > div {
+                display: inline-flex;
+                gap: 7px;
+                align-items: center;
+                min-height: 30px;
+            }
+
+            .play-aid-toggle {
+                display: inline-flex;
+                gap: 5px;
+                align-items: center;
+                cursor: pointer;
+            }
+
+            .play-aid-toggle input {
+                width: 17px;
+                height: 17px;
+                margin: 0;
+                accent-color: #65c47a;
+            }
+
+            .play-aid-toggle input:disabled {
+                cursor: wait;
+            }
+
+            .play-aid-state {
+                min-width: 19px;
+                color: #aeb8c0;
+                font-size: 11px;
+            }
+
+            .play-aid-label {
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            .play-aid-value {
+                width: 3.5rem;
+                padding: 4px 5px;
+                border: 1px solid #68737d;
+                border-radius: 3px;
+                background: #11171c;
+                color: #edf2f5;
+                text-align: right;
+            }
+
+            .play-aids-status {
+                margin-left: auto;
+                color: #b9c3ca;
+                font-size: 11px;
+            }
+
+            .play-aids-status p {
+                max-width: 760px;
+                margin: 7px 0 0;
+                line-height: 1.4;
+            }
+
+            .project-about {
+                max-width: 900px;
+                padding: 22px 0 0;
+                color: #dbe1e6;
+                line-height: 1.55;
+            }
+
+            .project-about h1 {
+                margin: 0 0 8px;
+                color: #ffffff;
+                font-size: 22px;
+                letter-spacing: 0;
+            }
+
+            .project-about p {
+                margin: 8px 0;
+            }
+
+            .project-about .controls {
+                color: #ffffff;
+            }
+
+            .project-about kbd {
+                display: inline-block;
+                min-width: 1.65em;
+                padding: 1px 5px;
+                border: 1px solid #7b858d;
+                border-bottom-width: 2px;
+                border-radius: 3px;
+                background: #20252a;
+                color: #ffffff;
+                font-family: Menlo, Consolas, monospace;
+                font-size: 0.9em;
+                text-align: center;
+            }
+
+            @media (max-width: 1120px) {
+                .play-workspace {
+                    grid-template-columns: minmax(0, 640px);
+                    justify-content: center;
+                }
+
+                .navigation-map {
+                    height: 500px;
+                }
+            }
+
+            @media (max-width: 620px) {
+                .page-shell {
+                    width: calc(100vw - 16px);
+                    padding-top: 8px;
+                }
+
+                .play-workspace {
+                    gap: 10px;
+                }
+
+                .navigation-map {
+                    height: 440px;
+                }
+
+                .navigation-map-title {
+                    min-width: 100%;
+                }
+
+                .navigation-map-toolbar {
+                    align-items: stretch;
+                }
+
+                .navigation-map-follow {
+                    margin-left: auto;
+                }
+
+                .play-aids {
+                    align-items: flex-start;
+                }
+
+                .play-aids-status {
+                    width: 100%;
+                    margin-left: 0;
+                }
+            }
+        </style>
+    </head>
+    <body onload="window.KnightLoreInfinity.start()">
+        <main class="page-shell">
+            <div class="play-workspace">
+                <div id="jsspeccy"></div>
+                <section id="knight-lore-navigation-map" class="navigation-map" aria-labelledby="knight-lore-navigation-map-title">
+                    <header class="navigation-map-toolbar">
+                        <div class="navigation-map-title">
+                            <h1 id="knight-lore-navigation-map-title">Logical Map</h1>
+                            <span class="navigation-map-coordinate" data-navigation-coord>(0, 0)</span>
+                        </div>
+                        <div class="navigation-map-segmented" role="group" aria-label="Map visibility">
+                            <button class="navigation-map-mode is-active" type="button" data-navigation-mode="visited" aria-pressed="true">Visited</button>
+                            <button class="navigation-map-mode" type="button" data-navigation-mode="generated" aria-pressed="false">Generated</button>
+                        </div>
+                        <div class="navigation-map-actions" role="group" aria-label="Map view controls">
+                            <button class="navigation-map-action" type="button" data-navigation-action="zoom-out" title="Zoom out" aria-label="Zoom out">-</button>
+                            <button class="navigation-map-action" type="button" data-navigation-action="center" title="Center on player" aria-label="Center on player">&#9678;</button>
+                            <button class="navigation-map-action" type="button" data-navigation-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+                        </div>
+                        <label class="navigation-map-follow" title="Keep the logical map centered on the player">
+                            <input type="checkbox" data-navigation-follow checked>
+                            <span>Follow</span>
+                        </label>
+                    </header>
+                    <div class="navigation-map-canvas-wrap" data-navigation-canvas-wrap>
+                        <canvas class="navigation-map-canvas" data-navigation-canvas tabindex="0" aria-label="Knight Lore logical navigation map"></canvas>
+                        <div class="navigation-map-tooltip" data-navigation-tooltip hidden></div>
+                    </div>
+                    <div class="navigation-map-legend" aria-label="Map legend">
+                        <span class="navigation-map-key"><span class="navigation-map-swatch current"></span>Player</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch origin"></span>Origin</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch cauldron"></span>Cauldron</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch charm"></span>Charm</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch guard"></span>Guard</span>
+                        <span class="navigation-map-key"><span class="navigation-map-swatch completed"></span>Completed</span>
+                    </div>
+                    <p class="navigation-map-status" data-navigation-status data-state-stable="true">Waiting for logical map data.</p>
+                </section>
+            </div>
+
+            <section id="knight-lore-playtest-pokes" class="play-aids" aria-labelledby="play-aids-title">
+                <h2 id="play-aids-title">Play aids</h2>
+                <div class="play-aid-controls">
+                    <div id="playtest-poke-infinite-lives-row">
+                        <label class="play-aid-toggle">
+                            <input id="playtest-poke-infinite-lives" type="checkbox">
+                            <span class="play-aid-state">Off</span>
+                        </label>
+                        <span class="play-aid-label">Infinite lives</span>
+                        <span id="playtest-poke-infinite-lives-original" hidden></span>
+                        <span id="playtest-poke-infinite-lives-current" hidden></span>
+                        <span id="playtest-poke-infinite-lives-status" hidden></span>
+                    </div>
+                    <div id="playtest-poke-invulnerability-row">
+                        <label class="play-aid-toggle">
+                            <input id="playtest-poke-invulnerability" type="checkbox">
+                            <span class="play-aid-state">Off</span>
+                        </label>
+                        <span class="play-aid-label">Partial invulnerability</span>
+                        <span id="playtest-poke-invulnerability-original" hidden></span>
+                        <span id="playtest-poke-invulnerability-current" hidden></span>
+                        <span id="playtest-poke-invulnerability-status" hidden></span>
+                    </div>
+                    <div id="playtest-poke-completion-target-row">
+                        <label class="play-aid-toggle">
+                            <input id="playtest-poke-completion-target" type="checkbox">
+                            <span class="play-aid-state">Off</span>
+                        </label>
+                        <label class="play-aid-label" for="playtest-poke-completion-target-value">Charms to finish</label>
+                        <input id="playtest-poke-completion-target-value" class="play-aid-value" type="number" min="1" max="14" step="1" value="14">
+                        <span id="playtest-poke-completion-target-original" hidden></span>
+                        <span id="playtest-poke-completion-target-current" hidden></span>
+                        <span id="playtest-poke-completion-target-status" hidden></span>
+                    </div>
+                </div>
+                <details class="play-aids-status">
+                    <summary>Status</summary>
+                    <p id="playtest-pokes-status">All play aids are off. Waiting to capture the original bytes.</p>
+                </details>
+            </section>
+
+            <section class="project-about" aria-labelledby="project-title">
+                <h1 id="project-title">Knight Lore Infinity</h1>
+                <p>
+                    This is an experimental, non-profit, just-for-fun extension of the original 1984
+                    <em>Knight Lore</em>, running inside JSSpeccy. Load your own legally obtained
+                    <code>.z80</code> snapshot with the emulator's Open control to begin.
+                </p>
+                <p class="controls">
+                    Advance conversations and choose replies with the number keys <kbd>0</kbd>-<kbd>9</kbd>.
+                    Press <kbd>B</kbd> to shoot a bouncing ball, but take care: your own weapon can hurt you too.
+                </p>
+                <p>
+                    The original finite castle has become a deterministic infinite map, with dispersed charms,
+                    cauldrons, guarded rooms, original-room interiors, persistent exploration, and an external
+                    logical navigation map. This remains a research toy rather than a polished remake, so
+                    unintended glitches may still occur.
+                </p>
+                <p>
+                    Source code, technical notes, and project history:
+                    <a href="https://github.com/dagush/Knight-Lore-Infinity">dagush/Knight-Lore-Infinity</a>.
+                </p>
+            </section>
+        </main>
+    </body>
+</html>
