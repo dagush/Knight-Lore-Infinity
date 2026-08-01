@@ -1,15 +1,22 @@
 import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 import { createKnightLoreNavigationMap } from './knightlore-navigation-map.js';
 import { createKnightLoreWizardDialogue } from './knightlore-wizard-dialogue.js';
-import { createKnightLoreBallProbe } from './knightlore-ball-probe.js';
-import { KNIGHT_LORE_WIZARD_DIALOGUE } from './dialogue.js';
+import {
+    createKnightLoreBallProbe,
+    findKnightLoreSquareGuardPairs,
+} from './knightlore-ball-probe.js';
+import {
+    KNIGHT_LORE_GUARD_TUTORIAL,
+    KNIGHT_LORE_WIZARD_DIALOGUE,
+} from './dialogue.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
     let navigationMap = null;
     let wizardDialogue = null;
+    let guardDialogue = null;
     let ballProbe = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage9-guard-kill-latch-20260801-1';
+    const KL_DIAGNOSTICS_BUILD = 'stage9-guard-contact-fallback-20260801-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_TRUE_PARAM_VALUES = ['1', 'true', 'on', 'yes', 'enabled'];
     const KL_CURRENT_PLAYTEST_PRESET = ['latest', 'current', '1'].includes(
@@ -109,6 +116,47 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         ['stage83dialogue', 'wizarddialogue', 'dialogue'],
         true
     );
+    const KL_STAGE9_GUARD_TUTORIAL_PARAM = (
+        KL_URL_PARAMS.get('stage9guardtutorial') || ''
+    ).trim().toLowerCase();
+    const KL_STAGE9_GUARD_TUTORIAL_REQUESTED = ![
+        '0', 'false', 'off', 'disabled', 'no',
+    ].includes(KL_STAGE9_GUARD_TUTORIAL_PARAM);
+    const KL_STAGE9_GUARD_TUTORIAL_RESET = KL_STAGE9_GUARD_TUTORIAL_PARAM === 'reset';
+    const KL_STAGE9_GUARD_TUTORIAL_STORAGE_KEY =
+        'knight-lore-infinity.guard-combat-tutorial.v1';
+    const guardTutorialPersistence = {
+        key: KL_STAGE9_GUARD_TUTORIAL_STORAGE_KEY,
+        available: true,
+        seen: false,
+        resetRequested: KL_STAGE9_GUARD_TUTORIAL_RESET,
+        lastAction: 'not initialized',
+    };
+    try {
+        if (KL_STAGE9_GUARD_TUTORIAL_RESET) {
+            window.localStorage.removeItem(KL_STAGE9_GUARD_TUTORIAL_STORAGE_KEY);
+            guardTutorialPersistence.lastAction = 'stored one-time flag cleared by reset query';
+        } else {
+            guardTutorialPersistence.lastAction = 'stored one-time flag read';
+        }
+        guardTutorialPersistence.seen =
+            window.localStorage.getItem(KL_STAGE9_GUARD_TUTORIAL_STORAGE_KEY) === '1';
+    } catch (error) {
+        guardTutorialPersistence.available = false;
+        guardTutorialPersistence.lastAction = `browser storage unavailable: ${error.message}`;
+    }
+    let guardTutorialActiveCoord = null;
+    const markGuardTutorialSeen = coord => {
+        guardTutorialPersistence.seen = true;
+        guardTutorialPersistence.lastAction = `shown once at (${coord.x}, ${coord.y})`;
+        try {
+            window.localStorage.setItem(KL_STAGE9_GUARD_TUTORIAL_STORAGE_KEY, '1');
+        } catch (error) {
+            guardTutorialPersistence.available = false;
+            guardTutorialPersistence.lastAction =
+                `shown once for this page; browser storage unavailable: ${error.message}`;
+        }
+    };
     const KL_STAGE5_STATIC_MAP_URL = KL_STAGE7_SLIDING_CROSS_ENABLED ? null : (KL_URL_PARAMS.get('stage5staticmap') ||
         (KL_URL_PARAMS.get('stage5static3x3') === '1'
             ? 'maps/knight-lore-3x3-static-map.json'
@@ -411,6 +459,14 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     const KL_STAGE83_WIZARD_DIALOGUE = {
         enabled: KL_STAGE83_WIZARD_DIALOGUE_ENABLED && KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED,
         dialogue: KNIGHT_LORE_WIZARD_DIALOGUE,
+    };
+    const KL_STAGE9_GUARD_TUTORIAL = {
+        enabled: KL_STAGE83_WIZARD_DIALOGUE_ENABLED &&
+            KL_STAGE9_GUARD_TUTORIAL_REQUESTED &&
+            KL_STAGE9_GUARD_ROOMS_ENABLED &&
+            KL_STAGE9_BALL_PROBE_ENABLED &&
+            KL_STAGE9_BALL_KILL_ENABLED,
+        dialogue: KNIGHT_LORE_GUARD_TUTORIAL,
     };
     const getStage2RoomPatchBytes = patch => {
         if (patch.kind === 'wizard-background' && KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED) {
@@ -1868,6 +1924,13 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             canvas: emulatorCanvas,
             enabled: KL_STAGE83_WIZARD_DIALOGUE.enabled,
             dialogue: KL_STAGE83_WIZARD_DIALOGUE.dialogue,
+        });
+        if (guardDialogue) guardDialogue.destroy();
+        guardDialogue = createKnightLoreWizardDialogue({
+            root: emulatorAppRoot,
+            canvas: emulatorCanvas,
+            enabled: KL_STAGE9_GUARD_TUTORIAL.enabled,
+            dialogue: KL_STAGE9_GUARD_TUTORIAL.dialogue,
         });
         if (ballProbe) ballProbe.destroy();
         ballProbe = createKnightLoreBallProbe({
@@ -6489,11 +6552,18 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         };
 
         const updateStage83WizardDialogue = (workRange, sample) => {
-            if (!wizardDialogue) return;
+            if (!wizardDialogue && !guardDialogue) return;
 
             const currentCoord = getStage8CurrentCoord();
+            const currentRoom = logicalMap.getRoomAt(currentCoord.x, currentCoord.y);
             const wizardPairs = findStage84C39WizardPairs(workRange);
             const wizardPair = wizardPairs.length === 1 ? wizardPairs[0] : null;
+            const guardPairs = findKnightLoreSquareGuardPairs(workRange);
+            const guardPair = guardPairs.length === 1 ? guardPairs[0] : null;
+            const guardRoom = currentRoom.meta &&
+                currentRoom.meta.procedural &&
+                currentRoom.meta.procedural.guardRoom;
+            const isGeneratedGuardRoom = !!(guardRoom && guardRoom.selected);
             const playerBodySprite = readByte(workRange, KL_STAGE84_C30.playerBodyRecordAddr) || 0;
             const playerReady = (
                 (playerBodySprite >= 0x10 && playerBodySprite <= 0x15) ||
@@ -6502,7 +6572,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 (playerBodySprite >= 0x38 && playerBodySprite <= 0x3d)
             );
             const playerTransforming = playerBodySprite >= 0x5c && playerBodySprite <= 0x5f;
-            const available = KL_STAGE83_WIZARD_DIALOGUE.enabled &&
+            const wizardAvailable = KL_STAGE83_WIZARD_DIALOGUE.enabled &&
                 sameCoord(currentCoord, KL_STAGE84_C39_ORIGIN_WIZARD.logicalCoord) &&
                 sample.room0 === KL_STAGE7_SLIDING_CROSS.centerRoom &&
                 !!wizardPair;
@@ -6512,24 +6582,58 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 KL_STAGE7_SLIDING_CROSS.slotSize
             );
 
-            wizardDialogue.update({
-                available,
-                playerReady,
-                playerTransforming,
-                playerBodySprite,
-                wizardAnchor: wizardPair ? {
-                    pixelX: wizardPair.pixelX,
-                    pixelY: wizardPair.pixelY,
-                    spriteWidthBytes: wizardPair.spriteWidthBytes,
-                    spriteHeight: wizardPair.spriteHeight,
-                } : null,
-                playerAnchor: playerHeadRecord[0] ? {
-                    pixelX: playerHeadRecord[26],
-                    pixelY: playerHeadRecord[27],
-                    spriteWidthBytes: playerHeadRecord[24],
-                    spriteHeight: playerHeadRecord[25],
-                } : null,
-            });
+            const playerAnchor = playerHeadRecord[0] ? {
+                pixelX: playerHeadRecord[26],
+                pixelY: playerHeadRecord[27],
+                spriteWidthBytes: playerHeadRecord[24],
+                spriteHeight: playerHeadRecord[25],
+            } : null;
+
+            if (wizardDialogue) {
+                wizardDialogue.update({
+                    available: wizardAvailable,
+                    playerReady,
+                    playerTransforming,
+                    playerBodySprite,
+                    wizardAnchor: wizardPair ? {
+                        pixelX: wizardPair.pixelX,
+                        pixelY: wizardPair.pixelY,
+                        spriteWidthBytes: wizardPair.spriteWidthBytes,
+                        spriteHeight: wizardPair.spriteHeight,
+                    } : null,
+                    playerAnchor,
+                });
+            }
+
+            if (guardTutorialActiveCoord && !sameCoord(currentCoord, guardTutorialActiveCoord)) {
+                guardTutorialActiveCoord = null;
+            }
+            const guardTutorialAvailable = KL_STAGE9_GUARD_TUTORIAL.enabled &&
+                sample.room0 === KL_STAGE7_SLIDING_CROSS.centerRoom &&
+                isGeneratedGuardRoom &&
+                !!guardPair &&
+                (!guardTutorialPersistence.seen ||
+                    (guardTutorialActiveCoord && sameCoord(currentCoord, guardTutorialActiveCoord)));
+            if (guardDialogue) {
+                guardDialogue.update({
+                    available: guardTutorialAvailable,
+                    playerReady,
+                    playerTransforming,
+                    playerBodySprite,
+                    guardAnchor: guardPair ? {
+                        pixelX: guardPair.top.record[26],
+                        pixelY: guardPair.top.record[27],
+                        spriteWidthBytes: guardPair.top.record[24],
+                        spriteHeight: guardPair.top.record[25],
+                    } : null,
+                    playerAnchor,
+                });
+                const guardDialogueState = guardDialogue.getState();
+                if (guardDialogueState.autoStarted && !guardTutorialPersistence.seen) {
+                    guardTutorialActiveCoord = {...currentCoord};
+                    markGuardTutorialSeen(currentCoord);
+                }
+            }
         };
 
         const decodeStage84StaticObjectRecord = (itemObjectRange, index) => {
@@ -6685,6 +6789,50 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 room: `logical ${fmtLogicalCoord(currentCoord)}; physical ${hexByte(sample.room0)}`,
                 bytes: '-',
                 notes: `${dialogueState.lastAction}. Dialogue content lives in runtime/dialogue.js. The first automatic conversation begins at greeting; replays begin at opening. The box follows its speaker using the previous factor-0.5 weighted screen position while keeping page placement stable; transformation sprites 0x5C..0x5F freeze text and motion. Choose 1..3, use a number to advance, and use 0 or Escape to close.`,
+            });
+
+            const guardDialogueState = guardDialogue
+                ? guardDialogue.getState()
+                : {enabled: false, available: false, visible: false, lastAction: 'not installed'};
+            const guardRoom = currentRoom.meta &&
+                currentRoom.meta.procedural &&
+                currentRoom.meta.procedural.guardRoom;
+            const currentGuardPairs = findKnightLoreSquareGuardPairs(workRange);
+            const guardDialogueAnchor = guardDialogueState.anchor;
+            addRow({
+                state: !guardDialogueState.enabled
+                    ? 'muted'
+                    : guardDialogueState.visible
+                        ? 'ok'
+                        : guardTutorialPersistence.seen
+                            ? 'ok'
+                            : guardDialogueState.available
+                                ? 'ok'
+                                : 'muted',
+                probe: 'Stage 9 one-time guard warning',
+                address: `HTML overlay / localStorage ${guardTutorialPersistence.key}`,
+                decode: [
+                    `enabled ${guardDialogueState.enabled ? 'yes' : 'no'}`,
+                    `guard room ${guardRoom && guardRoom.selected ? 'yes' : 'no'}`,
+                    `live guard pairs ${currentGuardPairs.length}`,
+                    `available ${guardDialogueState.available ? 'yes' : 'no'}`,
+                    `visible ${guardDialogueState.visible ? 'yes' : 'no'}`,
+                    `shown once ${guardTutorialPersistence.seen ? 'yes' : 'no'}`,
+                    `storage ${guardTutorialPersistence.available ? 'available' : 'unavailable'}`,
+                    `reset query ${guardTutorialPersistence.resetRequested ? 'yes' : 'no'}`,
+                    `auto-started ${guardDialogueState.autoStarted ? 'yes' : 'no'}`,
+                    `completed ${guardDialogueState.completed ? 'yes' : 'no'}`,
+                    `node ${guardDialogueState.nodeId || '-'}`,
+                    `speaker ${guardDialogueState.speaker || '-'}`,
+                    `opens ${guardDialogueState.opens || 0}`,
+                    `closes ${guardDialogueState.closes || 0}`,
+                    guardDialogueAnchor
+                        ? `anchor px ${guardDialogueAnchor.pixelX},${guardDialogueAnchor.pixelY}; smooth ${guardDialogueAnchor.screenX.toFixed(1)},${guardDialogueAnchor.screenY.toFixed(1)}; box ${guardDialogueAnchor.placement || '-'}`
+                        : 'anchor -',
+                ].join('; '),
+                room: `logical ${fmtLogicalCoord(currentCoord)}; physical ${hexByte(sample.room0)}`,
+                bytes: '-',
+                notes: `${guardDialogueState.lastAction}. ${guardTutorialPersistence.lastAction}. The warning appears only when both Stage 9 shooting and guard-kill handling are enabled, follows the first live generated guard encountered, and is persisted as soon as it is shown. It cannot be replayed. Use ?stage9guardtutorial=reset for one deliberate retest, then remove that query parameter.`,
             });
 
             addRow({
@@ -8098,6 +8246,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         },
         get wizardDialogue() {
             return wizardDialogue;
+        },
+        get guardDialogue() {
+            return guardDialogue;
         },
         get ballProbe() {
             return ballProbe;

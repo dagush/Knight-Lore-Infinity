@@ -13,9 +13,16 @@ export function createKnightLoreWizardDialogue({
     const replayStartNodeId = dialogue && nodes[dialogue.replayStart]
         ? dialogue.replayStart
         : startNodeId;
+    const dialogueName = dialogue && dialogue.name ? dialogue.name : 'Wizard';
+    const replayable = !dialogue || dialogue.replayable !== false;
+    const dismissKeys = dialogue && Array.isArray(dialogue.dismissKeys)
+        ? dialogue.dismissKeys
+        : [];
     const validTree = !!(startNodeId && nodes[startNodeId]);
     const state = {
         enabled: !!enabled && validTree,
+        dialogueName,
+        replayable,
         available: false,
         playerReady: false,
         playerTransforming: false,
@@ -33,7 +40,7 @@ export function createKnightLoreWizardDialogue({
         lastAction: !enabled
             ? 'disabled'
             : validTree
-                ? 'waiting for the player at the origin wizard'
+                ? `waiting for ${dialogueName.toLowerCase()} dialogue availability`
                 : 'disabled; dialogue tree is missing its start node',
         nodeId: null,
         speaker: null,
@@ -46,7 +53,7 @@ export function createKnightLoreWizardDialogue({
         state.lastAction = 'disabled; emulator overlay root or canvas not found';
         return {
             update() {},
-            show() {},
+            show() { return false; },
             hide() {},
             destroy() {},
             getState: () => ({...state}),
@@ -56,19 +63,19 @@ export function createKnightLoreWizardDialogue({
     const bubble = document.createElement('div');
     bubble.className = 'knight-lore-wizard-dialogue';
     bubble.setAttribute('role', 'dialog');
-    bubble.setAttribute('aria-label', 'Wizard dialogue');
+    bubble.setAttribute('aria-label', `${dialogueName} dialogue`);
     bubble.setAttribute('aria-live', 'polite');
     bubble.hidden = true;
     root.appendChild(bubble);
 
-    let anchors = {wizard: null, player: null};
+    let anchors = {wizard: null, guard: null, player: null};
     let motionAnchor = null;
 
     const getCurrentNode = () => state.nodeId ? nodes[state.nodeId] : null;
 
     const getActiveAnchor = () => {
         const node = getCurrentNode();
-        return (node && anchors[node.speaker]) || anchors.wizard || anchors.player;
+        return (node && anchors[node.speaker]) || anchors.wizard || anchors.guard || anchors.player;
     };
 
     const positionBubble = (anchor, {resetSmoothing = false} = {}) => {
@@ -138,10 +145,12 @@ export function createKnightLoreWizardDialogue({
         if (!node) return false;
         state.speaker = node.speaker || 'wizard';
         bubble.dataset.speaker = state.speaker;
-        bubble.setAttribute(
-            'aria-label',
-            state.speaker === 'player' ? 'Player dialogue' : 'Wizard dialogue'
-        );
+        const speakerName = state.speaker === 'player'
+            ? 'Player'
+            : state.speaker === 'guard'
+                ? 'Guard'
+                : dialogueName;
+        bubble.setAttribute('aria-label', `${speakerName} dialogue`);
         bubble.textContent = node.text || '';
         return true;
     };
@@ -158,13 +167,14 @@ export function createKnightLoreWizardDialogue({
     };
 
     const show = ({automatic = false, replay = false} = {}) => {
+        if (replay && !replayable) return false;
         if (
             !state.enabled ||
             !state.available ||
             !state.playerReady ||
             state.frozen ||
             !getActiveAnchor()
-        ) return;
+        ) return false;
         state.nodeId = replay ? replayStartNodeId : startNodeId;
         state.speaker = nodes[state.nodeId].speaker || 'wizard';
         state.branch = null;
@@ -177,8 +187,9 @@ export function createKnightLoreWizardDialogue({
         bubble.hidden = false;
         positionBubble(getActiveAnchor(), {resetSmoothing: true});
         state.lastAction = automatic
-            ? 'wizard opened the introductory conversation'
-            : 'replaying the wizard conversation';
+            ? `${dialogueName.toLowerCase()} opened the introductory dialogue`
+            : `replaying the ${dialogueName.toLowerCase()} dialogue`;
+        return true;
     };
 
     const advance = key => {
@@ -209,6 +220,12 @@ export function createKnightLoreWizardDialogue({
 
     const keydownHandler = event => {
         if (!state.enabled || event.repeat) return;
+        if (state.visible && dismissKeys.includes(event.key)) {
+            state.lastKey = event.key;
+            state.completed = true;
+            hide(`closed ${dialogueName.toLowerCase()} dialogue with key ${event.key}`);
+            return;
+        }
         if (event.key === 'Escape' && state.visible) {
             state.lastKey = 'Escape';
             hide('closed dialogue with Escape');
@@ -231,7 +248,7 @@ export function createKnightLoreWizardDialogue({
             } else {
                 advance(event.key);
             }
-        } else {
+        } else if (replayable) {
             show({replay: true});
         }
     };
@@ -245,6 +262,7 @@ export function createKnightLoreWizardDialogue({
             playerTransforming = false,
             playerBodySprite = 0,
             wizardAnchor = null,
+            guardAnchor = null,
             playerAnchor = null,
         } = {}) {
             state.playerReady = !!playerReady;
@@ -252,17 +270,17 @@ export function createKnightLoreWizardDialogue({
             state.playerBodySprite = playerBodySprite & 0xff;
             state.available = state.enabled && !!available;
             if (!state.available) {
-                anchors = {wizard: null, player: null};
+                anchors = {wizard: null, guard: null, player: null};
                 motionAnchor = null;
                 state.anchor = null;
                 state.frozen = false;
                 hide(state.enabled
-                    ? 'waiting for the player at the origin wizard'
+                    ? `waiting for ${dialogueName.toLowerCase()} dialogue availability`
                     : 'disabled');
                 return;
             }
 
-            anchors = {wizard: wizardAnchor, player: playerAnchor};
+            anchors = {wizard: wizardAnchor, guard: guardAnchor, player: playerAnchor};
             if (state.visible && state.playerTransforming) {
                 state.frozen = true;
                 state.lastAction = `transformation freeze; preserving ${state.speaker} line ${state.nodeId}`;
@@ -287,9 +305,13 @@ export function createKnightLoreWizardDialogue({
                     ? `resumed smoothed tracking for ${state.speaker} line ${state.nodeId}`
                     : `smoothed tracking for ${state.speaker} line ${state.nodeId}`;
             } else {
-                state.lastAction = state.completed
-                    ? 'conversation completed; number keys replay it'
-                    : 'conversation closed; number keys replay it';
+                state.lastAction = replayable
+                    ? state.completed
+                        ? 'conversation completed; number keys replay it'
+                        : 'conversation closed; number keys replay it'
+                    : state.completed
+                        ? 'one-time dialogue completed'
+                        : 'one-time dialogue closed';
             }
         },
         show,

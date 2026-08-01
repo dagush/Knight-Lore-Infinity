@@ -209,9 +209,17 @@ export const getKnightLorePairedCollisionEvidence = (ball, guard) => {
         guard.z - Math.abs(guard.dz) - 1,
         guard.z + guard.height + Math.abs(guard.dz) + 1
     );
+    const spatialContact = xGap <= xLimit && yGap <= yLimit && zOverlap;
+    const deadlyBall = !!(ball.objectFlags & 0x80);
+    const pairedHit = !!(ballAxes && guardAxes && spatialContact);
+    const inferredHit = !!(!pairedHit && deadlyBall && spatialContact);
 
     return {
-        hit: !!(ballAxes && guardAxes && xGap <= xLimit && yGap <= yLimit && zOverlap),
+        hit: pairedHit || inferredHit,
+        pairedHit,
+        inferredHit,
+        spatialContact,
+        deadlyBall,
         ballAxes,
         guardAxes,
         xGap,
@@ -372,7 +380,7 @@ export function createKnightLoreBallProbe({
                 : '-',
             lastCollision
                 ? `event ${collisionEdges} at frame ${lastCollision.frame}; ${lastCollision.kind}; ball +12 ${hexByte(lastCollision.ballCollisionFlags)} (${collisionAxes(lastCollision.ballCollisionFlags)}) +13 ${hexByte(lastCollision.ballObjectFlags)}; guard +12 ${hexByte(lastCollision.guardCollisionFlags)} (${collisionAxes(lastCollision.guardCollisionFlags)}) +13 ${hexByte(lastCollision.guardObjectFlags)}`
-                : 'no paired original X/Y collision observed yet',
+                : 'no paired or inferred ball/guard collision observed yet',
             lastCollision
                 ? `${fmtCoord(lastCollision.coord)}; ball ${lastCollision.ballXYZ}; guard ${lastCollision.guardXYZ}`
                 : fmtCoord(context && context.coord),
@@ -380,8 +388,10 @@ export function createKnightLoreBallProbe({
                 ? `gap X ${lastCollision.xGap}/${lastCollision.xLimit}; Y ${lastCollision.yGap}/${lastCollision.yLimit}; Z overlap ${lastCollision.zOverlap ? 'yes' : 'no'}`
                 : '-',
             lastCollision
-                ? `Both live records carried transient +12 X/Y collision flags in the same completed-frame sample while their bounds touched. +13 is context only. Guard-kill transition ${killEnabled ? 'enabled' : 'disabled'}.`
-                : 'Expected contact: ball and guard both show an X/Y bit in +12 while their live bounds touch. The guard may already have +13 bit 6 set, so +13 is not used as the trigger.',
+                ? lastCollision.inferred
+                    ? `The paired one-frame +12 signal was missed, so contact was inferred from the ball's original deadly-out flag and swept 3D bounds. Guard-kill transition ${killEnabled ? 'enabled' : 'disabled'}.`
+                    : `Both live records carried transient +12 X/Y collision flags in the same completed-frame sample while their bounds touched. Guard-kill transition ${killEnabled ? 'enabled' : 'disabled'}.`
+                : 'Preferred contact proof is paired ball/guard X/Y bits in +12. If either transient flag is missed, an active deadly ball entering the guard swept 3D bounds is accepted as a conservative fallback.',
             lastCollision ? 'warn' : 'muted'
         );
 
@@ -537,12 +547,16 @@ export function createKnightLoreBallProbe({
                 : {hit: false};
             const previousContact = guardContactStates.get(guard.topAddr) || false;
             if (evidence.hit && !previousContact) {
+                const collisionKind = evidence.pairedHit
+                    ? `paired collision flags ball ${collisionAxes(evidence.ballAxes)} / guard ${collisionAxes(evidence.guardAxes)}`
+                    : `inferred deadly-ball swept contact; flags ball ${collisionAxes(evidence.ballAxes)} / guard ${collisionAxes(evidence.guardAxes)}`;
                 const event = {
                     frame,
                     coord: coord ? {x: coord.x, y: coord.y} : null,
                     ballAddr: observed.addr,
                     guardAddr: guard.topAddr,
-                    kind: `paired collision flags ball ${collisionAxes(evidence.ballAxes)} / guard ${collisionAxes(evidence.guardAxes)}`,
+                    kind: collisionKind,
+                    inferred: evidence.inferredHit,
                     ballCollisionFlags: observed.collisionFlags,
                     ballObjectFlags: observed.objectFlags,
                     guardCollisionFlags: guard.top.collisionFlags,

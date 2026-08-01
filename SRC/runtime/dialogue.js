@@ -1,4 +1,5 @@
 export const KNIGHT_LORE_WIZARD_DIALOGUE = {
+    name: 'Wizard',
     start: 'greeting',
     replayStart: 'opening',
     nodes: {
@@ -76,6 +77,25 @@ export const KNIGHT_LORE_WIZARD_DIALOGUE = {
         'offerings-end': {
             speaker: 'wizard',
             text: 'THEN THE LAST ENCHANTMENT\nBREAKS... IF THY COURAGE\nHAS NOT BROKEN FIRST.',
+            end: true,
+        },
+    },
+};
+
+export const KNIGHT_LORE_GUARD_TUTORIAL = {
+    name: 'Guard',
+    replayable: false,
+    dismissKeys: ['b', 'B'],
+    start: 'warning',
+    nodes: {
+        warning: {
+            speaker: 'guard',
+            text: [
+                'STRIKE ME WITH B,',
+                'IF THOU DAREST.',
+                'BUT HEED THINE OWN ORB:',
+                'IT BITES FRIEND AND FOE.',
+            ].join('\n'),
             end: true,
         },
     },
