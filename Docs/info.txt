@@ -1127,13 +1127,61 @@ guard: 0x90~0x95 is the lower part of the back of the guard and
        like orbit. This is accepted; simulation-driven layout optimization is
        intentionally outside the project scope.
        Runtime control: ?stage9guards=0
+
+       Stage 9 Phase B bouncing-ball combat, 2026 08 01:
+          Original static foreground type:
+             0x17 -> ball_bounce template, initial sprite 0xB6.
+          Live sprite family:
+             0xB6/0xB7, dimensions 7/7/12.
+          The JS launcher writes one disposable 32-byte live record into a
+          free expanded-room slot at 0x5C88..0x6107. Initial dX/dY follows the
+          player's facing and initial dZ is 4. The original updater owns all
+          subsequent motion, animation, gravity, bounce, and collision.
+          Host control:
+             B queues one shot in a stable generated guard room.
+             ?stage9ballprobe=1 enables launch/diagnostics.
+             ?stage9ballkill=1 enables the guard transition.
+          Paired collision evidence:
+             ball and square-guard top both carry transient X/Y bits in +12
+             in the same completed-frame snapshot;
+             X/Y proximity and Z overlap must also agree.
+             Guard +13 bit 6 is not a collision edge because normal guard
+             states can already contain it.
+          Timing requirement:
+             the shared full diagnostic snapshot can miss one-frame +12 bits;
+             the accepted detector performs one compact read after every
+             frameCompleted event and has no frame-drop lock.
+          Complete square-guard live pair:
+             top 0x1E/0x1F;
+             body 0x90..0x95 west-facing or 0x98..0x9D east-facing.
+             The following body record has the ignore-in-3D flag, while the
+             top participates in collision.
+          Guard-death transition:
+             one contiguous 40-byte write starts at the top record;
+             top sprite -> 0x70 with wipe/draw flags;
+             adjacent body sprite -> invalid 0x01 with wipe/draw flags;
+             ball record remains active and unchanged.
+             Original code advances 0x70..0x77 and then 0x01; the renderer
+             clears the terminal top/body records to 0x00/0x00.
+          Reliability boundary:
+             every transition is read back from memory;
+             a same-shot latch may reassert the death state if the same live
+             guard reappears while the same ball, shot serial, logical room,
+             and room visit remain active;
+             a later shot or room rebuild is not affected.
+          Final manual proof:
+             events 4; kills 4; writes 4; repairs 0; verifications 4;
+             every write confirmed 0x70/0x01;
+             final live pair 0x00/0x00.
+          Implementation:
+             SRC/runtime/knightlore-ball-probe.js
 0x08 0x09 portcullis
 0x10~0x15 legs ????
 0x16 gargoyle
 0xB4~0xB5 fire
 
 
-Current Integrated Playtest URL (2026 07 30)
+Current Integrated Playtest URL (2026 08 01)
 ---------------------------------------------
 
 Use:
@@ -1147,6 +1195,14 @@ charm-room interiors, C3.7 distributed ordinary original interiors, and the
 C3.9 original wizard at logical origin `(0,0)`. It also enables the Stage 8.3
 automatic three-branch wizard conversation and Stage 9 Phase A deterministic
 guard rooms.
+
+Stage 9 Phase B bouncing-ball combat remains deliberately opt-in during final
+testing. Add both flags to the integrated preset:
+
+    http://127.0.0.1:8000/index.html?playtest=latest&stage9ballprobe=1&stage9ballkill=1
+
+`stage9ballprobe` enables the host-B launcher and live diagnostics;
+`stage9ballkill` enables the verified guard death-sparkle transition.
 
 It deliberately does not enable infinite lives or partial invulnerability;
 those remain player-controlled HTML toggles.

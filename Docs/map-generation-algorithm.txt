@@ -1032,6 +1032,47 @@ A trial-and-error generator that simulates and scores long-term patrols could
 reduce such convergence, but its complexity is outside this project's scope.
 
 
+Bouncing-Ball Combat Runtime
+----------------------------
+
+Stage 9 Phase B does not change deterministic room generation. It adds a
+runtime-only projectile layer in:
+
+    SRC/runtime/knightlore-ball-probe.js
+
+The host `B` key may queue one original type-`0x17` bouncing ball only in a
+stable generated guard room. JS selects a free expanded-object slot, derives
+the initial horizontal direction from the player's facing, writes sprite
+`0xB6` with dimensions 7/7/12 and dZ=4, and then yields ownership to the
+original updater. Static room bytes, location entries, exits, obstacle
+patterns, and logical-map payloads remain unchanged.
+
+Collision detection watches the active ball and the one original square-guard
+pair. The guard upper record uses 0x1E/0x1F; its lower animation uses both
+0x90..0x95 west-facing and 0x98..0x9D east-facing ranges. A lethal edge requires
+transient X/Y collision flags in byte +12 of both participating records, plus
+compatible X/Y and Z bounds. Because those bits may last only one frame, the
+probe uses a compact post-frame read independent of the full diagnostics pass.
+
+On a new edge, one 40-byte write changes the guard upper sprite to original
+death sparkle 0x70 and the adjacent lower sprite to invalid 0x01. Original
+Knight Lore code owns sparkle frames 0x70..0x77 and renderer cleanup to
+0x00/0x00. The ball is not consumed. Each write is verified, and a narrow
+same-shot latch can reassert the transition if that exact guard pair reappears
+while the same projectile remains active. Shot serial and room context prevent
+the latch from killing a freshly rebuilt guard on a later visit.
+
+The final manual proof on 2026 08 01 recorded four collision events, four
+kills, four writes, four successful 0x70/0x01 verifications, no repair writes,
+and final 0x00/0x00 guard records. The controls remain opt-in:
+
+    ?stage9ballprobe=1&stage9ballkill=1
+
+This runtime layer deliberately does not create persistent killed-guard state.
+Re-entering a generated guard room rebuilds its original guard and deterministic
+8-queens obstacle payload.
+
+
 Known Limits and Future Work
 ----------------------------
 
@@ -1040,7 +1081,10 @@ director.
 
 Open future work:
 
-- bouncing-ball launch, guard damage, and projectile cleanup/persistence;
+- decide whether bouncing-ball launch becomes part of the default playtest;
+- define cross-room projectile cleanup and optional killed-guard persistence;
+- complete a focused manual proof that a rebounding player-fired ball can also
+  kill the player, preserving the intended risky side effect;
 - richer hazard placement beyond the first deterministic guard rooms;
 - treasure placement;
 - authored special-room injection;

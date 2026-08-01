@@ -644,6 +644,15 @@ those same runs. An authored map may use the same groups; it need not declare
 queen metadata. The generator's `meta.procedural.guardRoom` object is diagnostic
 provenance, not a required portable room field.
 
+Stage 9 Phase B likewise adds no JSON field. A shot is a disposable live
+working-memory object created by the JavaScript runtime, not part of the room's
+static `blocks` array. Guard death is currently a room-visit runtime state: the
+original type-`0x0D` guard expands again when the room is rebuilt. Therefore
+authored JSON describes the guard and obstacles exactly as before, while
+launch controls, active projectile state, collision sampling, death sparkles,
+and any future killed-guard persistence remain outside this portable map
+format.
+
 
 Compilation to a Physical Location Entry
 ----------------------------------------

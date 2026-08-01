@@ -3888,3 +3888,123 @@ Runtime control:
 Build:
 
     stage9-guard-rooms-20260731-1
+
+
++============================================================+
+| 2026 08 01 - Bouncing-Ball Combat And Guard Death          |
++============================================================+
+
+2026 08 01
+
+Stage 9 Phase B proved the project's final new internal mechanic: the player
+can launch an original Knight Lore bouncing ball inside a generated guard room,
+and a collision can kill the original square-patrol guard through its own
+death-sparkle animation. The Spectrum renderer and the original movement,
+bounce, collision, player-hazard, animation, and sparkle updaters remain
+unchanged.
+
+The implementation is isolated in:
+
+    SRC/runtime/knightlore-ball-probe.js
+
+It is deliberately opt-in:
+
+    ?playtest=latest&stage9ballprobe=1&stage9ballkill=1
+
+The host `B` key queues one shot only when the player is controllable, the
+physical center is stable at `0x88`, the logical room is a generated guard
+room, no original completion sequence is active, no earlier ball is live, and
+a free 32-byte room-object slot and collision-free forward spawn both exist.
+The key is handled by the JavaScript layer; it does not alter the Spectrum
+keyboard matrix or original game code.
+
+The ball uses original foreground object type `0x17` and the original
+`ball_bounce` template:
+
+    sprite 0xB6/0xB7; dimensions 7/7/12; physical room 0x88
+
+The JS layer seeds one disposable live record with direction derived from the
+player's facing and initial `dZ=4`. From the next frame onward, the original
+updater owns the object. Manual play confirmed normal horizontal and vertical
+motion, gravity, floor/obstacle bounces, animation, collision with the guard,
+and continued ball activity after the guard transition. The guard also reacts
+to the ball through the original collision system. No static room entry or
+location-table object is added for the projectile.
+
+The live collision anatomy was established read-only before enabling a kill.
+The useful signal is not guard byte `+13`, because bit 6 may already be set in
+ordinary guard states. A confirmed contact instead has:
+
+- transient X or Y collision bits in byte `+12` of both live records;
+- compatible X/Y bounds including current signed movement;
+- overlapping Z extents.
+
+The first diagnostic implementation sampled those transient bits through the
+large shared diagnostics pass. Its `sampleInFlight` lock could skip several
+completed frames, so a visually obvious contact was sometimes missed. The
+accepted implementation starts a compact memory read after every
+`frameCompleted` event. It reads only the active ball and one guard pair, has
+no frame-drop lock, and leaves the slower full table solely for presentation
+and supporting diagnostics.
+
+Another intermittent miss exposed the complete square-guard sprite family.
+The upper record is `0x1E/0x1F`, while the paired lower record can be either:
+
+    0x90..0x95   west-facing legs
+    0x98..0x9D   east-facing legs
+
+The first recognizer accepted only the west-facing range. A live report of
+`0x1F/0x98` identified the omission exactly. Both ranges are now accepted,
+while the distinctive `0x1E/0x1F` upper record remains mandatory so unrelated
+wizard or guard sprites cannot be mistaken for this target.
+
+On one new paired X/Y collision edge, the JS layer performs one contiguous
+40-byte transition write spanning the full upper record and the first eight
+bytes of the adjacent lower record:
+
+- upper sprite becomes `0x70`, the first original death-sparkle frame;
+- upper representation flags retain their state and gain the original
+  wipe/draw bits;
+- lower sprite becomes invalid `0x01` and receives matching wipe/draw bits;
+- the bouncing-ball record is not modified.
+
+The original engine then advances `0x70..0x77`, changes the terminal sprite to
+`0x01`, and the renderer clears both records to `0x00`. Thus JS chooses the
+guard's transition into death, but the visible death sequence and cleanup are
+still original Knight Lore behavior.
+
+A third anomaly was initially described as an unrecognized collision, but its
+diagnostics showed `event 3`, `kills 3`, and `writes 3`: detection and the write
+had occurred. The live `0x1E/0x95` pair subsequently reappeared. The runtime
+now verifies every write directly and keeps a narrow same-shot latch. If the
+exact guard reappears in the same logical room while the same ball and shot
+serial remain active, the sparkle transition is reasserted. The latch does not
+survive into a later shot, so leaving and revisiting still restores a fresh
+guard as Phase A requires.
+
+The final manual proof killed the guard four times. Its terminal diagnostics
+were:
+
+    collision events 4
+    kills 4
+    writes 4
+    same-shot repairs 0
+    verifications 4
+    verification 0x70/0x01 death state confirmed
+    final upper/lower sprites 0x00/0x00
+
+All four ordinary kills therefore required one write each, all four writes
+were independently verified, no safety repair was needed in the accepted run,
+and the final pair was cleared by the original sparkle/renderer lifecycle.
+
+Stage 9 Phase B is empirically complete for launch, original bouncing,
+ball/guard collision detection, guard death, animation, and same-room cleanup.
+The ball probe and lethal transition remain explicit opt-ins while the project
+is prepared for final wrap-up. A complete projectile productization pass could
+still decide default controls, cross-room cleanup policy, and whether killed
+guards should persist across revisits; the current intended behavior is one
+live ball at a time and a fresh guard whenever the room is rebuilt.
+
+Build:
+
+    stage9-guard-kill-latch-20260801-1

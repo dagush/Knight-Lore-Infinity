@@ -1720,7 +1720,8 @@ Obstacle-layout refinement, 2026 07 30-31:
 Phase A status:
 
 - complete by automated invariants and manual gameplay proof;
-- the next work is the bouncing-ball object and launch-lifecycle probe.
+- Phase B follows with the bouncing-ball object, collision, and guard-death
+  lifecycle proof.
 
 Phase A exit criteria:
 
@@ -1732,13 +1733,66 @@ Phase A exit criteria:
 - walking multiple sectors causes no black room, reset, freeze, or invalid
   location decode.
 
-Later combat phases:
+Phase B - bouncing-ball launch and guard death:
 
-- probe a real original bouncing-ball foreground record and its live updater;
-- identify a safe player input and spawn lifecycle;
-- preserve the original bounce and deadly collision logic;
-- prove that the ball can kill a guard and can also kill the player;
-- define cleanup/persistence when leaving, revisiting, dying, or recentering.
+- Keep the implementation isolated in
+  `SRC/runtime/knightlore-ball-probe.js`.
+- Use host key `B` as an opt-in external trigger; do not modify the Spectrum
+  keyboard matrix or original game code.
+- Allow one shot only in a stable generated guard room, with a controllable
+  player, no live earlier ball, no completion sequence, a free 32-byte dynamic
+  slot, and a collision-free forward spawn.
+- Seed the original type-`0x17` `ball_bounce` live record:
+  - sprite `0xB6/0xB7`;
+  - dimensions 7/7/12;
+  - initial dX/dY from player facing;
+  - initial dZ=4;
+  - physical room `0x88`.
+- Yield movement, gravity, animation, obstacle bounce, guard interaction, and
+  player-hazard behavior to the original updater after the initial write.
+- Detect a ball/guard contact from transient X/Y bits in record byte `+12` of
+  both live records, compatible X/Y proximity, and overlapping Z bounds.
+- Sample the active ball and guard pair through a compact read after every
+  `frameCompleted`; the large shared diagnostics sampler can skip the
+  one-frame collision flags.
+- Recognize the complete square-guard pair:
+  - upper record `0x1E/0x1F`;
+  - lower record `0x90..0x95` west-facing or `0x98..0x9D` east-facing.
+- On one new collision edge, perform one contiguous 40-byte transition write:
+  - upper sprite -> original death sparkle `0x70`;
+  - adjacent lower sprite -> invalid `0x01`;
+  - retain record state and set required wipe/draw flags;
+  - leave the bouncing ball active and unchanged.
+- Let the original engine advance `0x70..0x77` and let the renderer clear the
+  terminal pair to `0x00/0x00`.
+- Verify every death write directly. Keep a same-shot latch that can reassert
+  the transition only if the exact guard reappears in the same room while the
+  same ball and shot serial remain active. Do not carry the latch into a later
+  shot or rebuilt room.
+
+Phase B manual proof, 2026 08 01:
+
+- the ball moved, animated, and bounced through the original updater;
+- the guard and ball reacted through the original collision system;
+- four paired collision events produced four kills and four writes;
+- all four writes verified `0x70/0x01`;
+- no same-shot repair was required in the accepted four-kill run;
+- the final guard pair reached `0x00/0x00` through original sparkle/renderer
+  cleanup;
+- runtime controls are `?stage9ballprobe=1&stage9ballkill=1`;
+- build `stage9-guard-kill-latch-20260801-1`.
+
+Phase B status:
+
+- complete for launch, original bouncing, ball/guard collision detection,
+  guard death, original sparkle animation, and same-room cleanup;
+- the combat mechanic remains opt-in pending final project wrap-up;
+- still run a focused manual proof that a rebounding player-fired ball can kill
+  the player before claiming that intended risky side effect as empirically
+  complete;
+- final wrap-up may decide default controls, cross-room projectile cleanup,
+  and optional killed-guard persistence. Current revisits rebuild a fresh
+  guard.
 
 
 Data Model Sketch

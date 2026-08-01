@@ -1,13 +1,15 @@
 import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 import { createKnightLoreNavigationMap } from './knightlore-navigation-map.js';
 import { createKnightLoreWizardDialogue } from './knightlore-wizard-dialogue.js';
+import { createKnightLoreBallProbe } from './knightlore-ball-probe.js';
 import { KNIGHT_LORE_WIZARD_DIALOGUE } from './dialogue.js';
 
 export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let emu = null;
     let navigationMap = null;
     let wizardDialogue = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage9-guard-rooms-20260731-1';
+    let ballProbe = null;
+    const KL_DIAGNOSTICS_BUILD = 'stage9-guard-kill-latch-20260801-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_TRUE_PARAM_VALUES = ['1', 'true', 'on', 'yes', 'enabled'];
     const KL_CURRENT_PLAYTEST_PRESET = ['latest', 'current', '1'].includes(
@@ -92,6 +94,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     const KL_STAGE9_GUARD_ROOMS_ENABLED = getBooleanUrlOption(
         ['stage9guards', 'stage84c310guards', 'guardrooms'],
         true
+    );
+    const KL_STAGE9_BALL_PROBE_ENABLED = getBooleanUrlOption(
+        ['stage9ballprobe', 'stage9ball', 'ballprobe']
+    );
+    const KL_STAGE9_BALL_KILL_ENABLED = getBooleanUrlOption(
+        ['stage9ballkill', 'stage9kill', 'ballkill']
     );
     const KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED = getBooleanUrlOption(
         ['stage84c39wizard', 'stage8wizard', 'wizard'],
@@ -1850,6 +1858,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         const stage8QuestStatus = document.getElementById('stage8-quest-status');
         const stage84C30Tbody = document.getElementById('stage84-c30-body');
         const stage84C30Status = document.getElementById('stage84-c30-status');
+        const stage9BallProbeTbody = document.getElementById('stage9-ball-probe-body');
+        const stage9BallProbeStatus = document.getElementById('stage9-ball-probe-status');
         const emulatorCanvas = document.querySelector('#jsspeccy canvas');
         const emulatorAppRoot = emulatorCanvas ? emulatorCanvas.parentElement : null;
         if (wizardDialogue) wizardDialogue.destroy();
@@ -1858,6 +1868,15 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             canvas: emulatorCanvas,
             enabled: KL_STAGE83_WIZARD_DIALOGUE.enabled,
             dialogue: KL_STAGE83_WIZARD_DIALOGUE.dialogue,
+        });
+        if (ballProbe) ballProbe.destroy();
+        ballProbe = createKnightLoreBallProbe({
+            emu,
+            enabled: KL_STAGE9_BALL_PROBE_ENABLED,
+            killEnabled: KL_STAGE9_BALL_PROBE_ENABLED && KL_STAGE9_BALL_KILL_ENABLED,
+            statusElement: stage9BallProbeStatus,
+            bodyElement: stage9BallProbeTbody,
+            build: KL_DIAGNOSTICS_BUILD,
         });
         const playtestPokesStatus = document.getElementById('playtest-pokes-status');
         const playtestPokeUi = new Map(KL_PLAYTEST_POKES.map(definition => [
@@ -7805,6 +7824,16 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
                 await updateStage84C35cRoutineThrottle(workRange);
                 updateStage84C35eBubbleRespawnState(workRange, sample);
                 updateStage83WizardDialogue(workRange, sample);
+                if (ballProbe) {
+                    const currentCoord = getStage8CurrentCoord();
+                    await ballProbe.update({
+                        workRange,
+                        coord: currentCoord,
+                        logicalRoom: logicalMap.getRoomAt(currentCoord.x, currentCoord.y),
+                        physicalRoom: sample.room0,
+                        frame: frameCompletedCount,
+                    });
+                }
 
                 const entry = decodeLocationEntry(staticRange, sample.room0);
                 if (stage5RoomIdRecenterTest.enabled && !KL_STAGE5_ROOM_ID_FORCE_TEST.configError) {
@@ -7978,6 +8007,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         if (typeof emu.on === 'function') {
             emu.on('frameCompleted', () => {
                 queueStage5RoomIdRecenterAfterDraw();
+                if (ballProbe) {
+                    ballProbe.captureFrame({coord: getStage8CurrentCoord()});
+                }
                 sample('frameCompleted');
             });
         } else {
@@ -8066,6 +8098,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         },
         get wizardDialogue() {
             return wizardDialogue;
+        },
+        get ballProbe() {
+            return ballProbe;
         },
         compileLogicalRoom: logicalMap.compileRoom,
         loadLogicalMapDocument,

@@ -218,6 +218,47 @@ Dynamic result:
   - 0x5F08
   - 0x5F28
 
+Stage 9 bouncing-ball and square-guard records
+------------------------------------------------
+Runtime probes on 2026 08 01 confirmed that the unused expanded room-object
+slots in 0x5C88..0x6107 can host one disposable original bouncing ball without
+changing the static location entry.
+
+Ball record:
+- live sprite alternates between 0xB6 and 0xB7;
+- bytes +1..+3 are X/Y/Z;
+- bytes +4..+6 are dimensions 7/7/12;
+- byte +8 remains physical room 0x88 in the sliding-window center;
+- bytes +9..+11 are signed dX/dY/dZ;
+- byte +12 contains transient X/Y/Z collision flags;
+- byte +13 contains original per-object state/deadly flags.
+
+The JS launcher seeds initial dX/dY from the player's facing and dZ=4. After
+that write, the original `upd_182_183` bouncing-ball routine owns movement,
+gravity, animation, obstacle collision, and rebounds.
+
+Square-guard pair:
+- upper record sprite: 0x1E or 0x1F;
+- adjacent lower record sprite: 0x90..0x95 when west-facing or 0x98..0x9D
+  when east-facing;
+- only the upper record participates in normal 3D collision;
+- the lower record carries the ignore-in-3D representation flag.
+
+A confirmed ball/guard contact has an X or Y bit in byte +12 of both the ball
+and upper guard records in the same completed-frame sample, compatible X/Y
+bounds, and overlapping Z extents. The flags are transient: a large
+asynchronous diagnostic snapshot may miss them. Stage 9 therefore samples only
+the active ball and guard pair immediately after every `frameCompleted` event.
+
+The guard-death proof writes one contiguous 40-byte range from the upper guard
+record through byte +7 of the lower record. It changes the upper sprite to the
+original death-sparkle start 0x70 and the lower sprite to invalid 0x01, while
+retaining record state and adding wipe/draw flags. Original code advances
+0x70..0x77; the renderer eventually clears both terminal records to 0x00.
+
+This transition is runtime-only. A later room rebuild expands the original
+type-0x0D square guard again unless a future persistence policy says otherwise.
+
 Player working-memory fields
 ----------------------------
 Chapter 4 discovers the main character by comparing work-memory captures while
