@@ -1,6 +1,7 @@
 import { createKnightLoreProceduralMap } from './knightlore-mapgen.js';
 import { createKnightLoreNavigationMap } from './knightlore-navigation-map.js';
 import { createKnightLoreWizardDialogue } from './knightlore-wizard-dialogue.js';
+import { installKnightLoreBanner } from './knightlore-banner.js';
 import {
     createKnightLoreBallProbe,
     findKnightLoreSquareGuardPairs,
@@ -1898,6 +1899,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     };
 
     function startKnightLore() {
+        installKnightLoreBanner();
         emu = JSSpeccyImpl(document.getElementById('jsspeccy'), {
             zoom: 2,
             sandbox: false,

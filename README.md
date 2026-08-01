@@ -140,4 +140,9 @@ For a different playful take on the same classic, see
 
 The emulator is based on [JSSpeccy 3](https://github.com/gasman/jsspeccy3) by Matt Westcott. Its original README is retained as [SRC/README_Original.md](SRC/README_Original.md), and its GPLv3 licence is in [SRC/COPYING](SRC/COPYING).
 
-Project experiments and integration by Gustavo Patow. No warranty is provided.
+Project direction, experiments, gameplay decisions, integration, and hands-on
+testing by Gustavo Patow. The project was developed with extensive AI
+assistance from OpenAI Codex, used as a collaborative partner for code,
+reverse-engineering analysis, debugging, testing, and documentation.
+
+No warranty is provided.
