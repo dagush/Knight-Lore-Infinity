@@ -528,6 +528,14 @@ window.JSSpeccy = (container, opts) => {
         sandbox: opts.sandbox,
         uiEnabled: uiEnabled,
     });
+    const snapshotLoadedBeforeStartHandlers = [];
+
+    const prepareOpenedSnapshot = async result => {
+        if (!result || result.mediaType !== 'snapshot') return;
+        for (const handler of snapshotLoadedBeforeStartHandlers) {
+            await handler(result);
+        }
+    };
 
     if (keyboardEnabled) {
         if (ui.appContainer.tabIndex == -1) {
@@ -699,9 +707,13 @@ window.JSSpeccy = (container, opts) => {
 
     const openFileDialog = () => {
         fileDialog().then(files => {
+            if (!files || !files.length) return;
             const file = files[0];
-            emu.openFile(file).then(() => {
-                if (emu.isInitiallyPaused) emu.start();
+            const wasRunning = emu.isRunning;
+            emu.pause();
+            emu.openFile(file).then(async result => {
+                await prepareOpenedSnapshot(result);
+                if (emu.isInitiallyPaused || wasRunning) emu.start();
                 emu.focus();
             }).catch((err) => {alert(err);});
         });
@@ -825,10 +837,29 @@ window.JSSpeccy = (container, opts) => {
         ),
         openFileDialog: () => {openFileDialog();},
         openUrl: (url) => {
-            emu.openUrl(url).catch((err) => {alert(err);});
+            const wasRunning = emu.isRunning;
+            emu.pause();
+            return emu.openUrl(url).then(async result => {
+                await prepareOpenedSnapshot(result);
+                if (emu.isInitiallyPaused || wasRunning) emu.start();
+                emu.focus();
+                return result;
+            }).catch((err) => {alert(err);});
         },
         loadSnapshotFromStruct: (snapshot) => {
-            emu.loadSnapshot(snapshot);
+            const wasRunning = emu.isRunning;
+            emu.pause();
+            return emu.loadSnapshot(snapshot).then(async result => {
+                await prepareOpenedSnapshot(result);
+                if (emu.isInitiallyPaused || wasRunning) emu.start();
+                emu.focus();
+                return result;
+            });
+        },
+        onSnapshotLoadedBeforeStart: callback => {
+            if (typeof callback === 'function') {
+                snapshotLoadedBeforeStartHandlers.push(callback);
+            }
         },
         onReady: (callback) => {
             if (emu.isReady) {

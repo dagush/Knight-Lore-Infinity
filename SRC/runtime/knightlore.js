@@ -16,12 +16,19 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
     let wizardDialogue = null;
     let guardDialogue = null;
     let ballProbe = null;
-    const KL_DIAGNOSTICS_BUILD = 'stage9-guard-contact-fallback-20260801-1';
+    const KL_DIAGNOSTICS_BUILD = 'pages-manual-snapshot-20260801-1';
     const KL_URL_PARAMS = new URLSearchParams(window.location.search);
     const KL_TRUE_PARAM_VALUES = ['1', 'true', 'on', 'yes', 'enabled'];
+    const KL_SNAPSHOT_MODE_PARAM = (KL_URL_PARAMS.get('snapshot') || '').trim().toLowerCase();
+    const KL_LOCAL_DEVELOPMENT_HOST = [
+        'localhost', '127.0.0.1', '0.0.0.0', '[::1]',
+    ].includes(window.location.hostname);
+    const KL_MANUAL_SNAPSHOT_MODE = KL_SNAPSHOT_MODE_PARAM === 'manual' || (
+        KL_SNAPSHOT_MODE_PARAM !== 'auto' && !KL_LOCAL_DEVELOPMENT_HOST
+    );
     const KL_CURRENT_PLAYTEST_PRESET = ['latest', 'current', '1'].includes(
         (KL_URL_PARAMS.get('playtest') || '').trim().toLowerCase()
-    );
+    ) || KL_MANUAL_SNAPSHOT_MODE;
     const getBooleanUrlOption = (names, presetDefault = false) => {
         for (const name of names) {
             if (!KL_URL_PARAMS.has(name)) continue;
@@ -103,10 +110,12 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         true
     );
     const KL_STAGE9_BALL_PROBE_ENABLED = getBooleanUrlOption(
-        ['stage9ballprobe', 'stage9ball', 'ballprobe']
+        ['stage9ballprobe', 'stage9ball', 'ballprobe'],
+        KL_MANUAL_SNAPSHOT_MODE
     );
     const KL_STAGE9_BALL_KILL_ENABLED = getBooleanUrlOption(
-        ['stage9ballkill', 'stage9kill', 'ballkill']
+        ['stage9ballkill', 'stage9kill', 'ballkill'],
+        KL_MANUAL_SNAPSHOT_MODE
     );
     const KL_STAGE84_C39_ORIGIN_WIZARD_ENABLED = getBooleanUrlOption(
         ['stage84c39wizard', 'stage8wizard', 'wizard'],
@@ -1893,7 +1902,9 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             zoom: 2,
             sandbox: false,
             autoStart: false,
-            openUrl: 'Knight Lore (1984)(Ultimate).z80',
+            openUrl: KL_MANUAL_SNAPSHOT_MODE
+                ? null
+                : 'Knight Lore (1984)(Ultimate).z80',
         });
         const logicalMapLoadPromise = KL_STAGE45_MAP_URL
             ? loadLogicalMapFromUrl(KL_STAGE45_MAP_URL).catch(err => {
@@ -1902,7 +1913,8 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             })
             : null;
         installKnightLoreDiagnostics(emu, logicalMapLoadPromise, {
-            startAfterStartupPrime: true,
+            startAfterStartupPrime: !KL_MANUAL_SNAPSHOT_MODE,
+            waitForSnapshot: KL_MANUAL_SNAPSHOT_MODE,
         });
     }
 
@@ -1968,6 +1980,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         let frameCompletedCount = 0;
         let sampleInFlight = false;
         let startupPrimePending = false;
+        let awaitingInitialSnapshot = !!options.waitForSnapshot;
         let previousSample = null;
         let lastTransition = null;
         let stage2StartPoke = {
@@ -8202,14 +8215,37 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
             }
         };
 
+        if (options.waitForSnapshot && typeof emu.onSnapshotLoadedBeforeStart === 'function') {
+            emu.onSnapshotLoadedBeforeStart(async () => {
+                awaitingInitialSnapshot = false;
+                setRow(
+                    'sampler',
+                    'Snapshot loaded; preparing Knight Lore',
+                    'Execution remains paused while the runtime installs and verifies the initial sliding cross.',
+                    'warn'
+                );
+                await runStartupPrime();
+            });
+        }
+
         if (typeof emu.onReady === 'function') {
-            setRow(
-                'sampler',
-                'Startup prime pending',
-                'The emulator is loaded paused; the runtime will inject the initial physical cross before starting execution.',
-                'warn'
-            );
+            if (options.waitForSnapshot) {
+                setRow(
+                    'sampler',
+                    'Load Knight Lore snapshot',
+                    'Use the emulator Open file button and select your legally obtained Knight Lore .z80 snapshot. The file remains inside this browser.',
+                    'warn'
+                );
+            } else {
+                setRow(
+                    'sampler',
+                    'Startup prime pending',
+                    'The emulator is loaded paused; the runtime will inject the initial physical cross before starting execution.',
+                    'warn'
+                );
+            }
             emu.onReady(() => {
+                if (options.waitForSnapshot) return;
                 runStartupPrime().catch(err => {
                     setRow('sampler', 'Startup prime error', String(err), 'bad');
                     startupPrimePending = false;
@@ -8225,7 +8261,7 @@ export function createKnightLoreInfinity(JSSpeccyImpl = window.JSSpeccy) {
         }
 
         window.setInterval(() => {
-            if (frameCompletedCount === 0 && !startupPrimePending) {
+            if (!awaitingInitialSnapshot && frameCompletedCount === 0 && !startupPrimePending) {
                 sample('interval');
             }
         }, 250);

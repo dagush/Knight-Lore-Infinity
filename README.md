@@ -11,6 +11,20 @@ replacing its renderer?
 
 The answer turned out to be: surprisingly far.
 
+## Live Demo
+
+Open the [Knight Lore Infinity live demo](https://dagush.github.io/Knight-Lore-Infinity/).
+
+The copyrighted game snapshot is not hosted by this project. Use the **Open
+file** button in the emulator toolbar and select your own legally obtained
+Knight Lore `.z80` snapshot. The browser reads the file locally; it is not
+uploaded to this site or stored in the repository. Once selected, the runtime
+installs and verifies the sliding room window before allowing the emulator to
+start.
+
+The hosted build enables the current integrated playtest, including bouncing
+ball combat in generated guard rooms. Press `B` to fire there.
+
 ## What It Does
 
 Knight Lore still runs inside JSSpeccy and still draws every room through its
@@ -83,6 +97,27 @@ http://127.0.0.1:8000/index.html?playtest=latest&stage9ballprobe=1&stage9ballkil
 ```
 
 In a generated guard room, press `B` to launch one ball. The numbered keys are used for wizard dialogue at logical origin `(0,0)`.
+
+## GitHub Pages Deployment
+
+The workflow at `.github/workflows/deploy-pages.yml` builds a release version
+from `SRC/` and deploys `SRC/dist/` whenever `master` is pushed. Before upload,
+the workflow fails if it finds any `.z80` file in the public artifact.
+
+To enable the first deployment:
+
+1. Open the repository on GitHub and select **Settings**.
+2. Select **Pages** under **Code and automation**.
+3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+4. Push the workflow to `master`, or run **Deploy GitHub Pages** manually from
+   the repository's **Actions** tab.
+5. When both workflow jobs are green, open
+   `https://dagush.github.io/Knight-Lore-Infinity/`.
+
+Local development continues to load
+`Knight Lore (1984)(Ultimate).z80` automatically from the local server root.
+Use `?snapshot=manual` to test the hosted file-selection path locally, or
+`?snapshot=auto` to force automatic loading on another host.
 
 ## Project Notes
 
